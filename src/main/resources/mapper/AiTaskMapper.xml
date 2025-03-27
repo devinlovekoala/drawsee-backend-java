@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.yifan.drawsee.mapper.AiTaskMapper">
+
+    <insert id="insert"
+            parameterType="cn.yifan.drawsee.pojo.entity.AiTask"
+            useGeneratedKeys="true"
+            keyProperty="id"
+    >
+        INSERT INTO ai_task (type, data, status, user_id, conv_id)
+        VALUES (#{type}, #{data}, #{status}, #{userId}, #{convId})
+    </insert>
+
+    <update id="update"
+            parameterType="cn.yifan.drawsee.pojo.entity.AiTask"
+    >
+        UPDATE ai_task
+        <set>
+            <if test="status != null">
+                status = #{status},
+            </if>
+            <if test="result != null">
+                result = #{result},
+            </if>
+            <if test="tokens != null">
+                tokens = #{tokens},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <select id="getById"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.AiTask"
+            useCache="false"
+    >
+        SELECT id, type, data, result, status, tokens, user_id, conv_id, created_at, updated_at, is_deleted
+        FROM ai_task
+        WHERE id = #{id}
+    </select>
+
+    <select id="getByUserIdAndConvIdAndStatus"
+            resultType="cn.yifan.drawsee.pojo.entity.AiTask"
+    >
+        SELECT id, type, data, result, status, tokens, user_id, conv_id, created_at, updated_at, is_deleted
+        FROM ai_task
+        WHERE user_id = #{userId} AND #{convId} AND status = #{status}
+    </select>
+
+    <select id="countTotalAiTasks" resultType="java.lang.Long">
+        SELECT COUNT(1) FROM ai_task WHERE is_deleted = false
+    </select>
+    
+    <select id="countTaskTypeDistribution" resultType="java.util.Map">
+        SELECT 
+            type as type,
+            COUNT(1) as value
+        FROM ai_task
+        WHERE is_deleted = false
+        GROUP BY type
+    </select>
+    
+    <select id="calculateAverageTaskDuration" resultType="java.lang.Long">
+        SELECT 
+            COALESCE(AVG(TIMESTAMPDIFF(SECOND, created_at, updated_at)), 0)
+        FROM ai_task
+        WHERE status = 'success'
+        AND is_deleted = false
+        AND created_at IS NOT NULL
+        AND updated_at IS NOT NULL
+        AND updated_at > created_at
+    </select>
+    
+    <select id="sumTotalTokensConsumed" resultType="java.lang.Long">
+        SELECT COALESCE(SUM(tokens), 0) FROM ai_task
+        WHERE is_deleted = false
+    </select>
+    
+    <select id="countDailyTokenConsumption" resultType="java.util.Map">
+        SELECT 
+            DATE_FORMAT(created_at, '%Y-%m-%d') as date,
+            COALESCE(SUM(tokens), 0) as value
+        FROM ai_task
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY)
+        AND is_deleted = false
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
+        ORDER BY date
+    </select>
+    
+    <select id="countWeeklyTokenConsumption" resultType="java.util.Map">
+        SELECT 
+            DATE_FORMAT(DATE_SUB(created_at, INTERVAL WEEKDAY(created_at) DAY), '%Y-%m-%d') as weekStart,
+            DATE_FORMAT(DATE_ADD(DATE_SUB(created_at, INTERVAL WEEKDAY(created_at) DAY), INTERVAL 6 DAY), '%Y-%m-%d') as weekEnd,
+            COALESCE(SUM(tokens), 0) as value
+        FROM ai_task
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{weeks} WEEK)
+        AND is_deleted = false
+        GROUP BY weekStart, weekEnd
+        ORDER BY weekStart
+    </select>
+    
+    <select id="countMonthlyTokenConsumption" resultType="java.util.Map">
+        SELECT 
+            DATE_FORMAT(created_at, '%Y-%m') as yearMonth,
+            COALESCE(SUM(tokens), 0) as value
+        FROM ai_task
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{months} MONTH)
+        AND is_deleted = false
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+        ORDER BY yearMonth
+    </select>
+    
+    <select id="countUsersWithAiTasks" resultType="java.lang.Long">
+        SELECT COUNT(DISTINCT user_id) FROM ai_task
+        WHERE is_deleted = false
+    </select>
+    
+    <select id="countDailySystemVisits" resultType="java.util.Map">
+        SELECT 
+            DATE_FORMAT(created_at, '%Y-%m-%d') as date,
+            COUNT(1) as value
+        FROM ai_task
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY)
+        AND is_deleted = false
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
+        ORDER BY date
+    </select>
+    
+    <select id="countWeeklySystemVisits" resultType="java.util.Map">
+        SELECT 
+            DATE_FORMAT(DATE_SUB(created_at, INTERVAL WEEKDAY(created_at) DAY), '%Y-%m-%d') as weekStart,
+            DATE_FORMAT(DATE_ADD(DATE_SUB(created_at, INTERVAL WEEKDAY(created_at) DAY), INTERVAL 6 DAY), '%Y-%m-%d') as weekEnd,
+            COUNT(1) as value
+        FROM ai_task
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{weeks} WEEK)
+        AND is_deleted = false
+        GROUP BY weekStart, weekEnd
+        ORDER BY weekStart
+    </select>
+    
+    <select id="countMonthlySystemVisits" resultType="java.util.Map">
+        SELECT 
+            DATE_FORMAT(created_at, '%Y-%m') as yearMonth,
+            COUNT(1) as value
+        FROM ai_task
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{months} MONTH)
+        AND is_deleted = false
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+        ORDER BY yearMonth
+    </select>
+
+</mapper>

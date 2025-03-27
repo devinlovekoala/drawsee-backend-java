@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.yifan.drawsee.mapper.InvitationCodeMapper">
+
+    <select id="getById"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.InvitationCode"
+    >
+        SELECT id, code, created_at, used_by, used_at, is_active, sent_user_name, sent_email, last_sent_at
+        FROM invitation_code
+        WHERE id = #{id}
+    </select>
+
+    <select id="getByPage"
+            resultType="cn.yifan.drawsee.pojo.entity.InvitationCode"
+    >
+        SELECT id, code, created_at, used_by, used_at, is_active, sent_user_name, sent_email, last_sent_at
+        FROM invitation_code
+        WHERE id >= (
+            SELECT id
+            FROM invitation_code
+            ORDER BY created_at DESC
+            LIMIT 1 OFFSET #{offset}
+        )
+        ORDER BY created_at DESC
+        LIMIT #{size}
+    </select>
+
+    <select id="getByCode"
+            parameterType="string"
+            resultType="cn.yifan.drawsee.pojo.entity.InvitationCode"
+    >
+        SELECT id, code, created_at, used_by, used_at, is_active, sent_user_name, sent_email, last_sent_at
+        FROM invitation_code
+        WHERE code = #{code}
+    </select>
+
+    <select id="getByUsedBy"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.InvitationCode"
+    >
+        SELECT id, code, created_at, used_by, used_at, is_active, sent_user_name, sent_email, last_sent_at
+        FROM invitation_code
+        WHERE used_by = #{usedBy}
+    </select>
+    
+    <insert id="insert"
+            parameterType="cn.yifan.drawsee.pojo.entity.InvitationCode"
+            useGeneratedKeys="true"
+            keyProperty="id"
+    >
+        INSERT INTO invitation_code (code) VALUES (#{code})
+    </insert>
+
+    <update id="update"
+            parameterType="cn.yifan.drawsee.pojo.entity.InvitationCode"
+    >
+        UPDATE invitation_code
+        <set>
+            <if test="usedBy != null">used_by = #{usedBy},</if>
+            <if test="usedAt != null">used_at = #{usedAt},</if>
+            <if test="isActive != null">is_active = #{isActive},</if>
+            <if test="sentUserName != null">sent_user_name = #{sentUserName},</if>
+            <if test="sentEmail != null">sent_email = #{sentEmail},</if>
+            <if test="lastSentAt != null">last_sent_at = #{lastSentAt},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+</mapper>

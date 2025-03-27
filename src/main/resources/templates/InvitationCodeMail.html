@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>昭析（DrawSee）邀请函</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .header p {
+            margin: 10px 0 0;
+            font-size: 16px;
+        }
+        .content {
+            padding: 30px;
+            color: #333333;
+        }
+        .code {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            text-align: center;
+            margin: 20px 0;
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>欢迎加入 <strong>昭析</strong></h1>
+            <p>思维的画布，知识的星图</p>
+        </div>
+        <div class="content">
+            <p>亲爱的 <span th:text="${userName}">[用户名]</span>，</p>
+            <p>我们很高兴邀请您体验 <strong>昭析（DrawSee）</strong> - 这个革命性的AI对话平台，它将帮助您以全新的方式组织和可视化您的思维。</p>
+            <p>您的专属邀请码是：</p>
+            <div class="code" th:text="${invitationCode}">[邀请码]</div>
+            <p>使用此邀请码立即注册，开启您的思维探索之旅。在 <strong>昭析（DrawSee）</strong> 中，您可以：</p>
+            <ul>
+                <li>打破线性对话的局限</li>
+                <li>将复杂思考可视化</li>
+                <li>在思维画布上绘制知识星图</li>
+            </ul>
+            <p>期待在<strong>昭析</strong>中与您相遇！</p>
+        </div>
+        <div class="footer">
+            <p><strong>FunStack</strong> 团队敬上</p>
+            <p>如您有任何问题，请随时联系我们：easyfunstack@gmail.com</p>
+        </div>
+    </div>
+</body>
+</html>

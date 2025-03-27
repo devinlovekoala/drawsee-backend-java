@@ -1,0 +1,18 @@
+spring:
+  rabbitmq:
+    username: drawsee-prod
+    password: drawsee-prod
+    virtual-host: /drawsee-prod
+  data:
+    redis:
+      database: 1
+
+drawsee:
+  mysql:
+    database: drawsee
+  rabbitmq:
+    aiConfig:
+      queueCount: 5
+      queueConcurrency: 5-10
+    animationConfig:
+      queueCount: 5

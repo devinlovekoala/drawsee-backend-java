@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.yifan.drawsee.mapper.NodeMapper">
+
+    <select id="getById"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.Node"
+    >
+        SELECT id, type, data, position, height, parent_id, conv_id, user_id, created_at, updated_at, is_deleted FROM node WHERE id = #{id}
+    </select>
+
+    <select id="getByConvId"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.Node"
+    >
+        SELECT id, type, data, position, height, parent_id, conv_id, user_id, created_at, updated_at, is_deleted
+        FROM node
+        WHERE conv_id = #{convId} AND is_deleted = 0
+    </select>
+
+    <insert id="insert"
+            parameterType="cn.yifan.drawsee.pojo.entity.Node"
+            useGeneratedKeys="true"
+            keyProperty="id"
+    >
+        INSERT INTO node (type, data, position, parent_id, conv_id, user_id, is_deleted)
+        VALUES (#{type}, #{data}, #{position}, #{parentId}, #{convId}, #{userId}, #{isDeleted})
+    </insert>
+
+    <update id="update"
+            parameterType="cn.yifan.drawsee.pojo.entity.Node"
+    >
+        UPDATE node
+        <set>
+            <if test="data != null">
+                data = #{data},
+            </if>
+            <if test="position != null">
+                position = #{position},
+            </if>
+            <if test="height != null">
+                height = #{height},
+            </if>
+            <if test="isDeleted != null">
+                is_deleted = #{isDeleted},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateDataAndIsDeletedBatch"
+            parameterType="java.util.List"
+    >
+        UPDATE node
+        <set>
+            data = CASE
+                <foreach collection="list" item="node">
+                    <if test="node.data != null">
+                        WHEN id = #{node.id} THEN #{node.data}
+                    </if>
+                </foreach>
+                ELSE data
+            END,
+            is_deleted = CASE
+                <foreach collection="list" item="node">
+                    <if test="node.isDeleted != null">
+                        WHEN id = #{node.id} THEN #{node.isDeleted}
+                    </if>
+                </foreach>
+                ELSE is_deleted
+            END
+        </set>
+        WHERE id IN
+        <foreach collection="list" item="node" open="(" separator="," close=")">
+            #{node.id}
+        </foreach>
+    </update>
+
+    <update id="updatePositionAndHeightBatch"
+            parameterType="java.util.List"
+    >
+        UPDATE node
+        <set>
+            height = CASE
+            <foreach collection="list" item="node">
+                <if test="node.height != null">
+                    WHEN id = #{node.id} THEN #{node.height}
+                </if>
+            </foreach>
+            ELSE height
+            END,
+            position = CASE
+            <foreach collection="list" item="node">
+                <if test="node.position != null">
+                    WHEN id = #{node.id} THEN #{node.position}
+                </if>
+            </foreach>
+            ELSE position
+            END
+        </set>
+        WHERE id IN
+        <foreach collection="list" item="node" open="(" separator="," close=")">
+            #{node.id}
+        </foreach>
+    </update>
+
+</mapper>

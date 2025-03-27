@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.yifan.drawsee.mapper.ConversationMapper">
+
+    <select id="getById"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.Conversation"
+    >
+        SELECT id, title, user_id, created_at, updated_at, is_deleted FROM conversation WHERE id = #{id}
+    </select>
+
+    <select id="getByUserId"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.Conversation"
+    >
+        SELECT id, title, user_id, created_at, updated_at, is_deleted
+        FROM conversation WHERE user_id = #{userId} AND is_deleted = 0 ORDER BY updated_at DESC
+    </select>
+
+    <insert id="insert"
+            parameterType="cn.yifan.drawsee.pojo.entity.Conversation"
+            useGeneratedKeys="true"
+            keyProperty="id"
+    >
+        INSERT INTO conversation (title, user_id) VALUES (#{title}, #{userId})
+    </insert>
+
+    <update id="update"
+            parameterType="cn.yifan.drawsee.pojo.entity.Conversation"
+    >
+        UPDATE conversation
+        <set>
+            <if test="title != null">
+                title = #{title},
+            </if>
+            <if test="updatedAt != null">
+                updated_at = #{updatedAt},
+            </if>
+            <if test="isDeleted != null">
+                is_deleted = #{isDeleted},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <select id="countTotalConversations" resultType="java.lang.Long">
+        SELECT COUNT(1) FROM conversation WHERE is_deleted = false
+    </select>
+    
+    <select id="countNewConversationsBetween" resultType="java.lang.Long">
+        SELECT COUNT(1) FROM conversation 
+        WHERE created_at BETWEEN #{startTime} AND #{endTime}
+        AND is_deleted = false
+    </select>
+    
+    <select id="countDailyNewConversations" resultType="java.util.Map">
+        SELECT 
+            DATE_FORMAT(created_at, '%Y-%m-%d') as date,
+            COUNT(1) as value
+        FROM conversation
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY)
+        AND is_deleted = false
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
+        ORDER BY date
+    </select>
+    
+    <select id="countWeeklyNewConversations" resultType="java.util.Map">
+        SELECT 
+            DATE_FORMAT(DATE_SUB(created_at, INTERVAL WEEKDAY(created_at) DAY), '%Y-%m-%d') as weekStart,
+            DATE_FORMAT(DATE_ADD(DATE_SUB(created_at, INTERVAL WEEKDAY(created_at) DAY), INTERVAL 6 DAY), '%Y-%m-%d') as weekEnd,
+            COUNT(1) as value
+        FROM conversation
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{weeks} WEEK)
+        AND is_deleted = false
+        GROUP BY weekStart, weekEnd
+        ORDER BY weekStart
+    </select>
+    
+    <select id="countMonthlyNewConversations" resultType="java.util.Map">
+        SELECT 
+            DATE_FORMAT(created_at, '%Y-%m') as yearMonth,
+            COUNT(1) as value
+        FROM conversation
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{months} MONTH)
+        AND is_deleted = false
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+        ORDER BY yearMonth
+    </select>
+    
+    <select id="countUsersWithConversations" resultType="java.lang.Long">
+        SELECT COUNT(DISTINCT user_id) FROM conversation
+        WHERE is_deleted = false
+    </select>
+
+</mapper>

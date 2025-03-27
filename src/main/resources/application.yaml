@@ -1,0 +1,128 @@
+server:
+  port: 6868
+
+management: # 开启监控
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+
+logging:
+  level:
+    cn.yifan.drawsee.mapper : debug
+
+sa-token:
+  # token 名称（同时也是 cookie 名称）
+  token-name: Authorization
+  # token 有效期（单位：秒） 默认30天，-1 代表永久有效
+  timeout: 2592000
+  # token 最低活跃频率（单位：秒），如果 token 超过此时间没有访问系统就会被冻结，默认-1 代表不限制，永不冻结
+  active-timeout: -1
+  # 是否允许同一账号多地同时登录 （为 true 时允许一起登录, 为 false 时新登录挤掉旧登录）
+  is-concurrent: true
+  # 在多人登录同一账号时，是否共用一个 token （为 true 时所有登录共用一个 token, 为 false 时每次登录新建一个 token）
+  is-share: true
+  # token 风格（默认可取值：uuid、simple-uuid、random-32、random-64、random-128、tik）
+  token-style: uuid
+  # 是否输出操作日志
+  is-log: true
+  # token前缀
+  token-prefix: Bearer
+
+drawsee:
+  mysql:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    host: 42.193.107.127
+    port: 3246
+    username: root
+    password: cyf829CMT917
+  minio:
+    endpoint: http://42.193.107.127:9046
+    accessKey: XOKQYoPekwnGasqY9cB3
+    secretKey: Z65Sy7T2pegQFj5A7ZnRzCFeJdTBV2O4qj5GQkH3
+    bucketName: drawsee
+  models:
+    doubao:
+      baseUrl: https://ark.cn-beijing.volces.com/api/v3
+      apiKey: 38e2b6ed-2af3-440d-a28b-2f3b1c4aaafc
+      modelName: ep-20250129233540-8rztb
+    deepseekV3:
+      baseUrl: https://ark.cn-beijing.volces.com/api/v3
+      apiKey: 38e2b6ed-2af3-440d-a28b-2f3b1c4aaafc
+      modelName: ep-20250320211327-hgz94
+    doubaoVision:
+      baseUrl: https://ark.cn-beijing.volces.com/api/v3
+      apiKey: 38e2b6ed-2af3-440d-a28b-2f3b1c4aaafc
+      modelName: ep-20250323134257-7l4fn
+  rabbitmq:
+    aiConfig:
+      exchangeName: direct_ai_task_exchange
+      queueName: direct_ai_task_queue
+      routingKey: ai_task
+    animationConfig:
+      exchangeName: direct_animation_task_exchange
+      queueName: direct_animation_task_queue
+      routingKey: animation_task
+
+spring:
+  application:
+    name: drawsee-java
+  profiles:
+    active: dev
+  mail:
+    host: smtp.qq.com
+    protocol: smtp
+    default-encoding: UTF-8
+    username: 3149107774@qq.com
+    password: ofnkhtpclryjdgfe
+    test-connection: true
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+  thymeleaf:
+    cache: false
+    prefix: classpath:/templates/
+    encoding: UTF-8 #编码
+    suffix: .html #模板后缀
+    mode: HTML #模板
+  rabbitmq:
+    host: 42.193.107.127
+    port: 5678
+  datasource:
+    druid:
+      driver-class-name: ${drawsee.mysql.driver-class-name}
+      url: jdbc:mysql://${drawsee.mysql.host}:${drawsee.mysql.port}/${drawsee.mysql.database}?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+      username: ${drawsee.mysql.username}
+      password: ${drawsee.mysql.password}
+  data:
+    redis:
+      host: 42.193.107.127
+      port: 6278
+      # 连接超时时间
+      timeout: 10s
+      lettuce:
+        pool:
+          # 连接池最大连接数
+          max-active: 200
+          # 连接池最大阻塞等待时间（使用负值表示没有限制）
+          max-wait: -1ms
+          # 连接池中的最大空闲连接
+          max-idle: 10
+          # 连接池中的最小空闲连接
+          min-idle: 0
+    mongodb:
+      host: 42.193.107.127
+      port: 26084
+      database: drawsee
+
+mybatis:
+  #mapper配置文件
+  mapper-locations: classpath*:mapper/*.xml # classpath*: 会搜索所有类路径（包括依赖 jar 包中的资源）
+  type-aliases-package: cn.yifan.drawsee.pojo.entity
+  configuration:
+    #开启驼峰命名
+    map-underscore-to-camel-case: true
