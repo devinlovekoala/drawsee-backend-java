@@ -23,21 +23,39 @@ public class Conversation implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
+    /**
+     * 会话ID
+     */
     private Long id;
 
-    // 会话标题
-    private String title;
-
-    // 会话所属用户
+    /**
+     * 用户ID
+     */
     private Long userId;
 
-    // 会话创建时间
-    private Timestamp createdAt;
+    /**
+     * 会话标题
+     */
+    private String title;
 
-    // 会话更新时间
-    private Timestamp updatedAt;
+    /**
+     * 学科
+     */
+    private String subject;
 
-    // 会话是否删除
+    /**
+     * 创建时间
+     */
+    private Long createdAt;
+
+    /**
+     * 更新时间
+     */
+    private Long updatedAt;
+
+    /**
+     * 是否删除
+     */
     private Boolean isDeleted;
 
     public Conversation(String title, Long userId) {

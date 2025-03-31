@@ -1,11 +1,14 @@
 package cn.yifan.drawsee.exception;
 
+import lombok.Getter;
+
 /**
  * @FileName ApiError
  * @Description
  * @Author yifan
  * @date 2025-01-28 17:48
  **/
+@Getter
 public enum ApiError {
 
     // admin
@@ -26,12 +29,12 @@ public enum ApiError {
     NODE_NOT_EXISTED(404, "节点不存在"),
 
     // ai_task
-    AI_TASK_NOT_EXISTED(404, "not_exist"),
-    AI_TASK_IS_WAITING(409, "waiting"),
+    AI_TASK_NOT_EXISTED(404, "AI任务不存在"),
+    AI_TASK_IS_WAITING(409, "AI任务等待中"),
     AI_TASK_IS_FINISHED(409, "finished"),
 
     // 超过使用额度
-    AI_TASK_EXCEED_LIMIT(409, "24小时内您的对话次数已达上限，请明天再试"),
+    AI_TASK_EXCEED_LIMIT(429, "已达到每日AI任务次数限制"),
 
     // conversation
     CONVERSATION_NOT_EXISTED(404, "会话不存在"),
@@ -45,7 +48,7 @@ public enum ApiError {
     PARAM_ERROR(400, "参数错误"),
 
     // 系统
-    SYSTEM_ERROR(500, "服务器内部错误"),
+    SYSTEM_ERROR(500, "系统错误"),
 
     // 权限
     NOT_LOGIN(401, "未登录"),
@@ -80,7 +83,10 @@ public enum ApiError {
     COURSE_HAD_EXISTED(405802, "课程已存在"),
     ALREADY_JOINED(405803, "已加入该课程"),
     INVALID_CLASS_CODE(405804, "班级码无效"),
-    JOIN_COURSE_FAILED(405805, "加入课程失败");
+    JOIN_COURSE_FAILED(405805, "加入课程失败"),
+
+    // 每日限制已达到
+    DAILY_LIMIT_EXCEEDED(429, "已达到每日对话次数限制");
 
     // 枚举项的参数
     private final Integer code;

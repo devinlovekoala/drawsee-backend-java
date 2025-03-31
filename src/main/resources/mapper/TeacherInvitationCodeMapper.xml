@@ -8,7 +8,7 @@
             resultType="cn.yifan.drawsee.pojo.entity.TeacherInvitationCode"
     >
         SELECT id, code, created_at as createdAt, created_by as createdBy, used_by as usedBy, 
-               used_at as usedAt, is_active as isActive, remark
+               used_at as usedAt, is_active as isActive, remark, course_id as courseId
         FROM teacher_invitation_code
         WHERE id = #{id}
     </select>
@@ -17,7 +17,7 @@
             resultType="cn.yifan.drawsee.pojo.entity.TeacherInvitationCode"
     >
         SELECT id, code, created_at as createdAt, created_by as createdBy, used_by as usedBy, 
-               used_at as usedAt, is_active as isActive, remark
+               used_at as usedAt, is_active as isActive, remark, course_id as courseId
         FROM teacher_invitation_code
         WHERE id >= (
             SELECT id
@@ -34,7 +34,7 @@
             resultType="cn.yifan.drawsee.pojo.entity.TeacherInvitationCode"
     >
         SELECT id, code, created_at as createdAt, created_by as createdBy, used_by as usedBy, 
-               used_at as usedAt, is_active as isActive, remark
+               used_at as usedAt, is_active as isActive, remark, course_id as courseId
         FROM teacher_invitation_code
         WHERE code = #{code}
     </select>
@@ -44,7 +44,7 @@
             resultType="cn.yifan.drawsee.pojo.entity.TeacherInvitationCode"
     >
         SELECT id, code, created_at as createdAt, created_by as createdBy, used_by as usedBy, 
-               used_at as usedAt, is_active as isActive, remark
+               used_at as usedAt, is_active as isActive, remark, course_id as courseId
         FROM teacher_invitation_code
         WHERE used_by = #{usedBy}
     </select>
@@ -54,8 +54,8 @@
             useGeneratedKeys="true"
             keyProperty="id"
     >
-        INSERT INTO teacher_invitation_code (code, created_by, is_active, remark) 
-        VALUES (#{code}, #{createdBy}, #{isActive}, #{remark})
+        INSERT INTO teacher_invitation_code (code, created_by, is_active, remark, course_id) 
+        VALUES (#{code}, #{createdBy}, #{isActive}, #{remark}, #{courseId})
     </insert>
 
     <update id="update"
@@ -67,6 +67,7 @@
             <if test="usedAt != null">used_at = #{usedAt},</if>
             <if test="isActive != null">is_active = #{isActive},</if>
             <if test="remark != null">remark = #{remark},</if>
+            <if test="courseId != null">course_id = #{courseId},</if>
         </set>
         WHERE id = #{id}
     </update>

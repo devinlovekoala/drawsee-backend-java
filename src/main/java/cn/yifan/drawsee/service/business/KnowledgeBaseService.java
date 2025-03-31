@@ -1,6 +1,7 @@
 package cn.yifan.drawsee.service.business;
 
 import cn.dev33.satoken.stp.StpUtil;
+import cn.yifan.drawsee.constant.UserRole;
 import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
 import cn.yifan.drawsee.pojo.dto.AddKnowledgeDTO;
@@ -8,6 +9,7 @@ import cn.yifan.drawsee.pojo.dto.CreateKnowledgeBaseDTO;
 import cn.yifan.drawsee.pojo.dto.JoinKnowledgeBaseDTO;
 import cn.yifan.drawsee.pojo.dto.UpdateKnowledgeDTO;
 import cn.yifan.drawsee.pojo.dto.UploadResourceDTO;
+import cn.yifan.drawsee.pojo.mongo.Course;
 import cn.yifan.drawsee.pojo.mongo.Knowledge;
 import cn.yifan.drawsee.pojo.mongo.KnowledgeBase;
 import cn.yifan.drawsee.pojo.mongo.KnowledgePosition;
@@ -15,6 +17,7 @@ import cn.yifan.drawsee.pojo.mongo.KnowledgeResource;
 import cn.yifan.drawsee.pojo.vo.KnowledgeBaseVO;
 import cn.yifan.drawsee.pojo.vo.ResourceCountVO;
 import cn.yifan.drawsee.constant.KnowledgeResourceType;
+import cn.yifan.drawsee.repository.CourseRepository;
 import cn.yifan.drawsee.repository.KnowledgeBaseRepository;
 import cn.yifan.drawsee.repository.KnowledgeRepository;
 import cn.yifan.drawsee.service.base.MinioService;
@@ -51,6 +54,9 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
     
     @Autowired
     private MinioService minioService;
+    
+    @Autowired
+    private CourseRepository courseRepository;
 
     /**
      * 创建知识库
@@ -505,5 +511,65 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         result.put("edges", edges);
         
         return result;
+    }
+
+    /**
+     * 为课程创建知识库
+     * @param courseId 课程ID
+     * @param createKnowledgeBaseDTO 创建知识库DTO
+     * @return 知识库ID
+     */
+    public String createKnowledgeBaseForCourse(String courseId, CreateKnowledgeBaseDTO createKnowledgeBaseDTO) {
+        Course course = courseRepository.findById(courseId).orElse(null);
+        if (course == null) {
+            throw new ApiException(ApiError.COURSE_NOT_EXISTED);
+        }
+        
+        // 检查知识库名称是否已存在
+        KnowledgeBase existKnowledgeBase = knowledgeBaseRepository.findByName(createKnowledgeBaseDTO.getName());
+        if (existKnowledgeBase != null) {
+            throw new ApiException(ApiError.KNOWLEDGE_BASE_HAD_EXISTED);
+        }
+        
+        // 生成邀请码
+        String invitationCode = generateInvitationCode();
+        
+        // 创建知识库
+        KnowledgeBase knowledgeBase = new KnowledgeBase();
+        knowledgeBase.setName(createKnowledgeBaseDTO.getName());
+        knowledgeBase.setDescription(createKnowledgeBaseDTO.getDescription());
+        knowledgeBase.setSubject(createKnowledgeBaseDTO.getSubject());
+        knowledgeBase.setInvitationCode(invitationCode);
+        knowledgeBase.setCreatorId(StpUtil.getLoginIdAsLong());
+        knowledgeBase.setCreatedAt(new Date());
+        knowledgeBase.setUpdatedAt(new Date());
+        knowledgeBase.setKnowledgeIds(new ArrayList<>());
+        knowledgeBase.setMembers(new ArrayList<>());
+        knowledgeBase.getMembers().add(StpUtil.getLoginIdAsLong());
+        knowledgeBase.setIsDeleted(false);
+        
+        // 根据课程创建者角色设置知识库可见性
+        // 管理员创建的课程对应的知识库对所有用户可见
+        // 教师创建的课程对应的知识库仅对班级学生可见
+        if (course.getCreatorRole() != null && course.getCreatorRole().equals(UserRole.ADMIN)) {
+            knowledgeBase.setIsPublished(true); // 管理员创建的班级，知识库设为公开
+        } else {
+            knowledgeBase.setIsPublished(false); // 教师创建的班级，知识库设为仅班级可见
+            // 将班级学生添加为知识库成员
+            if (course.getStudentIds() != null && !course.getStudentIds().isEmpty()) {
+                knowledgeBase.getMembers().addAll(course.getStudentIds());
+            }
+        }
+        
+        knowledgeBaseRepository.save(knowledgeBase);
+        
+        // 将知识库ID添加到课程中
+        if (course.getKnowledgeBaseIds() == null) {
+            course.setKnowledgeBaseIds(new ArrayList<>());
+        }
+        course.getKnowledgeBaseIds().add(knowledgeBase.getId());
+        courseRepository.save(course);
+        
+        return knowledgeBase.getId();
     }
 } 

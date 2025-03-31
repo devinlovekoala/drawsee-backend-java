@@ -1,13 +1,16 @@
 package cn.yifan.drawsee.service.business;
 
 import cn.dev33.satoken.stp.StpUtil;
+import cn.yifan.drawsee.constant.UserRole;
 import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
 import cn.yifan.drawsee.pojo.dto.CreateCourseDTO;
 import cn.yifan.drawsee.pojo.dto.JoinCourseDTO;
+import cn.yifan.drawsee.pojo.dto.UpdateCourseDTO;
 import cn.yifan.drawsee.pojo.mongo.Course;
 import cn.yifan.drawsee.pojo.vo.CourseVO;
 import cn.yifan.drawsee.repository.CourseRepository;
+import cn.yifan.drawsee.service.business.TeacherInvitationCodeService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -33,6 +36,12 @@ public class CourseService {
     
     @Autowired
     private TeacherService teacherService;
+    
+    @Autowired
+    private UserRoleService userRoleService;
+    
+    @Autowired
+    private TeacherInvitationCodeService teacherInvitationCodeService;
 
     /**
      * 创建课程
@@ -40,8 +49,13 @@ public class CourseService {
      * @return 课程ID
      */
     public String createCourse(CreateCourseDTO createCourseDTO) {
-        // 验证用户是否为教师
-        teacherService.validateTeacher();
+        Long userId = StpUtil.getLoginIdAsLong();
+        String userRole = userRoleService.getCurrentUserRole();
+        
+        // 验证用户是否为教师或管理员
+        if (!UserRole.ADMIN.equals(userRole) && !UserRole.TEACHER.equals(userRole)) {
+            throw new ApiException(ApiError.PERMISSION_DENIED);
+        }
         
         // 检查课程名称是否已存在
         Course existCourse = courseRepository.findByName(createCourseDTO.getName());
@@ -57,7 +71,8 @@ public class CourseService {
         course.setName(createCourseDTO.getName());
         course.setDescription(createCourseDTO.getDescription());
         course.setClassCode(classCode);
-        course.setCreatorId(StpUtil.getLoginIdAsLong());
+        course.setCreatorId(userId);
+        course.setCreatorRole(userRole); // 设置创建者角色
         course.setCreatedAt(new Date());
         course.setUpdatedAt(new Date());
         course.setStudentIds(new ArrayList<>());
@@ -65,6 +80,11 @@ public class CourseService {
         course.setIsDeleted(false);
         
         courseRepository.save(course);
+        
+        // 如果创建者是教师，为其生成班级邀请码
+        if (UserRole.TEACHER.equals(userRole)) {
+            teacherInvitationCodeService.generateCodeForCourse(course.getId(), userId);
+        }
         
         return course.getId();
     }
@@ -174,5 +194,72 @@ public class CourseService {
             result.add(vo);
         }
         return result;
+    }
+    /**
+     * 更新课程信息
+     * @param id 课程ID
+     * @param updateCourseDTO 更新课程DTO
+     * @return 是否更新成功
+     */
+    public boolean updateCourse(String id, UpdateCourseDTO updateCourseDTO) {
+        // 获取当前用户ID和角色
+        Long userId = StpUtil.getLoginIdAsLong();
+        String userRole = userRoleService.getCurrentUserRole();
+
+        // 查找课程
+        Course course = courseRepository.findById(id).orElse(null);
+        if (course == null || course.getIsDeleted()) {
+            throw new ApiException(ApiError.COURSE_NOT_EXISTED);
+        }
+
+        // 验证权限：只有课程创建者或管理员可以更新课程
+        if (!UserRole.ADMIN.equals(userRole) && !course.getCreatorId().equals(userId)) {
+            throw new ApiException(ApiError.PERMISSION_DENIED);
+        }
+
+        // 如果更改课程名称，需检查新名称是否已被使用
+        if (!course.getName().equals(updateCourseDTO.getName())) {
+            Course existCourse = courseRepository.findByName(updateCourseDTO.getName());
+            if (existCourse != null && !existCourse.getId().equals(id)) {
+                throw new ApiException(ApiError.COURSE_HAD_EXISTED);
+            }
+        }
+
+        // 更新课程信息
+        course.setName(updateCourseDTO.getName());
+        course.setDescription(updateCourseDTO.getDescription());
+        course.setUpdatedAt(new Date());
+
+        courseRepository.save(course);
+        return true;
+    }
+
+    /**
+     * 删除课程
+     * @param id 课程ID
+     * @return 是否删除成功
+     */
+    public boolean deleteCourse(String id) {
+        // 获取当前用户ID和角色
+        Long userId = StpUtil.getLoginIdAsLong();
+        String userRole = userRoleService.getCurrentUserRole();
+
+        // 查找课程
+        Course course = courseRepository.findById(id).orElse(null);
+        if (course == null || course.getIsDeleted()) {
+            throw new ApiException(ApiError.COURSE_NOT_EXISTED);
+        }
+
+        // 验证权限：只有课程创建者或管理员可以删除课程
+        if (!UserRole.ADMIN.equals(userRole) && !course.getCreatorId().equals(userId)) {
+            throw new ApiException(ApiError.PERMISSION_DENIED);
+        }
+
+        // 逻辑删除课程
+        course.setIsDeleted(true);
+        course.setUpdatedAt(new Date());
+
+        courseRepository.save(course);
+        return true;
     }
 } 

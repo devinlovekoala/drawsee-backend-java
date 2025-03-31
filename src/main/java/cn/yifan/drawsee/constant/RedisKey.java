@@ -9,7 +9,10 @@ package cn.yifan.drawsee.constant;
 
 public class RedisKey {
 
-    public static final String AI_TASK_PREFIX = "ai-task:";
+    /**
+     * AI任务前缀
+     */
+    public static final String AI_TASK_PREFIX = "ai_task:";
 
     public static final String CACHE_SPACE = "cache";
 
@@ -29,4 +32,12 @@ public class RedisKey {
 
     public static final String CLEAN_AI_TASK_QUEUE_KEY = "clean-ai-task-queue";
 
+    /**
+     * 每日对话次数前缀
+     */
+    public static final String DAILY_CONVERSATION_COUNT = "daily_conversation_count:";
+
+    private RedisKey() {
+        // 私有构造函数，防止实例化
+    }
 }

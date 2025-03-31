@@ -42,6 +42,9 @@ public class Course implements Serializable {
 
     @Field("creator_id")
     private Long creatorId;
+    
+    @Field("creator_role")
+    private String creatorRole;
 
     @Field("created_at")
     private Date createdAt;

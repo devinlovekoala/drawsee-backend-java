@@ -73,6 +73,27 @@ public class TeacherInvitationCodeService {
         }
         return code;
     }
+    
+    /**
+     * 为课程生成邀请码
+     *
+     * @param courseId 课程ID
+     * @param teacherId 教师用户ID
+     * @return 生成的邀请码
+     */
+    public String generateCodeForCourse(String courseId, Long teacherId) {
+        try {
+            String code = generateTeacherCode();
+            TeacherInvitationCode invitationCode = new TeacherInvitationCode(code, teacherId);
+            invitationCode.setRemark("课程ID: " + courseId);
+            invitationCode.setCourseId(courseId);
+            teacherInvitationCodeMapper.insert(invitationCode);
+            return code;
+        } catch (Exception e) {
+            log.error("为课程生成邀请码失败: courseId={}, teacherId={}, error={}", courseId, teacherId, e.getMessage(), e);
+            return null;
+        }
+    }
 
     /**
      * 创建教师邀请码

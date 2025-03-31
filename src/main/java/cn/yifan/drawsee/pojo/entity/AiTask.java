@@ -1,5 +1,6 @@
 package cn.yifan.drawsee.pojo.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -54,6 +55,12 @@ public class AiTask implements Serializable {
 
     // 任务是否删除
     private Boolean isDeleted;
+
+    // 提示词
+    private String prompt;
+
+    // 提示词参数
+    private JsonNode promptParams;
 
     public AiTask(
         String type, String data,

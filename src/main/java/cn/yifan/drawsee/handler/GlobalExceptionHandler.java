@@ -24,9 +24,19 @@ public class GlobalExceptionHandler {
     private ResponseEntity<Result<Object>> getErrorResponse(ApiError error) {
         Integer statusCode = error.getCode();
         String message = error.getMessage();
+        
+        // 判断状态码是否在HTTP状态码范围内(100-599)
+        HttpStatus httpStatus;
+        if (statusCode >= 100 && statusCode < 600) {
+            httpStatus = HttpStatus.valueOf(statusCode);
+        } else {
+            // 超出HTTP状态码范围的错误码，统一用400表示客户端错误
+            httpStatus = HttpStatus.BAD_REQUEST;
+        }
+        
         return new ResponseEntity<>(
                 Result.error(statusCode, message),
-                HttpStatus.valueOf(statusCode)
+                httpStatus
         );
     }
 

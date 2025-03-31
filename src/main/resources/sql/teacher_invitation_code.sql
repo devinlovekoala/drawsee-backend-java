@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS `teacher_invitation_code` (
   `used_at` timestamp NULL DEFAULT NULL COMMENT '使用时间',
   `is_active` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否有效',
   `remark` varchar(255) DEFAULT NULL COMMENT '备注',
+  `course_id` varchar(50) DEFAULT NULL COMMENT '关联的课程ID',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_code` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教师邀请码表'; 

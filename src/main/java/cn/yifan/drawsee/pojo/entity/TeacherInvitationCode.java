@@ -37,6 +37,9 @@ public class TeacherInvitationCode implements Serializable {
     private Boolean isActive;
 
     private String remark;
+    
+    // 关联的课程ID，可选
+    private String courseId;
 
     public TeacherInvitationCode(String code, Long createdBy) {
         this.code = code;

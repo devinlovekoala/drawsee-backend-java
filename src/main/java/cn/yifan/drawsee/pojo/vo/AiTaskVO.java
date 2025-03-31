@@ -1,5 +1,6 @@
 package cn.yifan.drawsee.pojo.vo;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -32,6 +33,12 @@ public class AiTaskVO implements Serializable {
     private Long userId;
 
     private Long convId;
+
+    private String prompt;
+
+    private JsonNode promptParams;
+
+    private ConversationVO conversation;
 
     private Timestamp createdAt;
 

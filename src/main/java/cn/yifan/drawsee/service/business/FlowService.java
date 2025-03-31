@@ -17,6 +17,7 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.LinkedQueue;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.pojo.vo.*;
+import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
 import cn.yifan.drawsee.util.RedisUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -72,6 +73,8 @@ public class FlowService {
     private ObjectMapper objectMapper;
     @Autowired
     private MinioService minioService;
+    @Autowired
+    private AiService aiService;
 
     // 获取用户所有会话
     public List<ConversationVO> getConversations() {
@@ -181,98 +184,120 @@ public class FlowService {
         counter.incrementAndGet();
     }
 
-    // 创建AI生成任务
+    /**
+     * 验证用户每日对话次数限制
+     *
+     * @param userId 用户ID
+     */
+    private void validateDailyConversationLimit(Long userId) {
+        String key = RedisKey.DAILY_CONVERSATION_COUNT + userId;
+        RAtomicLong count = redissonClient.getAtomicLong(key);
+        
+        // 如果是新的一天，重置计数器
+        if (!count.isExists()) {
+            count.set(0);
+            count.expire(Duration.ofDays(1));
+        }
+        
+        // 检查是否超过限制
+        if (count.get() >= SystemConfig.MAX_DAILY_CONVERSATIONS) {
+            throw new ApiException(ApiError.DAILY_LIMIT_EXCEEDED);
+        }
+        
+        // 增加计数
+        count.incrementAndGet();
+    }
+
+    /**
+     * 创建AI任务
+     *
+     * @param createAiTaskDTO 创建AI任务的DTO
+     * @return AI任务VO
+     */
     public CreateAiTaskVO createTask(CreateAiTaskDTO createAiTaskDTO) {
         Long userId = StpUtil.getLoginIdAsLong();
+        
+        // 校验每日对话次数限制
+        validateDailyConversationLimit(userId);
 
-        // 参数校验
-        if (createAiTaskDTO.getConvId() != null && createAiTaskDTO.getParentId() == null) {
-            throw new ApiException(ApiError.PARAM_ERROR);
-        }
-        if (
-            createAiTaskDTO.getType().equals(AiTaskType.SOLVER_FIRST) &&
-            createAiTaskDTO.getPromptParams().get("method") == null
-        ) {
-            throw new ApiException(ApiError.PARAM_ERROR);
-        }
-
-        validateUseAiCount(userId);
-
-        // 如果没有convId，创建一个conversation以及第一个 node
+        // 创建会话（如果需要）
         Conversation conversation = null;
         if (createAiTaskDTO.getConvId() == null) {
-            // new conversation
-            conversation = new Conversation("新会话", userId);
-            conversationMapper.insert(conversation);
-            createAiTaskDTO.setConvId(conversation.getId());
-            // new node
-            String position = null;
             try {
-                position = objectMapper.writeValueAsString(XYPosition.origin());
+                conversation = createNewConversation(createAiTaskDTO);
+                createAiTaskDTO.setConvId(conversation.getId());
             } catch (JsonProcessingException e) {
                 throw new ApiException(ApiError.SYSTEM_ERROR);
             }
-            Map<String, Object> dataMap = new ConcurrentHashMap<>();
-            String data = null;
-            try {
-                data = objectMapper.writeValueAsString(dataMap);
-            } catch (JsonProcessingException e) {
-                throw new ApiException(ApiError.SYSTEM_ERROR);
-            }
-            Node node = new Node(
-                NodeType.ROOT, data, position, null, userId, conversation.getId(), false
-            );
-            nodeMapper.insert(node);
-            createAiTaskDTO.setParentId(node.getId());
         }
 
-        // ai_task
-        Map<String, Object> dataMap = new ConcurrentHashMap<>();
-        if (createAiTaskDTO.getPrompt() != null) {
-            dataMap.put("prompt", createAiTaskDTO.getPrompt());
-        }
-        if (createAiTaskDTO.getPromptParams() != null) {
-            dataMap.put("promptParams", createAiTaskDTO.getPromptParams());
-        }
-        dataMap.put("parentId", createAiTaskDTO.getParentId());
-        String data = null;
-        try {
-            data = objectMapper.writeValueAsString(dataMap);
-        } catch (JsonProcessingException e) {
-            throw new ApiException(ApiError.PARAM_ERROR);
-        }
-        AiTask aiTask = new AiTask(
-            createAiTaskDTO.getType(), data,
-            AiTaskStatus.WAITING, userId, createAiTaskDTO.getConvId()
-        );
+        // 创建AI任务
+        AiTask aiTask = new AiTask();
+        aiTask.setUserId(userId);
+        aiTask.setConvId(createAiTaskDTO.getConvId());
+        aiTask.setType(createAiTaskDTO.getType());
+        aiTask.setStatus(AiTaskStatus.PENDING);
+        aiTask.setPrompt(createAiTaskDTO.getPrompt());
+        aiTask.setPromptParams(objectMapper.valueToTree(createAiTaskDTO.getPromptParams()));
         aiTaskMapper.insert(aiTask);
 
-        // ai_task_message
+        // 创建任务消息
         AiTaskMessage aiTaskMessage = new AiTaskMessage();
         aiTaskMessage.setTaskId(aiTask.getId());
         aiTaskMessage.setUserId(userId);
         BeanUtils.copyProperties(createAiTaskDTO, aiTaskMessage);
 
-        // 随机选取队列
+        // 随机选取队列并发送到RabbitMQ
         LinkedQueue queue = getRandomQueue();
-
-        // 发送到RabbitMQ
         rabbitTemplate.convertAndSend(
             queue.getExchangeName(),
             queue.getRoutingKey(),
             aiTaskMessage
         );
 
-        ConversationVO conversationVO = null;
+        // 构建返回对象
+        CreateAiTaskVO createAiTaskVO = new CreateAiTaskVO();
+        AiTaskVO aiTaskVO = new AiTaskVO();
+        BeanUtils.copyProperties(aiTask, aiTaskVO);
+        
         if (conversation != null) {
-            conversationVO = new ConversationVO();
+            ConversationVO conversationVO = new ConversationVO();
             BeanUtils.copyProperties(conversation, conversationVO);
-            conversationVO.setCreatedAt(new Timestamp(System.currentTimeMillis()));
-            conversationVO.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
+            aiTaskVO.setConversation(conversationVO);
         }
+        
+        createAiTaskVO.setTask(aiTaskVO);
+        return createAiTaskVO;
+    }
 
-        // 返回任务ID和convId
-        return new CreateAiTaskVO(aiTask.getId(), conversationVO);
+    /**
+     * 创建新会话
+     * @throws JsonProcessingException JSON处理异常
+     */
+    private Conversation createNewConversation(CreateAiTaskDTO createAiTaskDTO) throws JsonProcessingException {
+        Long userId = StpUtil.getLoginIdAsLong();
+        
+        // 生成会话标题
+        String title = aiService.getConvTitle(createAiTaskDTO.getPrompt());
+        
+        // 创建会话
+        Conversation conversation = new Conversation();
+        conversation.setUserId(userId);
+        conversation.setTitle(title);
+        conversation.setSubject(createAiTaskDTO.getSubject());
+        conversationMapper.insert(conversation);
+        
+        // 创建根节点
+        Node rootNode = new Node();
+        rootNode.setType(NodeType.ROOT);
+        rootNode.setData("{}");
+        rootNode.setPosition(objectMapper.writeValueAsString(XYPosition.origin()));
+        rootNode.setUserId(userId);
+        rootNode.setConvId(conversation.getId());
+        rootNode.setParentId(0L);
+        nodeMapper.insert(rootNode);
+        
+        return conversation;
     }
 
     @Async

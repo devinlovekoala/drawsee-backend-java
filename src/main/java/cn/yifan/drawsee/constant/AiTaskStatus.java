@@ -7,14 +7,42 @@ package cn.yifan.drawsee.constant;
  * @date 2025-02-01 10:57
  **/
 
+/**
+ * AI任务状态常量
+ */
 public class AiTaskStatus {
 
-    public static final String WAITING = "waiting";
+    /**
+     * 等待中
+     */
+    public static final String WAITING = "WAITING";
 
-    public static final String PROCESSING = "processing";
+    /**
+     * 处理中
+     */
+    public static final String PROCESSING = "PROCESSING";
 
-    public static final String SUCCESS = "success";
+    /**
+     * 已完成
+     */
+    public static final String COMPLETED = "COMPLETED";
 
-    public static final String FAILED = "failed";
+    /**
+     * 失败
+     */
+    public static final String FAILED = "FAILED";
 
+    /**
+     * 待处理
+     */
+    public static final String PENDING = "PENDING";
+
+    /**
+     * 成功
+     */
+    public static final String SUCCESS = "SUCCESS";
+
+    private AiTaskStatus() {
+        // 私有构造函数，防止实例化
+    }
 }

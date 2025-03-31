@@ -3,6 +3,7 @@ package cn.yifan.drawsee.pojo.dto;
 import cn.yifan.drawsee.annotation.ValueSet;
 import cn.yifan.drawsee.constant.AiModel;
 import cn.yifan.drawsee.constant.AiTaskType;
+import cn.yifan.drawsee.constant.KnowledgeSubject;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -14,7 +15,7 @@ import java.util.Map;
 
 /**
  * @FileName CreateTaskDTO
- * @Description
+ * @Description AI任务创建DTO，支持自动识别模式和学科特定处理
  * @Author yifan
  * @date 2025-01-29 18:13
  **/
@@ -38,6 +39,7 @@ public class CreateAiTaskDTO implements Serializable {
     })
     private String type;
 
+    @NotBlank(message = "提示词不能为空")
     private String prompt;
 
     private Map<String, String> promptParams;
@@ -47,5 +49,21 @@ public class CreateAiTaskDTO implements Serializable {
     private Long convId;
 
     private Long parentId;
+
+    /**
+     * 是否启用自动识别模式
+     */
+    private Boolean enableAutoDetection = false;
+
+    /**
+     * 学科类型，用于特定学科的处理逻辑
+     * 可选值: linear_algebra, electronic, general
+     */
+    @ValueSet(values = {
+        KnowledgeSubject.LINEAR_ALGEBRA,
+        KnowledgeSubject.ELECTRONIC,
+        KnowledgeSubject.GENERAL
+    })
+    private String subject = KnowledgeSubject.GENERAL;
 
 }
