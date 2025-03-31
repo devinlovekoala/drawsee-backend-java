@@ -96,4 +96,10 @@ public class StreamAiService {
         deepseekV3StreamingChatLanguageModel.generate(messages, handler);
     }
 
+    public void circuitAnalysisChat(LinkedList<ChatMessage> history, String prompt, StreamingResponseHandler<AiMessage> handler) {
+        LinkedList<ChatMessage> messages = new LinkedList<>(history);
+        messages.add(new UserMessage(prompt));
+        doubaoStreamingChatLanguageModel.generate(messages, handler);
+    }
+
 }

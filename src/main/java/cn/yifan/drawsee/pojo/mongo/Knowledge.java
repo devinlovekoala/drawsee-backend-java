@@ -50,5 +50,7 @@ public class Knowledge implements Serializable {
 
     @Field("childrenIds")
     private List<String> childrenIds;
-
+    
+    @Field("knowledge_base_id")
+    private String knowledgeBaseId;
 }

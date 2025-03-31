@@ -68,7 +68,7 @@ spring:
   application:
     name: drawsee-java
   profiles:
-    active: dev
+    active: test
   mail:
     host: smtp.qq.com
     protocol: smtp
@@ -89,6 +89,14 @@ spring:
     encoding: UTF-8 #编码
     suffix: .html #模板后缀
     mode: HTML #模板
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 100MB
+      file-size-threshold: 2KB
+      location: ${java.io.tmpdir}
+      resolve-lazily: false
   rabbitmq:
     host: 42.193.107.127
     port: 5678

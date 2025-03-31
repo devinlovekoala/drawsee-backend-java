@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.yifan.drawsee.mapper.TeacherMapper">
+
+    <insert id="insert"
+            parameterType="cn.yifan.drawsee.pojo.entity.Teacher"
+            useGeneratedKeys="true"
+            keyProperty="id"
+    >
+        INSERT INTO teacher (user_id, title, organization)
+        VALUES (#{userId}, #{title}, #{organization})
+    </insert>
+
+    <select id="getById"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.Teacher"
+    >
+        SELECT id, user_id as userId
+        FROM teacher
+        WHERE id = #{id}
+    </select>
+
+    <select id="getByUserId"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.Teacher"
+    >
+        SELECT id, user_id, title, organization
+        FROM teacher
+        WHERE user_id = #{userId}
+    </select>
+
+    <update id="update"
+            parameterType="cn.yifan.drawsee.pojo.entity.Teacher"
+    >
+        UPDATE teacher
+        SET title = #{title}, organization = #{organization}
+        WHERE id = #{id}
+    </update>
+
+</mapper> 

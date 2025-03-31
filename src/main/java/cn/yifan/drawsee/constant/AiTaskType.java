@@ -26,5 +26,7 @@ public class AiTaskType {
     public static final String PLANNER = "planner";
 
     public static final String HTML_MAKER = "html-maker";
+    
+    public static final String CIRCUIT_ANALYZE = "circuit-analyze";
 
 }

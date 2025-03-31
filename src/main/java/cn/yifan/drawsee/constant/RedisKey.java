@@ -17,6 +17,8 @@ public class RedisKey {
 
     public static final String INVITATION_CODE_PAGE_KEY = CACHE_PREFIX + "invitation-code-page";
 
+    public static final String TEACHER_INVITATION_CODE_PAGE_KEY = CACHE_PREFIX + "teacher-invitation-code-page";
+
     public static final String DASHBOARD_STATISTICS_KEY = CACHE_PREFIX + "dashboard-statistics";
 
     public static final String COUNT_SPACE = "count";

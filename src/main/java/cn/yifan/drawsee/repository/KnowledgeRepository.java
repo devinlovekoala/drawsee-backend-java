@@ -22,4 +22,6 @@ public interface KnowledgeRepository extends MongoRepository<Knowledge, String> 
 
     Knowledge findBySubjectAndName(String subject, String name);
 
+    List<Knowledge> findAllByIdIn(List<String> ids);
+
 }

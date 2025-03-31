@@ -2,6 +2,8 @@ package cn.yifan.drawsee.service.base;
 
 import cn.yifan.drawsee.annotation.PromptParam;
 import cn.yifan.drawsee.annotation.PromptResource;
+import cn.yifan.drawsee.pojo.entity.CircuitDesign;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 
@@ -12,6 +14,7 @@ import java.util.List;
  * @date 2025-03-09 23:19
  **/
 
+@Service
 public interface PromptService {
 
     @PromptResource(fromResource = "/prompt/general-chat.txt")
@@ -70,5 +73,21 @@ public interface PromptService {
 
     @PromptResource(fromResource = "/prompt/html-maker-chat.txt")
     String getHtmlMakerChatPrompt(@PromptParam("question") String question);
+
+    @PromptResource(fromResource = "/prompt/circuit-analysis.txt")
+    String getCircuitAnalysisPrompt(
+        @PromptParam("design") CircuitDesign design,
+        @PromptParam("spiceNetlist") String spiceNetlist
+    );
+
+    @PromptResource(fromResource = "/prompt/circuit-spice.txt")
+    String getCircuitSpicePrompt(
+        @PromptParam("circuitDesign") CircuitDesign circuitDesign
+    );
+
+    @PromptResource(fromResource = "/prompt/circuit-optimization.txt")
+    String getCircuitOptimizationPrompt(
+        @PromptParam("analysisResult") String analysisResult
+    );
 
 }

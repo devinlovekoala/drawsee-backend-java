@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -69,6 +70,12 @@ public class MinioService {
             return "image/gif";
         } else if (objectName.endsWith(".mp4")) {
             return "video/mp4";
+        } else if (objectName.endsWith(".pdf")) {
+            return "application/pdf";
+        } else if (objectName.endsWith(".doc")) {
+            return "application/msword";
+        } else if (objectName.endsWith(".docx")) {
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         }
         // 可以根据需要添加更多类型
         return "application/octet-stream";
@@ -106,4 +113,40 @@ public class MinioService {
         return objectName;
     }
 
+    /**
+     * 上传任意文件到MinIO
+     * @param file 要上传的文件
+     * @param objectName 对象名称
+     * @return 上传后的对象URL
+     * @throws MinioException MinIO异常
+     * @throws IOException IO异常
+     * @throws NoSuchAlgorithmException 算法异常
+     * @throws InvalidKeyException 密钥异常
+     */
+    public String uploadFile(MultipartFile file, String objectName) throws MinioException, IOException, NoSuchAlgorithmException, InvalidKeyException {
+        // 检查文件是否为空
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("文件不能为空");
+        }
+        
+        // 获取文件类型
+        String contentType = file.getContentType();
+        if (contentType == null) {
+            // 如果无法获取Content-Type，根据文件名推断
+            contentType = getContentType(Objects.requireNonNull(file.getOriginalFilename()));
+        }
+        
+        // 上传文件到MinIO
+        minioClient.putObject(
+            PutObjectArgs.builder()
+                .bucket(minioConfig.getBucketName())
+                .object(objectName)
+                .stream(file.getInputStream(), file.getSize(), -1)
+                .contentType(contentType)
+                .build()
+        );
+        
+        // 返回完整URL
+        return getObjectUrl(objectName);
+    }
 }

@@ -13,6 +13,10 @@ public class NodeSubType {
 
     public static final String ANIMATION = "animation";
 
+    public static final String WORD = "word";
+
+    public static final String PDF = "pdf";
+
     public static final String GENERATED_ANIMATION = "generated-animation";
 
     public static final String SOLVER_FIRST = "solver-first";
@@ -26,5 +30,11 @@ public class NodeSubType {
     public static final String PLANNER_SPLIT = "planner-split";
 
     public static final String HTML_MAKER = "html-maker";
+
+    public static final String CIRCUIT_ANALYSIS = "circuit-analysis";
+
+    public static final String CIRCUIT_SPICE = "circuit-spice";
+
+    public static final String CIRCUIT_OPTIMIZATION = "circuit-optimization";
 
 }

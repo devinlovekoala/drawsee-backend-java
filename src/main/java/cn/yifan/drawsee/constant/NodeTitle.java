@@ -16,6 +16,8 @@ public class NodeTitle {
     public static final String GENERATED_ANIMATION = "生成动画";
     public static final String BILIBILI = "B站视频";
     public static final String ANIMATION = "教学动画";
+    public static final String WORD = "Word文档";
+    public static final String PDF = "PDF文档";
 
     public static final String SOLVER_FIRST = "题目分析";
     public static final String SOLVER_CONTINUE = "题目推导";
@@ -25,5 +27,9 @@ public class NodeTitle {
     public static final String PLANNER_SPLIT = "目标拆解";
 
     public static final String HTML_MAKER = "HTML制作";
+
+    public static final String CIRCUIT_ANALYSIS = "电路分析";
+    public static final String CIRCUIT_SPICE = "SPICE网表生成";
+    public static final String CIRCUIT_OPTIMIZATION = "电路优化建议";
 
 }

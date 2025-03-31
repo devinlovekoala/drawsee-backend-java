@@ -1,5 +1,6 @@
 package cn.yifan.drawsee.worker;
 
+import cn.dev33.satoken.stp.StpUtil;
 import cn.yifan.drawsee.constant.NodeTitle;
 import cn.yifan.drawsee.constant.NodeType;
 import cn.yifan.drawsee.constant.RedisKey;
@@ -9,8 +10,12 @@ import cn.yifan.drawsee.mapper.NodeMapper;
 import cn.yifan.drawsee.mapper.UserMapper;
 import cn.yifan.drawsee.pojo.XYPosition;
 import cn.yifan.drawsee.pojo.entity.Node;
+import cn.yifan.drawsee.pojo.mongo.Course;
 import cn.yifan.drawsee.pojo.mongo.Knowledge;
+import cn.yifan.drawsee.pojo.mongo.KnowledgeBase;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
+import cn.yifan.drawsee.repository.CourseRepository;
+import cn.yifan.drawsee.repository.KnowledgeBaseRepository;
 import cn.yifan.drawsee.repository.KnowledgeRepository;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.StreamAiService;
@@ -21,8 +26,11 @@ import org.redisson.api.RList;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.time.Duration;
 
@@ -37,6 +45,9 @@ import java.time.Duration;
 @Service
 public class KnowledgeWorkFlow extends WorkFlow {
 
+    private final CourseRepository courseRepository;
+    private final KnowledgeBaseRepository knowledgeBaseRepository;
+
     public KnowledgeWorkFlow(
         UserMapper userMapper,
         AiService aiService,
@@ -46,10 +57,22 @@ public class KnowledgeWorkFlow extends WorkFlow {
         NodeMapper nodeMapper,
         ConversationMapper conversationMapper,
         AiTaskMapper aiTaskMapper,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        CourseRepository courseRepository,
+        KnowledgeBaseRepository knowledgeBaseRepository
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, knowledgeRepository, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
-        // 知识点列表
+        this.courseRepository = courseRepository;
+        this.knowledgeBaseRepository = knowledgeBaseRepository;
+        
+        // 全局默认知识点列表 - 这里将保留用于通用模式
+        refreshGlobalKnowledgePoints();
+    }
+    
+    /**
+     * 刷新全局知识点列表
+     */
+    private void refreshGlobalKnowledgePoints() {
         List<Knowledge> knowledgeList = knowledgeRepository.findAll();
         List<String> knowledgePoints = knowledgeList.stream().map(Knowledge::getName).toList();
         RList<String> rList = redissonClient.getList(RedisKey.CACHE_PREFIX + "knowledge-points");
@@ -63,10 +86,16 @@ public class KnowledgeWorkFlow extends WorkFlow {
     public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         Node streamNode = workContext.getStreamNode();
-
-        // 获取相关知识点
-        RList<String> rList = redissonClient.getList(RedisKey.CACHE_PREFIX + "knowledge-points");
-        List<String> knowledgePoints = rList.stream().toList();
+        
+        // 获取知识点列表，优先从用户加入的课程和知识库中获取
+        List<String> knowledgePoints = getUserRelatedKnowledgePoints(aiTaskMessage.getUserId());
+        
+        // 如果用户没有加入任何课程或知识库，则使用全局知识点列表
+        if (knowledgePoints.isEmpty()) {
+            RList<String> rList = redissonClient.getList(RedisKey.CACHE_PREFIX + "knowledge-points");
+            knowledgePoints = rList.stream().toList();
+        }
+        
         List<String> relatedKnowledgePoints = aiService.getRelatedKnowledgePoints(knowledgePoints, aiTaskMessage.getPrompt(), workContext.getTokens());
 
         if (relatedKnowledgePoints == null) return;
@@ -87,6 +116,74 @@ public class KnowledgeWorkFlow extends WorkFlow {
                 true
             );
             insertAndPublishNoneStreamNode(workContext, knowledgeHeadNode, knowledgeHeadNodeData);
+        }
+    }
+    
+    /**
+     * 获取用户相关的知识点列表
+     * @param userId 用户ID
+     * @return 知识点列表
+     */
+    private List<String> getUserRelatedKnowledgePoints(Long userId) {
+        Set<String> knowledgePoints = new HashSet<>();
+        
+        // 从用户加入的课程中获取知识库
+        List<Course> userCourses = courseRepository.findByStudentIdsContaining(userId);
+        for (Course course : userCourses) {
+            List<String> knowledgeBaseIds = course.getKnowledgeBaseIds();
+            if (knowledgeBaseIds != null && !knowledgeBaseIds.isEmpty()) {
+                for (String knowledgeBaseId : knowledgeBaseIds) {
+                    KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+                    if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
+                        // 只使用已发布的知识库，或者用户是知识库创建者的知识库
+                        if (knowledgeBase.getIsPublished() || knowledgeBase.getCreatorId().equals(userId)) {
+                            addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
+                        } else {
+                            log.info("用户{}跳过未发布的知识库: {}", userId, knowledgeBase.getName());
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 从用户直接加入的知识库中获取知识点
+        List<KnowledgeBase> userKnowledgeBases = knowledgeBaseRepository.findByMembersContaining(userId);
+        for (KnowledgeBase knowledgeBase : userKnowledgeBases) {
+            if (!knowledgeBase.getIsDeleted()) {
+                // 只使用已发布的知识库，或者用户是知识库创建者的知识库
+                if (knowledgeBase.getIsPublished() || knowledgeBase.getCreatorId().equals(userId)) {
+                    addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
+                } else {
+                    log.info("用户{}跳过未发布的知识库: {}", userId, knowledgeBase.getName());
+                }
+            }
+        }
+        
+        // 添加所有公开发布的知识库中的知识点
+        List<KnowledgeBase> publishedBases = knowledgeBaseRepository.findByIsPublishedTrue();
+        for (KnowledgeBase knowledgeBase : publishedBases) {
+            if (!knowledgeBase.getIsDeleted()) {
+                addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
+            }
+        }
+        
+        return new ArrayList<>(knowledgePoints);
+    }
+    
+    /**
+     * 从知识库中添加知识点到集合
+     * @param knowledgeBase 知识库
+     * @param knowledgePoints 知识点集合
+     */
+    private void addKnowledgePointsFromBase(KnowledgeBase knowledgeBase, Set<String> knowledgePoints) {
+        List<String> knowledgeIds = knowledgeBase.getKnowledgeIds();
+        if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
+            for (String knowledgeId : knowledgeIds) {
+                Knowledge knowledge = knowledgeRepository.findById(knowledgeId).orElse(null);
+                if (knowledge != null) {
+                    knowledgePoints.add(knowledge.getName());
+                }
+            }
         }
     }
 }

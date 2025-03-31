@@ -49,13 +49,38 @@ public enum ApiError {
 
     // 权限
     NOT_LOGIN(401, "未登录"),
+    PERMISSION_DENIED(403, "权限不足"),
 
     // 登录
     USER_NOT_EXIST(404, "用户名不存在"),
     PASSWORD_ERROR(401, "密码错误"),
 
     // 注册
-    USER_HAD_EXISTED(409, "用户名已存在");
+    USER_HAD_EXISTED(409, "用户名已存在"),
+
+    // 教师相关错误
+    NOT_TEACHER(405501, "用户不是教师"),
+    TEACHER_HAD_EXISTED(405502, "教师已存在"),
+
+    // 知识库相关错误
+    KNOWLEDGE_BASE_NOT_EXISTED(405601, "知识库不存在"),
+    KNOWLEDGE_BASE_HAD_EXISTED(405602, "知识库已存在"),
+    KNOWLEDGE_BASE_ALREADY_JOINED(405603, "已加入该知识库"),
+    KNOWLEDGE_BASE_JOIN_FAILED(405604, "加入知识库失败"),
+    INVALID_INVITATION_CODE(405605, "邀请码无效"),
+    KNOWLEDGE_NOT_IN_KNOWLEDGE_BASE(405606, "知识点不在知识库中"),
+    
+    // 上传相关错误
+    UPLOAD_FAILED(405701, "上传失败"),
+    INVALID_BILIBILI_URL(405702, "无效的B站链接"),
+    RESOURCE_ADD_FAILED(405703, "资源添加失败"),
+    
+    // 课程相关错误
+    COURSE_NOT_EXISTED(405801, "课程不存在"),
+    COURSE_HAD_EXISTED(405802, "课程已存在"),
+    ALREADY_JOINED(405803, "已加入该课程"),
+    INVALID_CLASS_CODE(405804, "班级码无效"),
+    JOIN_COURSE_FAILED(405805, "加入课程失败");
 
     // 枚举项的参数
     private final Integer code;

@@ -34,7 +34,7 @@ public class KnowledgeService {
         knowledge.setSubject(subject);
         knowledge.setName(addKnowledgeDTO.getName());
         knowledge.setAliases(addKnowledgeDTO.getAliases());
-        knowledge.setResources(addKnowledgeDTO.getResources());
+        knowledge.setResources(new ArrayList<>());
         knowledge.setLevel(parent.getLevel() + 1);
         knowledge.setParentId(parent.getId());
         knowledge.setChildrenIds(new ArrayList<>());
@@ -56,7 +56,6 @@ public class KnowledgeService {
         }
         knowledge.setName(updateKnowledgeDTO.getName());
         knowledge.setAliases(updateKnowledgeDTO.getAliases());
-        knowledge.setResources(updateKnowledgeDTO.getResources());
         knowledge.setLevel(parent.getLevel() + 1);
         knowledge.setParentId(parent.getId());
         knowledgeRepository.save(knowledge);

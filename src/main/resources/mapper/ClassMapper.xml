@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.yifan.drawsee.mapper.ClassMapper">
+
+    <insert id="insert"
+            parameterType="cn.yifan.drawsee.pojo.entity.Class"
+            useGeneratedKeys="true"
+            keyProperty="id"
+    >
+        INSERT INTO class (name, description, class_code, teacher_id, created_at, updated_at, is_deleted)
+        VALUES (#{name}, #{description}, #{classCode}, #{teacherId}, NOW(), NOW(), #{isDeleted})
+    </insert>
+
+    <select id="getById"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.Class"
+    >
+        SELECT id, name, description, class_code as classCode, teacher_id as teacherId, 
+               created_at as createdAt, updated_at as updatedAt, is_deleted as isDeleted
+        FROM class
+        WHERE id = #{id} AND is_deleted = 0
+    </select>
+
+    <select id="getByClassCode"
+            parameterType="string"
+            resultType="cn.yifan.drawsee.pojo.entity.Class"
+    >
+        SELECT id, name, description, class_code as classCode, teacher_id as teacherId, 
+               created_at as createdAt, updated_at as updatedAt, is_deleted as isDeleted
+        FROM class
+        WHERE class_code = #{classCode} AND is_deleted = 0
+    </select>
+
+    <select id="getByTeacherId"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.Class"
+    >
+        SELECT id, name, description, class_code as classCode, teacher_id as teacherId, 
+               created_at as createdAt, updated_at as updatedAt, is_deleted as isDeleted
+        FROM class
+        WHERE teacher_id = #{teacherId} AND is_deleted = 0
+    </select>
+
+    <update id="update"
+            parameterType="cn.yifan.drawsee.pojo.entity.Class"
+    >
+        UPDATE class
+        SET name = #{name},
+            description = #{description},
+            updated_at = NOW(),
+            is_deleted = #{isDeleted}
+        WHERE id = #{id}
+    </update>
+
+    <select id="getByPage"
+            resultType="cn.yifan.drawsee.pojo.entity.Class"
+    >
+        SELECT id, name, description, class_code as classCode, teacher_id as teacherId, 
+               created_at as createdAt, updated_at as updatedAt, is_deleted as isDeleted
+        FROM class
+        WHERE is_deleted = 0
+        ORDER BY created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+</mapper> 
