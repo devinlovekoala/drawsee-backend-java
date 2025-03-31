@@ -27,4 +27,4 @@ public class CreateCourseDTO implements Serializable {
     private String name;
 
     private String description;
-} 
+}
