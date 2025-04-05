@@ -8,15 +8,16 @@ import cn.yifan.drawsee.pojo.vo.*;
 import cn.yifan.drawsee.service.business.FlowService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * @FileName FlowController
- * @Description
+ * @Description 流程控制器
  * @Author yifan
  * @date 2025-01-28 22:38
  **/
@@ -81,4 +82,8 @@ public class FlowController {
         return flowService.getResource(objectName);
     }
 
+    @GetMapping("/resources/{objectName}")
+    public ResponseEntity<Resource> downloadResource(@PathVariable String objectName) {
+        return flowService.downloadResource(objectName);
+    }
 }

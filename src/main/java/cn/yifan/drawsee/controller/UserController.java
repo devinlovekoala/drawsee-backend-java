@@ -1,6 +1,7 @@
 package cn.yifan.drawsee.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
+import cn.dev33.satoken.stp.StpUtil;
 import cn.yifan.drawsee.pojo.dto.UserLoginDTO;
 import cn.yifan.drawsee.pojo.dto.UserSignUpDTO;
 import cn.yifan.drawsee.pojo.vo.LoginVO;
@@ -12,11 +13,12 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * @FileName UserController
- * @Description
+ * @Description 用户控制器
  * @Author yifan
  * @date 2025-01-28 16:06
  **/
 
+@Slf4j
 @RestController
 @RequestMapping("/user")
 public class UserController {
@@ -43,4 +45,9 @@ public class UserController {
         return userService.checkLogin();
     }
 
+    @PostMapping("/logout")
+    @SaCheckLogin
+    public void logout() {
+        StpUtil.logout();
+    }
 }

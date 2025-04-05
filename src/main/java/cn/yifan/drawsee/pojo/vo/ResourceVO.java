@@ -4,24 +4,28 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.Serial;
-import java.io.Serializable;
-
 /**
  * @FileName ResourceVO
- * @Description
+ * @Description 资源信息VO
  * @Author yifan
- * @date 2025-03-10 10:29
+ * @date 2025-03-09 16:21
  **/
-
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
-public class ResourceVO implements Serializable {
-
-    @Serial
-    private static final long serialVersionUID = 1L;
-
+@AllArgsConstructor
+public class ResourceVO {
+    /**
+     * 资源访问URL
+     */
     private String url;
-
+    
+    /**
+     * 资源大小（字节）
+     */
+    private Long size;
+    
+    /**
+     * 资源类型
+     */
+    private String contentType;
 }

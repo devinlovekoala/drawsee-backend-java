@@ -1,15 +1,20 @@
 package cn.yifan.drawsee.service.base;
 
 import cn.yifan.drawsee.config.MinioConfig;
-import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
-import io.minio.StatObjectArgs;
+import cn.yifan.drawsee.pojo.vo.ResourceVO;
+import io.minio.*;
 import io.minio.errors.MinioException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Map;
@@ -18,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @FileName MinioService
- * @Description
+ * @Description Minio服务类，处理文件上传下载等操作
  * @Author yifan
  * @date 2025-03-09 16:21
  **/
@@ -148,5 +153,60 @@ public class MinioService {
         
         // 返回完整URL
         return getObjectUrl(objectName);
+    }
+
+    /**
+     * 获取资源信息
+     * @param objectName 对象名称
+     * @return 资源信息VO
+     */
+    public ResourceVO getResource(String objectName) throws MinioException, IOException, NoSuchAlgorithmException, InvalidKeyException {
+        // 获取对象的元数据
+        StatObjectResponse stat = minioClient.statObject(
+                StatObjectArgs.builder()
+                        .bucket(minioConfig.getBucketName())
+                        .object(objectName)
+                        .build()
+        );
+        
+        // 获取预签名URL
+        String url = getObjectUrl(objectName);
+        
+        // 返回资源信息
+        return new ResourceVO(url, stat.size(), getContentType(objectName));
+    }
+
+    /**
+     * 下载资源
+     * @param objectName 对象名称
+     * @return ResponseEntity包含资源流
+     */
+    public ResponseEntity<Resource> downloadResource(String objectName) throws MinioException, IOException, NoSuchAlgorithmException, InvalidKeyException {
+        // 获取对象
+        GetObjectResponse response = minioClient.getObject(
+                GetObjectArgs.builder()
+                        .bucket(minioConfig.getBucketName())
+                        .object(objectName)
+                        .build()
+        );
+
+        // 获取对象的元数据
+        StatObjectResponse stat = minioClient.statObject(
+                StatObjectArgs.builder()
+                        .bucket(minioConfig.getBucketName())
+                        .object(objectName)
+                        .build()
+        );
+
+        // 创建InputStreamResource
+        InputStream inputStream = response;
+        Resource resource = new InputStreamResource(inputStream);
+
+        // 设置响应头
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(getContentType(objectName)))
+                .contentLength(stat.size())
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + objectName + "\"")
+                .body(resource);
     }
 }

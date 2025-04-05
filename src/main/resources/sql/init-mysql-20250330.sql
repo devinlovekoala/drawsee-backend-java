@@ -8,9 +8,10 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- 用户表
 DROP TABLE IF EXISTS `user`;
 CREATE TABLE `user` (
-  `id` int UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '用户唯一ID',
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '用户唯一ID',
   `username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '用户名（唯一）',
   `password` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '密码哈希值',
+  `role` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'USER' COMMENT '用户角色',
   `created_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) COMMENT '创建时间',
   `updated_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) ON UPDATE CURRENT_TIMESTAMP(0) COMMENT '更新时间',
   `is_deleted` tinyint(1) NULL DEFAULT 0 COMMENT '逻辑删除标记（0-未删除，1-已删除）',
@@ -101,10 +102,13 @@ CREATE TABLE `invitation_code` (
 -- 教师表
 DROP TABLE IF EXISTS `teacher`;
 CREATE TABLE `teacher` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `user_id` int UNSIGNED NOT NULL COMMENT '用户ID',
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id` bigint NOT NULL COMMENT '用户ID',
   `title` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '职称',
   `organization` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '所属组织机构',
+  `created_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) COMMENT '创建时间',
+  `updated_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) ON UPDATE CURRENT_TIMESTAMP(0) COMMENT '更新时间',
+  `is_deleted` tinyint(1) NULL DEFAULT 0 COMMENT '逻辑删除标记',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `idx_user_id`(`user_id`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '教师表' ROW_FORMAT = Dynamic;
@@ -112,11 +116,11 @@ CREATE TABLE `teacher` (
 -- 教师邀请码表
 DROP TABLE IF EXISTS `teacher_invitation_code`;
 CREATE TABLE `teacher_invitation_code` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
   `code` varchar(20) NOT NULL COMMENT '邀请码',
+  `course_id` varchar(36) NOT NULL COMMENT '课程ID',
+  `teacher_id` bigint NOT NULL COMMENT '教师ID',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `created_by` bigint(20) NOT NULL COMMENT '创建人ID',
-  `used_by` bigint(20) DEFAULT NULL COMMENT '使用人ID',
   `used_at` timestamp NULL DEFAULT NULL COMMENT '使用时间',
   `is_active` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否有效',
   `remark` varchar(255) DEFAULT NULL COMMENT '备注',
@@ -127,11 +131,11 @@ CREATE TABLE `teacher_invitation_code` (
 -- 班级表
 DROP TABLE IF EXISTS `class`;
 CREATE TABLE `class` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
   `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '班级名称',
   `description` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '班级描述',
   `class_code` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '班级码',
-  `teacher_id` bigint(20) NOT NULL COMMENT '教师ID',
+  `teacher_id` bigint NOT NULL COMMENT '教师ID',
   `created_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) COMMENT '创建时间',
   `updated_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) ON UPDATE CURRENT_TIMESTAMP(0) COMMENT '更新时间',
   `is_deleted` tinyint(1) NULL DEFAULT 0 COMMENT '逻辑删除标记',
@@ -143,9 +147,9 @@ CREATE TABLE `class` (
 -- 班级成员表
 DROP TABLE IF EXISTS `class_member`;
 CREATE TABLE `class_member` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `class_id` bigint(20) NOT NULL COMMENT '班级ID',
-  `user_id` int UNSIGNED NOT NULL COMMENT '用户ID',
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `class_id` bigint NOT NULL COMMENT '班级ID',
+  `user_id` bigint NOT NULL COMMENT '用户ID',
   `joined_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) COMMENT '加入时间',
   `is_deleted` tinyint(1) NULL DEFAULT 0 COMMENT '逻辑删除标记',
   PRIMARY KEY (`id`) USING BTREE,
@@ -153,9 +157,9 @@ CREATE TABLE `class_member` (
   INDEX `idx_user_id`(`user_id`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '班级成员表' ROW_FORMAT = Dynamic;
 
--- 插入一个管理员用户
-INSERT INTO `user` (id, username, password, created_at, updated_at, is_deleted) 
-VALUES (1, 'admin', 'admin123', NOW(), NOW(), 0);
+-- 插入管理员用户
+INSERT INTO `user` (id, username, password, role, created_at, updated_at, is_deleted) 
+VALUES (1, 'admin', '$2a$10$1/JxJxkxGUvE8zQh2XsGz.4QJj0xh.QMLk1QYn.rKGmGhxKgPXkPi', 'ADMIN', NOW(), NOW(), 0);
 
 -- 将该用户设置为管理员
 INSERT INTO `admin` (user_id) VALUES (1);

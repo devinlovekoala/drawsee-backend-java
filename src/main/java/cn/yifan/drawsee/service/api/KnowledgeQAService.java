@@ -1,4 +1,4 @@
-package cn.yifan.drawsee.service.business;
+package cn.yifan.drawsee.service.api;
 
 import cn.yifan.drawsee.pojo.dto.CreateAiTaskDTO;
 

@@ -33,6 +33,8 @@ public class CourseVO implements Serializable {
     private String classCode;
 
     private Long creatorId;
+    
+    private String creatorRole;
 
     private Date createdAt;
 
@@ -41,4 +43,8 @@ public class CourseVO implements Serializable {
     private Integer studentCount;
     
     private List<String> knowledgeBaseIds;
+    
+    private List<KnowledgeBaseVO> knowledgeBases;
+    
+    private Boolean isPublished;  // 是否有已发布的知识库
 } 

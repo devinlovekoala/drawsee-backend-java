@@ -6,28 +6,36 @@ import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
 import cn.yifan.drawsee.pojo.dto.CreateCourseDTO;
 import cn.yifan.drawsee.pojo.dto.JoinCourseDTO;
+import cn.yifan.drawsee.pojo.dto.PaginationParams;
 import cn.yifan.drawsee.pojo.dto.UpdateCourseDTO;
 import cn.yifan.drawsee.pojo.mongo.Course;
-import cn.yifan.drawsee.pojo.vo.CourseVO;
+import cn.yifan.drawsee.pojo.mongo.KnowledgeBase;
+import cn.yifan.drawsee.pojo.vo.*;
 import cn.yifan.drawsee.repository.CourseRepository;
+import cn.yifan.drawsee.repository.KnowledgeBaseRepository;
 import cn.yifan.drawsee.service.business.TeacherInvitationCodeService;
+import cn.yifan.drawsee.service.business.KnowledgeBaseService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * @FileName CourseService
  * @Description 课程服务类
  * @Author devin
- * @date 2025-03-28 11:07
+ * @date 2025-03-28 11:12
  **/
-
 @Service
 public class CourseService {
 
@@ -42,6 +50,12 @@ public class CourseService {
     
     @Autowired
     private TeacherInvitationCodeService teacherInvitationCodeService;
+    
+    @Autowired
+    private KnowledgeBaseRepository knowledgeBaseRepository;
+    
+    @Autowired
+    private KnowledgeBaseService knowledgeBaseService;
 
     /**
      * 创建课程
@@ -67,17 +81,22 @@ public class CourseService {
         String classCode = generateClassCode();
         
         // 创建课程
-        Course course = new Course();
-        course.setName(createCourseDTO.getName());
-        course.setDescription(createCourseDTO.getDescription());
-        course.setClassCode(classCode);
-        course.setCreatorId(userId);
-        course.setCreatorRole(userRole); // 设置创建者角色
-        course.setCreatedAt(new Date());
-        course.setUpdatedAt(new Date());
-        course.setStudentIds(new ArrayList<>());
-        course.setKnowledgeBaseIds(new ArrayList<>());
-        course.setIsDeleted(false);
+        Course course = new Course(
+            null, // MongoDB会自动生成ID
+            createCourseDTO.getName(),
+            null, // code暂时为空
+            classCode,
+            createCourseDTO.getDescription(),
+            null, // subject暂时为空
+            new ArrayList<>(), // topics
+            userId,
+            userRole,
+            new ArrayList<>(), // studentIds
+            new ArrayList<>(), // knowledgeBaseIds
+            System.currentTimeMillis(),
+            System.currentTimeMillis(),
+            false // isDeleted
+        );
         
         courseRepository.save(course);
         
@@ -110,7 +129,7 @@ public class CourseService {
         
         // 加入课程
         course.getStudentIds().add(userId);
-        course.setUpdatedAt(new Date());
+        course.setUpdatedAt(System.currentTimeMillis());
         courseRepository.save(course);
         
         return course.getId();
@@ -147,11 +166,20 @@ public class CourseService {
             throw new ApiException(ApiError.COURSE_NOT_EXISTED);
         }
         
-        CourseVO courseVO = new CourseVO();
-        BeanUtils.copyProperties(course, courseVO);
-        courseVO.setStudentCount(course.getStudentIds().size());
-        
-        return courseVO;
+        return new CourseVO(
+            course.getId(),
+            course.getName(),
+            course.getDescription(),
+            course.getClassCode(),
+            course.getCreatorId(),
+            course.getCreatorRole(),
+            new Date(course.getCreatedAt()),
+            new Date(course.getUpdatedAt()),
+            course.getStudentIds().size(),
+            course.getKnowledgeBaseIds(),
+            new ArrayList<>(),  // 暂时不需要知识库详情
+            false              // 暂时不需要发布状态
+        );
     }
     
     /**
@@ -188,9 +216,37 @@ public class CourseService {
                 continue;
             }
             
-            CourseVO vo = new CourseVO();
-            BeanUtils.copyProperties(course, vo);
-            vo.setStudentCount(course.getStudentIds().size());
+            List<KnowledgeBaseVO> knowledgeBases = new ArrayList<>();
+            boolean hasPublishedBase = false;
+            
+            if (course.getKnowledgeBaseIds() != null && !course.getKnowledgeBaseIds().isEmpty()) {
+                for (String knowledgeBaseId : course.getKnowledgeBaseIds()) {
+                    KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+                    if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
+                        KnowledgeBaseVO knowledgeBaseVO = knowledgeBaseService.convertToVO(knowledgeBase);
+                        knowledgeBases.add(knowledgeBaseVO);
+                        if (knowledgeBase.getIsPublished()) {
+                            hasPublishedBase = true;
+                        }
+                    }
+                }
+            }
+            
+            CourseVO vo = new CourseVO(
+                course.getId(),
+                course.getName(),
+                course.getDescription(),
+                course.getClassCode(),
+                course.getCreatorId(),
+                course.getCreatorRole(),
+                new Date(course.getCreatedAt()),
+                new Date(course.getUpdatedAt()),
+                course.getStudentIds().size(),
+                course.getKnowledgeBaseIds(),
+                knowledgeBases,
+                hasPublishedBase
+            );
+            
             result.add(vo);
         }
         return result;
@@ -228,7 +284,7 @@ public class CourseService {
         // 更新课程信息
         course.setName(updateCourseDTO.getName());
         course.setDescription(updateCourseDTO.getDescription());
-        course.setUpdatedAt(new Date());
+        course.setUpdatedAt(System.currentTimeMillis());
 
         courseRepository.save(course);
         return true;
@@ -257,9 +313,230 @@ public class CourseService {
 
         // 逻辑删除课程
         course.setIsDeleted(true);
-        course.setUpdatedAt(new Date());
+        course.setUpdatedAt(System.currentTimeMillis());
 
         courseRepository.save(course);
         return true;
+    }
+
+    /**
+     * 获取可访问的课程列表（包括我创建的和加入的）
+     * @return 课程列表
+     */
+    public List<CourseVO> getAccessibleCourses() {
+        Long userId = StpUtil.getLoginIdAsLong();
+        String userRole = userRoleService.getCurrentUserRole();
+        
+        // 如果是管理员，返回所有课程
+        if (UserRole.ADMIN.equals(userRole)) {
+            List<Course> allCourses = courseRepository.findAll();
+            return convertToVOList(allCourses);
+        }
+        
+        // 获取我创建的课程
+        List<Course> createdCourses = courseRepository.findAllByCreatorId(userId);
+        
+        // 获取我加入的课程
+        List<Course> joinedCourses = courseRepository.findByStudentIdsContaining(userId);
+        
+        // 合并两个列表并去重
+        Set<Course> uniqueCourses = new HashSet<>();
+        uniqueCourses.addAll(createdCourses);
+        uniqueCourses.addAll(joinedCourses);
+        
+        return convertToVOList(new ArrayList<>(uniqueCourses));
+    }
+
+    /**
+     * 获取系统课程列表（可访问的课程）
+     */
+    public PaginatedResponse<CourseVO> getSystemCourses(PaginationParams params, String subject) {
+        Pageable pageable = PageRequest.of(params.getPage() - 1, params.getSize());
+        Page<Course> coursePage;
+        if (subject != null && !subject.isEmpty()) {
+            coursePage = courseRepository.findBySubject(subject, pageable);
+        } else {
+            coursePage = courseRepository.findAll(pageable);
+        }
+        
+        List<CourseVO> courseVOs = coursePage.getContent().stream()
+            .map(course -> new CourseVO(
+                course.getId(),
+                course.getName(),
+                course.getDescription(),
+                course.getClassCode(),
+                course.getCreatorId(),
+                course.getCreatorRole(),
+                new Date(course.getCreatedAt()),
+                new Date(course.getUpdatedAt()),
+                course.getStudentIds().size(),
+                course.getKnowledgeBaseIds(),
+                new ArrayList<>(),  // 分页列表暂时不需要知识库详情
+                false              // 分页列表暂时不需要发布状态
+            ))
+            .toList();
+        
+        return PaginatedResponse.of(
+            courseVOs,
+            (int) coursePage.getTotalElements(),
+            params.getPage(),
+            params.getSize()
+        );
+    }
+
+    /**
+     * 获取用户已加入的课程列表
+     */
+    public PaginatedResponse<CourseVO> getUserCourses(PaginationParams params) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        Pageable pageable = PageRequest.of(params.getPage() - 1, params.getSize());
+        Page<Course> coursePage = courseRepository.findByStudentIdsContaining(userId, pageable);
+        
+        List<CourseVO> courseVOs = coursePage.getContent().stream()
+            .map(course -> new CourseVO(
+                course.getId(),
+                course.getName(),
+                course.getDescription(),
+                course.getClassCode(),
+                course.getCreatorId(),
+                course.getCreatorRole(),
+                new Date(course.getCreatedAt()),
+                new Date(course.getUpdatedAt()),
+                course.getStudentIds().size(),
+                course.getKnowledgeBaseIds(),
+                new ArrayList<>(),  // 分页列表暂时不需要知识库详情
+                false              // 分页列表暂时不需要发布状态
+            ))
+            .toList();
+        
+        return PaginatedResponse.of(
+            courseVOs,
+            (int) coursePage.getTotalElements(),
+            params.getPage(),
+            params.getSize()
+        );
+    }
+
+    /**
+     * 获取用户创建的课程列表
+     */
+    public PaginatedResponse<CourseVO> getCreatedCourses(PaginationParams params) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        Pageable pageable = PageRequest.of(params.getPage() - 1, params.getSize());
+        Page<Course> coursePage = courseRepository.findByCreatorId(userId, pageable);
+        
+        List<CourseVO> courseVOs = coursePage.getContent().stream()
+            .map(course -> new CourseVO(
+                course.getId(),
+                course.getName(),
+                course.getDescription(),
+                course.getClassCode(),
+                course.getCreatorId(),
+                course.getCreatorRole(),
+                new Date(course.getCreatedAt()),
+                new Date(course.getUpdatedAt()),
+                course.getStudentIds().size(),
+                course.getKnowledgeBaseIds(),
+                new ArrayList<>(),  // 分页列表暂时不需要知识库详情
+                false              // 分页列表暂时不需要发布状态
+            ))
+            .toList();
+        
+        return PaginatedResponse.of(
+            courseVOs,
+            (int) coursePage.getTotalElements(),
+            params.getPage(),
+            params.getSize()
+        );
+    }
+
+    /**
+     * 获取课程统计信息
+     */
+    public CourseStatsVO getCourseStats(String id) {
+        Course course = courseRepository.findById(id)
+            .orElseThrow(() -> new ApiException(ApiError.COURSE_NOT_EXISTED));
+            
+        // 获取学生数量
+        int studentCount = course.getStudentIds() != null ? course.getStudentIds().size() : 0;
+        
+        // 获取知识库数量
+        int knowledgeBaseCount = course.getKnowledgeBaseIds() != null ? course.getKnowledgeBaseIds().size() : 0;
+        
+        // 获取知识点总数
+        int totalKnowledgePoints = 0;
+        if (course.getKnowledgeBaseIds() != null) {
+            for (String knowledgeBaseId : course.getKnowledgeBaseIds()) {
+                KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+                if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
+                    totalKnowledgePoints += knowledgeBase.getKnowledgeIds() != null ? 
+                        knowledgeBase.getKnowledgeIds().size() : 0;
+                }
+            }
+        }
+        
+        // 获取活跃学生数（最近7天有登录记录的学生）
+        int activeStudents = 0;
+        if (course.getStudentIds() != null) {
+            long sevenDaysAgo = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L;
+            for (Long studentId : course.getStudentIds()) {
+                // TODO: 实现学生活跃度统计，可以通过用户登录记录或学习记录统计
+                activeStudents++;
+            }
+        }
+        
+        return new CourseStatsVO(
+            studentCount,          // 学生总数
+            totalKnowledgePoints,  // 知识点总数
+            activeStudents,        // 活跃学生数
+            knowledgeBaseCount     // 知识库数量
+        );
+    }
+
+    /**
+     * 获取课程学习进度
+     */
+    public CourseProgressVO getCourseProgress(String id) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        Course course = courseRepository.findById(id)
+            .orElseThrow(() -> new ApiException(ApiError.COURSE_NOT_EXISTED));
+            
+        if (!course.getStudentIds().contains(userId)) {
+            throw new ApiException(ApiError.NO_PERMISSION);
+        }
+        
+        // 获取课程的所有知识点
+        int totalKnowledgePoints = 0;
+        int completedKnowledgePoints = 0;
+        
+        if (course.getKnowledgeBaseIds() != null) {
+            for (String knowledgeBaseId : course.getKnowledgeBaseIds()) {
+                KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+                if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
+                    if (knowledgeBase.getKnowledgeIds() != null) {
+                        totalKnowledgePoints += knowledgeBase.getKnowledgeIds().size();
+                        
+                        // TODO: 实现学习进度统计，可以通过用户学习记录统计已完成的知识点
+                        for (String knowledgeId : knowledgeBase.getKnowledgeIds()) {
+                            // 这里需要根据实际业务逻辑判断知识点是否已完成
+                            completedKnowledgePoints++;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 获取最后访问时间
+        Date lastAccessTime = new Date(); // TODO: 从用户学习记录中获取最后访问时间
+        
+        // 获取总学习时长（分钟）
+        long totalLearningTime = 0; // TODO: 从用户学习记录中获取总学习时长
+        
+        return new CourseProgressVO(
+            completedKnowledgePoints,  // 已完成知识点数
+            totalKnowledgePoints,      // 总知识点数
+            lastAccessTime,            // 最后访问时间
+            totalLearningTime          // 学习时长（分钟）
+        );
     }
 } 

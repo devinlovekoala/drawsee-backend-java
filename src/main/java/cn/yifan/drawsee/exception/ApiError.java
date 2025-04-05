@@ -86,7 +86,12 @@ public enum ApiError {
     JOIN_COURSE_FAILED(405805, "加入课程失败"),
 
     // 每日限制已达到
-    DAILY_LIMIT_EXCEEDED(429, "已达到每日对话次数限制");
+    DAILY_LIMIT_EXCEEDED(429, "已达到每日对话次数限制"),
+
+    // Course related errors
+    COURSE_NOT_FOUND(4001, "课程不存在"),
+    NO_PERMISSION(4002, "没有权限"),
+    ALREADY_JOINED_COURSE(4003, "已经加入该课程");
 
     // 枚举项的参数
     private final Integer code;

@@ -5,59 +5,94 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.util.Date;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * @FileName Course
  * @Description 课程实体类
  * @Author devin
- * @date 2025-03-28 10:32
+ * @date 2025-03-28 14:45
  **/
-
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Document(collection = "course")
+@Document(collection = "courses")
 public class Course implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
-
+    /**
+     * 课程ID
+     */
     @Id
     private String id;
-
-    @Field("name")
+    
+    /**
+     * 课程名称
+     */
     private String name;
-
-    @Field("description")
-    private String description;
-
-    @Field("class_code")
+    
+    /**
+     * 课程代码
+     */
+    private String code;
+    
+    /**
+     * 班级代码
+     */
     private String classCode;
-
-    @Field("creator_id")
+    
+    /**
+     * 课程描述
+     */
+    private String description;
+    
+    /**
+     * 课程科目
+     */
+    private String subject;
+    
+    /**
+     * 课程主题列表
+     */
+    private List<String> topics = new ArrayList<>();
+    
+    /**
+     * 创建者ID
+     */
     private Long creatorId;
     
-    @Field("creator_role")
+    /**
+     * 创建者角色
+     */
     private String creatorRole;
-
-    @Field("created_at")
-    private Date createdAt;
-
-    @Field("updated_at")
-    private Date updatedAt;
-
-    @Field("student_ids")
-    private List<Long> studentIds;
     
-    @Field("knowledge_base_ids")
-    private List<String> knowledgeBaseIds;
+    /**
+     * 学生ID列表
+     */
+    private List<Long> studentIds = new ArrayList<>();
     
-    @Field("is_deleted")
+    /**
+     * 知识库ID列表
+     */
+    private List<String> knowledgeBaseIds = new ArrayList<>();
+    
+    /**
+     * 创建时间
+     */
+    private Long createdAt;
+    
+    /**
+     * 更新时间
+     */
+    private Long updatedAt;
+    
+    /**
+     * 是否已删除
+     */
     private Boolean isDeleted = false;
 } 

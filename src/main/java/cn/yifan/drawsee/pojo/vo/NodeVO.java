@@ -1,7 +1,6 @@
 package cn.yifan.drawsee.pojo.vo;
 
 import cn.yifan.drawsee.pojo.XYPosition;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

@@ -572,4 +572,27 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         
         return knowledgeBase.getId();
     }
+
+    /**
+     * 将知识库实体转换为VO对象
+     * @param knowledgeBase 知识库实体
+     * @return 知识库VO对象
+     */
+    public KnowledgeBaseVO convertToVO(KnowledgeBase knowledgeBase) {
+        if (knowledgeBase == null) {
+            return null;
+        }
+        
+        KnowledgeBaseVO vo = new KnowledgeBaseVO();
+        BeanUtils.copyProperties(knowledgeBase, vo);
+        
+        // 设置知识点数量
+        if (knowledgeBase.getKnowledgeIds() != null) {
+            vo.setKnowledgeCount(knowledgeBase.getKnowledgeIds().size());
+        } else {
+            vo.setKnowledgeCount(0);
+        }
+        
+        return vo;
+    }
 } 

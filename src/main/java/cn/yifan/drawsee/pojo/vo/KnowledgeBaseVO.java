@@ -42,5 +42,13 @@ public class KnowledgeBaseVO implements Serializable {
     
     private List<String> knowledgeIds;
     
+    private List<Long> members;
+    
+    private Boolean isPublished;
+    
+    private Boolean isDeleted;
+    
+    private Integer knowledgeCount;
+    
     private Integer memberCount;
 } 

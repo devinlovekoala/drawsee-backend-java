@@ -51,9 +51,9 @@ public class CreateAiTaskDTO implements Serializable {
     private Long parentId;
 
     /**
-     * 是否启用自动识别模式
+     * 是否启用知识问答模式
      */
-    private Boolean enableAutoDetection = false;
+    private Boolean enableKnowledgeQA = false;
 
     /**
      * 学科类型，用于特定学科的处理逻辑
