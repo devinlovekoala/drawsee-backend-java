@@ -11,6 +11,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * @FileName SpiceConverter
+ * @Description 电路SPICE网表转换器，用于将前端设计的电路图转换为标准SPICE网表格式
+ * @Author yifan
+ * @date 2025-07-15 10:20
+ **/
 @Slf4j
 @Component
 public class SpiceConverter {

@@ -75,6 +75,8 @@ public class FlowService {
     private ObjectMapper objectMapper;
     @Autowired
     private MinioService minioService;
+    @Autowired
+    private ModeAutoDetectionService modeAutoDetectionService;
 
     // 获取用户所有会话
     public List<ConversationVO> getConversations() {
@@ -200,6 +202,13 @@ public class FlowService {
         }
 
         validateUseAiCount(userId);
+        
+        // 如果是GENERAL类型，使用模式自动识别服务识别具体的任务类型
+        if (AiTaskType.GENERAL.equals(createAiTaskDTO.getType())) {
+            String detectedType = modeAutoDetectionService.detectTaskType(createAiTaskDTO);
+            createAiTaskDTO.setType(detectedType);
+            log.info("任务类型自动识别结果: {} -> {}", AiTaskType.GENERAL, detectedType);
+        }
 
         // 如果没有convId，创建一个conversation以及第一个 node
         Conversation conversation = null;

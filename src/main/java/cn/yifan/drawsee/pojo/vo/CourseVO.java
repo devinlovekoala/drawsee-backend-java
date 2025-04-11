@@ -31,6 +31,10 @@ public class CourseVO implements Serializable {
     private String description;
     
     private String classCode;
+    
+    private String code;
+    
+    private String subject;
 
     private Long creatorId;
     

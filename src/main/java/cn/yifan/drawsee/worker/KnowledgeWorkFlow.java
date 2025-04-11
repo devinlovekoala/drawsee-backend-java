@@ -128,7 +128,7 @@ public class KnowledgeWorkFlow extends WorkFlow {
         Set<String> knowledgePoints = new HashSet<>();
         
         // 从用户加入的课程中获取知识库
-        List<Course> userCourses = courseRepository.findByStudentIdsContaining(userId);
+        List<Course> userCourses = courseRepository.findByStudentIdsContainingAndIsDeletedFalse(userId);
         for (Course course : userCourses) {
             List<String> knowledgeBaseIds = course.getKnowledgeBaseIds();
             if (knowledgeBaseIds != null && !knowledgeBaseIds.isEmpty()) {

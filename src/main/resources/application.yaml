@@ -10,6 +10,8 @@ management: # 开启监控
 logging:
   level:
     cn.yifan.drawsee.mapper : debug
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+    org.springframework.data.mongodb.repository.Query: DEBUG 
 
 sa-token:
   # token 名称（同时也是 cookie 名称）

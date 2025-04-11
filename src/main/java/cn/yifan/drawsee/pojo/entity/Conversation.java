@@ -46,12 +46,12 @@ public class Conversation implements Serializable {
     /**
      * 创建时间
      */
-    private Long createdAt;
+    private Timestamp createdAt;
 
     /**
      * 更新时间
      */
-    private Long updatedAt;
+    private Timestamp updatedAt;
 
     /**
      * 是否删除

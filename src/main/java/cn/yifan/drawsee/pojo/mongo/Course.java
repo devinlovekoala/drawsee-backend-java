@@ -5,10 +5,12 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -25,74 +27,45 @@ public class Course implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
-    /**
-     * 课程ID
-     */
     @Id
     private String id;
-    
-    /**
-     * 课程名称
-     */
+
+    @Field("name")
     private String name;
-    
-    /**
-     * 课程代码
-     */
+
+    @Field("code")
     private String code;
-    
-    /**
-     * 班级代码
-     */
+
+    @Field("class_code")
     private String classCode;
-    
-    /**
-     * 课程描述
-     */
+
+    @Field("description")
     private String description;
-    
-    /**
-     * 课程科目
-     */
+
+    @Field("subject")
     private String subject;
-    
-    /**
-     * 课程主题列表
-     */
+
+    @Field("topics")
     private List<String> topics = new ArrayList<>();
-    
-    /**
-     * 创建者ID
-     */
+
+    @Field("creator_id")
     private Long creatorId;
-    
-    /**
-     * 创建者角色
-     */
+
+    @Field("creator_role")
     private String creatorRole;
-    
-    /**
-     * 学生ID列表
-     */
+
+    @Field("student_ids")
     private List<Long> studentIds = new ArrayList<>();
-    
-    /**
-     * 知识库ID列表
-     */
+
+    @Field("knowledge_base_ids")
     private List<String> knowledgeBaseIds = new ArrayList<>();
-    
-    /**
-     * 创建时间
-     */
-    private Long createdAt;
-    
-    /**
-     * 更新时间
-     */
-    private Long updatedAt;
-    
-    /**
-     * 是否已删除
-     */
+
+    @Field("created_at")
+    private Date createdAt;
+
+    @Field("updated_at")
+    private Date updatedAt;
+
+    @Field("is_deleted")
     private Boolean isDeleted = false;
 } 

@@ -165,15 +165,15 @@ CREATE TABLE `class_member` (
 -- 插入初始用户数据
 -- 插入管理员用户（密码为：funstack20250328）
 INSERT INTO `user` (id, username, password, role, created_at, updated_at, is_deleted) 
-VALUES (1, 'drawsee-admin', '$2a$10$1/JxJxkxGUvE8zQh2XsGz.4QJj0xh.QMLk1QYn.rKGmGhxKgPXkPi', 'ADMIN', NOW(), NOW(), 0);
+VALUES (1, 'drawsee-admin', 'funstack20250328', 'ADMIN', NOW(), NOW(), 0);
 
 -- 插入测试教师用户（密码为：teacher123）
 INSERT INTO `user` (id, username, password, role, created_at, updated_at, is_deleted)
-VALUES (2, 'teacher', '$2a$10$YDwJj1gk.V6nRwZG5bRLB.P.RFrG5z9RnC/FmZJ8x0PQXN5hNJ7Uy', 'TEACHER', NOW(), NOW(), 0);
+VALUES (2, 'teacher', 'teacher123', 'TEACHER', NOW(), NOW(), 0);
 
 -- 插入测试学生用户（密码为：student123）
 INSERT INTO `user` (id, username, password, role, created_at, updated_at, is_deleted)
-VALUES (3, 'student', '$2a$10$YDwJj1gk.V6nRwZG5bRLB.P.RFrG5z9RnC/FmZJ8x0PQXN5hNJ7Uy', 'USER', NOW(), NOW(), 0);
+VALUES (3, 'student', 'student123', 'USER', NOW(), NOW(), 0);
 
 -- 将用户设置为管理员
 INSERT INTO `admin` (user_id) VALUES (1);

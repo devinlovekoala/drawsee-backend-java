@@ -88,7 +88,7 @@ public class WorkFlow {
         // 更新conversation
         Conversation conversation = workContext.getConversation();
         // 更新现在的时间戳
-        conversation.setUpdatedAt(System.currentTimeMillis());
+        conversation.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
         conversationMapper.update(conversation);
         try {
             // 创建初始节点

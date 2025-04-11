@@ -50,20 +50,4 @@ public class CreateAiTaskDTO implements Serializable {
 
     private Long parentId;
 
-    /**
-     * 是否启用知识问答模式
-     */
-    private Boolean enableKnowledgeQA = false;
-
-    /**
-     * 学科类型，用于特定学科的处理逻辑
-     * 可选值: linear_algebra, electronic, general
-     */
-    @ValueSet(values = {
-        KnowledgeSubject.LINEAR_ALGEBRA,
-        KnowledgeSubject.ELECTRONIC,
-        KnowledgeSubject.GENERAL
-    })
-    private String subject = KnowledgeSubject.GENERAL;
-
 }

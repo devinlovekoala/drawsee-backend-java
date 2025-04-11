@@ -105,7 +105,7 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         spiceNodeData.put("progress", "正在生成SPICE网表...");
         
         Node spiceNode = new Node(
-            NodeType.RESOURCE,
+            NodeType.ANSWER,
             objectMapper.writeValueAsString(spiceNodeData),
             objectMapper.writeValueAsString(XYPosition.origin()),
             streamNode.getId(),
@@ -133,7 +133,7 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         analysisNodeData.put("progress", "正在分析电路...");
         
         Node analysisNode = new Node(
-            NodeType.RESOURCE,
+            NodeType.ANSWER,
             objectMapper.writeValueAsString(analysisNodeData),
             objectMapper.writeValueAsString(XYPosition.origin()),
             spiceNode.getId(),  // 将分析节点连接到SPICE节点
@@ -163,7 +163,7 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         optimizationNodeData.put("progress", "正在生成优化建议...");
         
         Node optimizationNode = new Node(
-            NodeType.RESOURCE,
+            NodeType.ANSWER,
             objectMapper.writeValueAsString(optimizationNodeData),
             objectMapper.writeValueAsString(XYPosition.origin()),
             analysisNode.getId(),  // 将优化节点连接到分析节点

@@ -90,4 +90,7 @@ public interface PromptService {
         @PromptParam("analysisResult") String analysisResult
     );
 
+    @PromptResource(fromResource = "/prompt/mode-detection.txt")
+    String getModeDetectionPrompt(@PromptParam("prompt") String prompt);
+
 }

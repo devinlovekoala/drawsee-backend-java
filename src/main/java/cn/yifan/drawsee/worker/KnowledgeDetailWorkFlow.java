@@ -266,7 +266,7 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
             cn.yifan.drawsee.pojo.entity.Class clazz = classMapper.getById(classMember.getClassId());
             if (clazz == null || clazz.getIsDeleted()) continue;
             
-            Course course = courseRepository.findByClassCode(clazz.getClassCode());
+            Course course = courseRepository.findByClassCodeAndIsDeletedFalse(clazz.getClassCode());
             if (course == null || course.getIsDeleted()) continue;
             
             // 2.2 获取课程关联的知识库列表

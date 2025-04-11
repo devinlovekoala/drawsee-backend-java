@@ -21,6 +21,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ import java.util.Set;
  * @Author devin
  * @date 2025-03-28 11:12
  **/
+@Slf4j
 @Service
 public class CourseService {
 
@@ -65,47 +67,53 @@ public class CourseService {
     public String createCourse(CreateCourseDTO createCourseDTO) {
         Long userId = StpUtil.getLoginIdAsLong();
         String userRole = userRoleService.getCurrentUserRole();
+        log.info("开始创建课程: userId={}, userRole={}, courseDTO={}", userId, userRole, createCourseDTO);
         
         // 验证用户是否为教师或管理员
         if (!UserRole.ADMIN.equals(userRole) && !UserRole.TEACHER.equals(userRole)) {
+            log.warn("用户权限不足: userId={}, userRole={}", userId, userRole);
             throw new ApiException(ApiError.PERMISSION_DENIED);
         }
         
         // 检查课程名称是否已存在
-        Course existCourse = courseRepository.findByName(createCourseDTO.getName());
+        Course existCourse = courseRepository.findByNameAndIsDeletedFalse(createCourseDTO.getName());
         if (existCourse != null) {
+            log.warn("课程名称已存在: name={}, existCourseId={}", createCourseDTO.getName(), existCourse.getId());
             throw new ApiException(ApiError.COURSE_HAD_EXISTED);
         }
         
         // 生成班级码
         String classCode = generateClassCode();
+        log.info("生成班级码: classCode={}", classCode);
         
         // 创建课程
         Course course = new Course(
             null, // MongoDB会自动生成ID
             createCourseDTO.getName(),
-            null, // code暂时为空
+            createCourseDTO.getCode(),
             classCode,
             createCourseDTO.getDescription(),
-            null, // subject暂时为空
+            createCourseDTO.getSubject(),
             new ArrayList<>(), // topics
             userId,
             userRole,
             new ArrayList<>(), // studentIds
             new ArrayList<>(), // knowledgeBaseIds
-            System.currentTimeMillis(),
-            System.currentTimeMillis(),
+            new Date(), // createdAt
+            new Date(), // updatedAt
             false // isDeleted
         );
         
-        courseRepository.save(course);
+        Course savedCourse = courseRepository.save(course);
+        log.info("课程创建成功: courseId={}, name={}, classCode={}", savedCourse.getId(), savedCourse.getName(), savedCourse.getClassCode());
         
         // 如果创建者是教师，为其生成班级邀请码
         if (UserRole.TEACHER.equals(userRole)) {
-            teacherInvitationCodeService.generateCodeForCourse(course.getId(), userId);
+            teacherInvitationCodeService.generateCodeForCourse(savedCourse.getId(), userId);
+            log.info("已为教师生成班级邀请码: courseId={}, teacherId={}", savedCourse.getId(), userId);
         }
         
-        return course.getId();
+        return savedCourse.getId();
     }
     
     /**
@@ -114,23 +122,28 @@ public class CourseService {
      * @return 课程ID
      */
     public String joinCourse(JoinCourseDTO joinCourseDTO) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        log.info("开始加入课程: userId={}, classCode={}", userId, joinCourseDTO.getClassCode());
+        
         // 检查班级码是否存在
-        Course course = courseRepository.findByClassCode(joinCourseDTO.getClassCode());
+        Course course = courseRepository.findByClassCodeAndIsDeletedFalse(joinCourseDTO.getClassCode());
         if (course == null) {
+            log.warn("班级码无效: classCode={}", joinCourseDTO.getClassCode());
             throw new ApiException(ApiError.INVALID_CLASS_CODE);
         }
         
-        Long userId = StpUtil.getLoginIdAsLong();
-        
         // 检查用户是否已加入该课程
         if (course.getStudentIds().contains(userId)) {
+            log.warn("用户已加入该课程: userId={}, courseId={}", userId, course.getId());
             throw new ApiException(ApiError.ALREADY_JOINED);
         }
         
         // 加入课程
         course.getStudentIds().add(userId);
-        course.setUpdatedAt(System.currentTimeMillis());
-        courseRepository.save(course);
+        course.setUpdatedAt(new Date());
+        Course updatedCourse = courseRepository.save(course);
+        log.info("用户成功加入课程: userId={}, courseId={}, studentCount={}", 
+            userId, updatedCourse.getId(), updatedCourse.getStudentIds().size());
         
         return course.getId();
     }
@@ -141,7 +154,9 @@ public class CourseService {
      */
     public List<CourseVO> getMyCreatedCourses() {
         Long userId = StpUtil.getLoginIdAsLong();
-        List<Course> courses = courseRepository.findAllByCreatorId(userId);
+        log.info("获取用户创建的课程: userId={}", userId);
+        List<Course> courses = courseRepository.findByCreatorIdAndIsDeletedFalse(userId);
+        log.info("查询结果: courses={}", courses);
         return convertToVOList(courses);
     }
     
@@ -151,7 +166,9 @@ public class CourseService {
      */
     public List<CourseVO> getMyJoinedCourses() {
         Long userId = StpUtil.getLoginIdAsLong();
-        List<Course> courses = courseRepository.findByStudentIdsContaining(userId);
+        log.info("获取用户加入的课程: userId={}", userId);
+        List<Course> courses = courseRepository.findByStudentIdsContainingAndIsDeletedFalse(userId);
+        log.info("查询结果: courses={}", courses);
         return convertToVOList(courses);
     }
     
@@ -171,10 +188,12 @@ public class CourseService {
             course.getName(),
             course.getDescription(),
             course.getClassCode(),
+            course.getCode(),
+            course.getSubject(),
             course.getCreatorId(),
             course.getCreatorRole(),
-            new Date(course.getCreatedAt()),
-            new Date(course.getUpdatedAt()),
+            course.getCreatedAt(),
+            course.getUpdatedAt(),
             course.getStudentIds().size(),
             course.getKnowledgeBaseIds(),
             new ArrayList<>(),  // 暂时不需要知识库详情
@@ -197,7 +216,7 @@ public class CourseService {
 
         String code = sb.toString();
         // 检查是否已存在（极小概率冲突时可重试）
-        Course existCourse = courseRepository.findByClassCode(code);
+        Course existCourse = courseRepository.findByClassCodeAndIsDeletedFalse(code);
         if (existCourse != null) {
             return generateClassCode();
         }
@@ -237,10 +256,12 @@ public class CourseService {
                 course.getName(),
                 course.getDescription(),
                 course.getClassCode(),
+                course.getCode(),
+                course.getSubject(),
                 course.getCreatorId(),
                 course.getCreatorRole(),
-                new Date(course.getCreatedAt()),
-                new Date(course.getUpdatedAt()),
+                course.getCreatedAt(),
+                course.getUpdatedAt(),
                 course.getStudentIds().size(),
                 course.getKnowledgeBaseIds(),
                 knowledgeBases,
@@ -258,25 +279,28 @@ public class CourseService {
      * @return 是否更新成功
      */
     public boolean updateCourse(String id, UpdateCourseDTO updateCourseDTO) {
-        // 获取当前用户ID和角色
         Long userId = StpUtil.getLoginIdAsLong();
         String userRole = userRoleService.getCurrentUserRole();
+        log.info("开始更新课程: courseId={}, userId={}, userRole={}, updateDTO={}", id, userId, userRole, updateCourseDTO);
 
         // 查找课程
         Course course = courseRepository.findById(id).orElse(null);
         if (course == null || course.getIsDeleted()) {
+            log.warn("课程不存在或已删除: courseId={}", id);
             throw new ApiException(ApiError.COURSE_NOT_EXISTED);
         }
 
-        // 验证权限：只有课程创建者或管理员可以更新课程
+        // 验证权限
         if (!UserRole.ADMIN.equals(userRole) && !course.getCreatorId().equals(userId)) {
+            log.warn("用户无权更新课程: userId={}, courseId={}, creatorId={}", userId, id, course.getCreatorId());
             throw new ApiException(ApiError.PERMISSION_DENIED);
         }
 
-        // 如果更改课程名称，需检查新名称是否已被使用
+        // 检查课程名称
         if (!course.getName().equals(updateCourseDTO.getName())) {
-            Course existCourse = courseRepository.findByName(updateCourseDTO.getName());
+            Course existCourse = courseRepository.findByNameAndIsDeletedFalse(updateCourseDTO.getName());
             if (existCourse != null && !existCourse.getId().equals(id)) {
+                log.warn("课程名称已存在: name={}, existingCourseId={}", updateCourseDTO.getName(), existCourse.getId());
                 throw new ApiException(ApiError.COURSE_HAD_EXISTED);
             }
         }
@@ -284,9 +308,11 @@ public class CourseService {
         // 更新课程信息
         course.setName(updateCourseDTO.getName());
         course.setDescription(updateCourseDTO.getDescription());
-        course.setUpdatedAt(System.currentTimeMillis());
+        course.setUpdatedAt(new Date());
 
-        courseRepository.save(course);
+        Course updatedCourse = courseRepository.save(course);
+        log.info("课程更新成功: courseId={}, name={}", updatedCourse.getId(), updatedCourse.getName());
+        
         return true;
     }
 
@@ -296,26 +322,30 @@ public class CourseService {
      * @return 是否删除成功
      */
     public boolean deleteCourse(String id) {
-        // 获取当前用户ID和角色
         Long userId = StpUtil.getLoginIdAsLong();
         String userRole = userRoleService.getCurrentUserRole();
+        log.info("开始删除课程: courseId={}, userId={}, userRole={}", id, userId, userRole);
 
         // 查找课程
         Course course = courseRepository.findById(id).orElse(null);
         if (course == null || course.getIsDeleted()) {
+            log.warn("课程不存在或已删除: courseId={}", id);
             throw new ApiException(ApiError.COURSE_NOT_EXISTED);
         }
 
-        // 验证权限：只有课程创建者或管理员可以删除课程
+        // 验证权限
         if (!UserRole.ADMIN.equals(userRole) && !course.getCreatorId().equals(userId)) {
+            log.warn("用户无权删除课程: userId={}, courseId={}, creatorId={}", userId, id, course.getCreatorId());
             throw new ApiException(ApiError.PERMISSION_DENIED);
         }
 
         // 逻辑删除课程
         course.setIsDeleted(true);
-        course.setUpdatedAt(System.currentTimeMillis());
+        course.setUpdatedAt(new Date());
 
-        courseRepository.save(course);
+        Course deletedCourse = courseRepository.save(course);
+        log.info("课程删除成功: courseId={}, name={}", deletedCourse.getId(), deletedCourse.getName());
+        
         return true;
     }
 
@@ -326,18 +356,22 @@ public class CourseService {
     public List<CourseVO> getAccessibleCourses() {
         Long userId = StpUtil.getLoginIdAsLong();
         String userRole = userRoleService.getCurrentUserRole();
+        log.info("获取用户可访问的课程: userId={}, userRole={}", userId, userRole);
         
         // 如果是管理员，返回所有课程
         if (UserRole.ADMIN.equals(userRole)) {
-            List<Course> allCourses = courseRepository.findAll();
+            List<Course> allCourses = courseRepository.findByIsDeletedFalse(Pageable.unpaged()).getContent();
+            log.info("管理员查询所有课程结果: courses={}", allCourses);
             return convertToVOList(allCourses);
         }
         
         // 获取我创建的课程
-        List<Course> createdCourses = courseRepository.findAllByCreatorId(userId);
+        List<Course> createdCourses = courseRepository.findByCreatorIdAndIsDeletedFalse(userId);
+        log.info("用户创建的课程: courses={}", createdCourses);
         
         // 获取我加入的课程
-        List<Course> joinedCourses = courseRepository.findByStudentIdsContaining(userId);
+        List<Course> joinedCourses = courseRepository.findByStudentIdsContainingAndIsDeletedFalse(userId);
+        log.info("用户加入的课程: courses={}", joinedCourses);
         
         // 合并两个列表并去重
         Set<Course> uniqueCourses = new HashSet<>();
@@ -351,30 +385,104 @@ public class CourseService {
      * 获取系统课程列表（可访问的课程）
      */
     public PaginatedResponse<CourseVO> getSystemCourses(PaginationParams params, String subject) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        String userRole = userRoleService.getCurrentUserRole();
+        log.info("开始获取系统课程列表: userId={}, userRole={}, page={}, size={}, subject={}", 
+            userId, userRole, params.getPage(), params.getSize(), subject);
+        
         Pageable pageable = PageRequest.of(params.getPage() - 1, params.getSize());
         Page<Course> coursePage;
-        if (subject != null && !subject.isEmpty()) {
-            coursePage = courseRepository.findBySubject(subject, pageable);
+
+        // 根据用户角色获取不同的课程列表
+        if (UserRole.ADMIN.equals(userRole)) {
+            // 管理员可以看到所有未删除的课程
+            if (subject != null && !subject.isEmpty()) {
+                log.debug("管理员按科目查询课程: subject={}", subject);
+                coursePage = courseRepository.findBySubjectAndIsDeletedFalse(subject, pageable);
+            } else {
+                log.debug("管理员查询所有课程");
+                coursePage = courseRepository.findByIsDeletedFalse(pageable);
+            }
+        } else if (UserRole.TEACHER.equals(userRole)) {
+            // 教师可以看到自己创建的课程和管理员创建的课程
+            if (subject != null && !subject.isEmpty()) {
+                log.debug("教师按科目查询课程: subject={}", subject);
+                coursePage = courseRepository.findBySubjectAndIsDeletedFalseAndCreatorRoleIn(
+                    subject, 
+                    List.of(UserRole.ADMIN, userRole),
+                    pageable
+                );
+            } else {
+                log.debug("教师查询可见课程");
+                coursePage = courseRepository.findByIsDeletedFalseAndCreatorRoleIn(
+                    List.of(UserRole.ADMIN, userRole),
+                    pageable
+                );
+            }
         } else {
-            coursePage = courseRepository.findAll(pageable);
+            // 学生可以看到管理员创建的课程和自己已加入的课程
+            if (subject != null && !subject.isEmpty()) {
+                log.debug("学生按科目查询课程: subject={}", subject);
+                coursePage = courseRepository.findBySubjectAndIsDeletedFalseAndCreatorRoleOrStudentIdsContaining(
+                    subject,
+                    UserRole.ADMIN,
+                    userId,
+                    pageable
+                );
+            } else {
+                log.debug("学生查询可见课程");
+                coursePage = courseRepository.findByIsDeletedFalseAndCreatorRoleOrStudentIdsContaining(
+                    UserRole.ADMIN,
+                    userId,
+                    pageable
+                );
+            }
         }
         
+        log.info("查询到课程总数: total={}", coursePage.getTotalElements());
+        
         List<CourseVO> courseVOs = coursePage.getContent().stream()
-            .map(course -> new CourseVO(
-                course.getId(),
-                course.getName(),
-                course.getDescription(),
-                course.getClassCode(),
-                course.getCreatorId(),
-                course.getCreatorRole(),
-                new Date(course.getCreatedAt()),
-                new Date(course.getUpdatedAt()),
-                course.getStudentIds().size(),
-                course.getKnowledgeBaseIds(),
-                new ArrayList<>(),  // 分页列表暂时不需要知识库详情
-                false              // 分页列表暂时不需要发布状态
-            ))
+            .map(course -> {
+                List<KnowledgeBaseVO> knowledgeBases = new ArrayList<>();
+                boolean hasPublishedBase = false;
+                
+                // 获取知识库信息
+                if (course.getKnowledgeBaseIds() != null && !course.getKnowledgeBaseIds().isEmpty()) {
+                    log.debug("获取课程知识库信息: courseId={}, knowledgeBaseCount={}", 
+                        course.getId(), course.getKnowledgeBaseIds().size());
+                    
+                    for (String knowledgeBaseId : course.getKnowledgeBaseIds()) {
+                        KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+                        if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
+                            KnowledgeBaseVO knowledgeBaseVO = knowledgeBaseService.convertToVO(knowledgeBase);
+                            knowledgeBases.add(knowledgeBaseVO);
+                            if (knowledgeBase.getIsPublished()) {
+                                hasPublishedBase = true;
+                            }
+                        }
+                    }
+                }
+                
+                return new CourseVO(
+                    course.getId(),
+                    course.getName(),
+                    course.getDescription(),
+                    course.getClassCode(),
+                    course.getCode(),
+                    course.getSubject(),
+                    course.getCreatorId(),
+                    course.getCreatorRole(),
+                    course.getCreatedAt(),
+                    course.getUpdatedAt(),
+                    course.getStudentIds().size(),
+                    course.getKnowledgeBaseIds(),
+                    knowledgeBases,
+                    hasPublishedBase
+                );
+            })
             .toList();
+        
+        log.info("成功转换课程列表: courseCount={}", courseVOs.size());
         
         return PaginatedResponse.of(
             courseVOs,
@@ -390,7 +498,7 @@ public class CourseService {
     public PaginatedResponse<CourseVO> getUserCourses(PaginationParams params) {
         Long userId = StpUtil.getLoginIdAsLong();
         Pageable pageable = PageRequest.of(params.getPage() - 1, params.getSize());
-        Page<Course> coursePage = courseRepository.findByStudentIdsContaining(userId, pageable);
+        Page<Course> coursePage = courseRepository.findByStudentIdsContainingAndIsDeletedFalse(userId, pageable);
         
         List<CourseVO> courseVOs = coursePage.getContent().stream()
             .map(course -> new CourseVO(
@@ -398,10 +506,12 @@ public class CourseService {
                 course.getName(),
                 course.getDescription(),
                 course.getClassCode(),
+                course.getCode(),
+                course.getSubject(),
                 course.getCreatorId(),
                 course.getCreatorRole(),
-                new Date(course.getCreatedAt()),
-                new Date(course.getUpdatedAt()),
+                course.getCreatedAt(),
+                course.getUpdatedAt(),
                 course.getStudentIds().size(),
                 course.getKnowledgeBaseIds(),
                 new ArrayList<>(),  // 分页列表暂时不需要知识库详情
@@ -423,7 +533,7 @@ public class CourseService {
     public PaginatedResponse<CourseVO> getCreatedCourses(PaginationParams params) {
         Long userId = StpUtil.getLoginIdAsLong();
         Pageable pageable = PageRequest.of(params.getPage() - 1, params.getSize());
-        Page<Course> coursePage = courseRepository.findByCreatorId(userId, pageable);
+        Page<Course> coursePage = courseRepository.findByCreatorIdAndIsDeletedFalse(userId, pageable);
         
         List<CourseVO> courseVOs = coursePage.getContent().stream()
             .map(course -> new CourseVO(
@@ -431,10 +541,12 @@ public class CourseService {
                 course.getName(),
                 course.getDescription(),
                 course.getClassCode(),
+                course.getCode(),
+                course.getSubject(),
                 course.getCreatorId(),
                 course.getCreatorRole(),
-                new Date(course.getCreatedAt()),
-                new Date(course.getUpdatedAt()),
+                course.getCreatedAt(),
+                course.getUpdatedAt(),
                 course.getStudentIds().size(),
                 course.getKnowledgeBaseIds(),
                 new ArrayList<>(),  // 分页列表暂时不需要知识库详情
