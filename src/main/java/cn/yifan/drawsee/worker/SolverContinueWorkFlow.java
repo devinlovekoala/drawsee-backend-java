@@ -77,7 +77,9 @@ public class SolverContinueWorkFlow extends WorkFlow {
 
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
-        streamAiService.solverContinueChat(workContext.getHistory(), handler);
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        String model = aiTaskMessage.getModel();
+        streamAiService.solverContinueChat(workContext.getHistory(), model, handler);
     }
 
     @Override

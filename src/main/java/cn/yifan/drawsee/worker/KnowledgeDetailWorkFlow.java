@@ -121,12 +121,14 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         Node parentNode = workContext.getParentNode();
         LinkedList<ChatMessage> history = workContext.getHistory();
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        String model = aiTaskMessage.getModel();
+        
         TypeReference<Map<String, Object>> parentNodeDataTypeReference = new TypeReference<>() {};
         Map<String, Object> parentNodeData = objectMapper.readValue(parentNode.getData(), parentNodeDataTypeReference);
         String knowledgePoint = (String) parentNodeData.get("text");
 
-        // 保持原有实现，不添加增强逻辑
-        streamAiService.knowledgeDetailChat(history, knowledgePoint, handler);
+        streamAiService.knowledgeDetailChat(history, knowledgePoint, model, handler);
     }
 
     @Override

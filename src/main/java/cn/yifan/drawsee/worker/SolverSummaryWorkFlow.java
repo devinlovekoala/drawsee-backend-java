@@ -73,7 +73,9 @@ public class SolverSummaryWorkFlow extends WorkFlow {
 
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
-        streamAiService.solverSummaryChat(workContext.getHistory(), handler);
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        String model = aiTaskMessage.getModel();
+        streamAiService.solverSummaryChat(workContext.getHistory(), model, handler);
     }
 
 }

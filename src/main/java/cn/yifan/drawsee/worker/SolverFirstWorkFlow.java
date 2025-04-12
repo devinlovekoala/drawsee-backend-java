@@ -16,6 +16,7 @@ import cn.yifan.drawsee.service.base.StreamAiService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.LinkedList;
 
 /**
  * @FileName SolverWorkFlow
@@ -73,9 +75,15 @@ public class SolverFirstWorkFlow extends WorkFlow {
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
-        String question = aiTaskMessage.getPrompt();
-        String method = aiTaskMessage.getPromptParams().get("method");
-        streamAiService.solverFirstChat(workContext.getHistory(), question, method, handler);
+        LinkedList<ChatMessage> history = workContext.getHistory();
+        String model = aiTaskMessage.getModel();
+        streamAiService.solverFirstChat(
+            history, 
+            aiTaskMessage.getPrompt(), 
+            aiTaskMessage.getPromptParams().get("method"), 
+            model,
+            handler
+        );
     }
 
 }

@@ -16,7 +16,7 @@ import java.util.Map;
 /**
  * @FileName CreateTaskDTO
  * @Description AI任务创建DTO，支持自动识别模式和学科特定处理
- * @Author yifan
+ * @Author devin
  * @date 2025-01-29 18:13
  **/
 

@@ -10,7 +10,7 @@ import java.io.Serializable;
 /**
  * @FileName ActivateInvitationCodeDTO
  * @Description
- * @Author yifan
+ * @Author devin
  * @date 2025-03-25 14:50
  **/
 

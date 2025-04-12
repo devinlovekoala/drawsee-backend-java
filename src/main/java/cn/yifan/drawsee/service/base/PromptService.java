@@ -93,4 +93,35 @@ public interface PromptService {
     @PromptResource(fromResource = "/prompt/mode-detection.txt")
     String getModeDetectionPrompt(@PromptParam("prompt") String prompt);
 
+    @PromptResource(fromResource = "/prompt/circuit-basic-analysis.txt")
+    String getCircuitBasicAnalysisPrompt(
+        @PromptParam("design") CircuitDesign design,
+        @PromptParam("spiceNetlist") String spiceNetlist
+    );
+
+    @PromptResource(fromResource = "/prompt/circuit-node-analysis.txt")
+    String getCircuitNodeAnalysisPrompt(
+        @PromptParam("design") CircuitDesign design,
+        @PromptParam("spiceNetlist") String spiceNetlist,
+        @PromptParam("nodeName") String nodeName
+    );
+
+    @PromptResource(fromResource = "/prompt/circuit-function.txt")
+    String getCircuitFunctionPrompt(
+        @PromptParam("design") CircuitDesign design,
+        @PromptParam("spiceNetlist") String spiceNetlist,
+        @PromptParam("basicAnalysis") String basicAnalysis
+    );
+
+    @PromptResource(fromResource = "/prompt/circuit-optimization-suggestion.txt")
+    String getCircuitOptimizationSuggestionPrompt(
+        @PromptParam("basicAnalysis") String basicAnalysis,
+        @PromptParam("functionAnalysis") String functionAnalysis
+    );
+
+    @PromptResource(fromResource = "/prompt/circuit-essential-nodes.txt")
+    String getCircuitEssentialNodesPrompt(
+        @PromptParam("design") CircuitDesign design,
+        @PromptParam("spiceNetlist") String spiceNetlist
+    );
 }

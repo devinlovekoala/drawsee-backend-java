@@ -74,8 +74,10 @@ public class HtmlMakerWorkFlow extends WorkFlow {
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         LinkedList<ChatMessage> history = workContext.getHistory();
-        String prompt = workContext.getAiTaskMessage().getPrompt();
-        streamAiService.htmlMakerChat(history, prompt, handler);
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        String prompt = aiTaskMessage.getPrompt();
+        String model = aiTaskMessage.getModel();
+        streamAiService.htmlMakerChat(history, prompt, model, handler);
     }
 
 }

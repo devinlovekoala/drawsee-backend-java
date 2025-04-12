@@ -86,7 +86,8 @@ public class AnimationWorkFlow extends WorkFlow {
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         LinkedList<ChatMessage> history = workContext.getHistory();
-        streamAiService.animationChat(history, aiTaskMessage.getPrompt(), handler);
+        String model = aiTaskMessage.getModel();
+        streamAiService.animationChat(history, aiTaskMessage.getPrompt(), model, handler);
     }
 
     @Override

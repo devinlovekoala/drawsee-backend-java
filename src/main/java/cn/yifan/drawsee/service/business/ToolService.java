@@ -10,7 +10,10 @@ import cn.yifan.drawsee.pojo.dto.UploadAnimationFrameDTO;
 import cn.yifan.drawsee.pojo.vo.RecognizeTextVO;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
+import cn.yifan.drawsee.service.base.PromptService;
+import cn.yifan.drawsee.service.base.StreamAiService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStream;
 import org.redisson.api.RedissonClient;
@@ -21,10 +24,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import cn.yifan.drawsee.converter.SpiceConverter;
+import java.util.LinkedList;
+import dev.langchain4j.data.message.ChatMessage;
 
 /**
  * @FileName ToolService
@@ -45,6 +49,12 @@ public class ToolService {
     private MinioService minioService;
     @Autowired
     private SpiceConverter spiceConverter;
+    @Autowired
+    private PromptService promptService;
+    @Autowired
+    private StreamAiService streamAiService;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     public void uploadAnimationFrame(UploadAnimationFrameDTO uploadAnimationFrameDTO) {
         RStream<String, Object> redisStream = redissonClient.getStream(RedisKey.AI_TASK_PREFIX + uploadAnimationFrameDTO.getTaskId());
@@ -94,62 +104,4 @@ public class ToolService {
             throw new ApiException(ApiError.SYSTEM_ERROR);
         }
     }
-
-    /**
-     * 生成电路的SPICE网表
-     *
-     * @param circuitDesign 电路设计数据
-     * @return SPICE网表内容
-     */
-//    public String generateSpiceNetlist(CircuitDesign circuitDesign) {
-//        try {
-//            return spiceConverter.generateNetlist(circuitDesign);
-//        } catch (Exception e) {
-//            log.error("生成SPICE网表失败", e);
-//            throw new ApiException(ApiError.SYSTEM_ERROR);
-//        }
-//    }
-//
-//    /**
-//     * 分析电路并返回分析结果
-//     *
-//     * @param circuitDesign 电路设计数据
-//     * @return 电路分析结果
-//     */
-//    public Map<String, Object> analyzeCircuit(CircuitDesign circuitDesign) {
-//        try {
-//            // 生成SPICE网表
-//            String spiceNetlist = spiceConverter.generateNetlist(circuitDesign);
-//
-//            // 分析结果对象
-//            Map<String, Object> analysisResult = new HashMap<>();
-//            analysisResult.put("spiceNetlist", spiceNetlist);
-//            analysisResult.put("circuitProperties", extractCircuitProperties(circuitDesign));
-//
-//            return analysisResult;
-//        } catch (Exception e) {
-//            log.error("电路分析失败", e);
-//            throw new ApiException(ApiError.SYSTEM_ERROR);
-//        }
-//    }
-    
-    /**
-     * 提取电路属性
-     *
-     * @param circuitDesign 电路设计数据
-     * @return 电路属性
-     */
-//    private Map<String, Object> extractCircuitProperties(CircuitDesign circuitDesign) {
-//        Map<String, Object> properties = new HashMap<>();
-//
-//        // 统计各类元件数量
-//        Map<String, Long> componentCounts = circuitDesign.getElements().stream()
-//                .collect(Collectors.groupingBy(CircuitDesign.CircuitElement::getType, Collectors.counting()));
-//
-//        properties.put("componentCounts", componentCounts);
-//        properties.put("totalComponents", circuitDesign.getElements().size());
-//        properties.put("connectionCount", circuitDesign.getConnections().size());
-//
-//        return properties;
-//    }
 }

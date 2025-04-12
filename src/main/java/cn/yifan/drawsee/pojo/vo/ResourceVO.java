@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 /**
  * @FileName ResourceVO
  * @Description 资源信息VO
- * @Author yifan
+ * @Author devin
  * @date 2025-03-09 16:21
  **/
 @Data

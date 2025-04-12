@@ -85,7 +85,9 @@ public class PlannerWorkFlow extends WorkFlow {
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         LinkedList<ChatMessage> history = workContext.getHistory();
-        streamAiService.plannerFirstChat(history, handler);
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        String model = aiTaskMessage.getModel();
+        streamAiService.plannerFirstChat(history, model, handler);
     }
 
     @Override
