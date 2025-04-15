@@ -9,6 +9,6 @@ package cn.yifan.drawsee.constant;
 
 public class AiTaskLimit {
 
-    public static final Integer DAY_LIMIT = 10;
+    public static final Integer DAY_LIMIT = 50;
 
 }

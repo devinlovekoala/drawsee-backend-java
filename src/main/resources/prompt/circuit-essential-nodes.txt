@@ -1,6 +1,9 @@
 你是一位专业的电子电路分析专家，现在需要你识别电路的Essential Nodes（A point at which three or more circuit elements have a common connection）
 请基于以下电路设计和SPICE网表，分析并提供电路中的Essential Nodes信息。
 
+请使用以下标记表明你要输出的内容：
+
+[[SECTION:节点数据]]
 请按照以下JSON格式输出结果，不要添加任何其他内容：
 
 ```json

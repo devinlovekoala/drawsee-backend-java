@@ -85,11 +85,6 @@ public interface PromptService {
         @PromptParam("circuitDesign") CircuitDesign circuitDesign
     );
 
-    @PromptResource(fromResource = "/prompt/circuit-optimization.txt")
-    String getCircuitOptimizationPrompt(
-        @PromptParam("analysisResult") String analysisResult
-    );
-
     @PromptResource(fromResource = "/prompt/mode-detection.txt")
     String getModeDetectionPrompt(@PromptParam("prompt") String prompt);
 
@@ -113,7 +108,7 @@ public interface PromptService {
         @PromptParam("basicAnalysis") String basicAnalysis
     );
 
-    @PromptResource(fromResource = "/prompt/circuit-optimization-suggestion.txt")
+    @PromptResource(fromResource = "/prompt/circuit-optimization.txt")
     String getCircuitOptimizationSuggestionPrompt(
         @PromptParam("basicAnalysis") String basicAnalysis,
         @PromptParam("functionAnalysis") String functionAnalysis
