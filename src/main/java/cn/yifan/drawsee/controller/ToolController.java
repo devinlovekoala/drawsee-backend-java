@@ -29,8 +29,6 @@ public class ToolController {
 
     @Autowired
     private ToolService toolService;
-    @Autowired
-    private CircuitAnalysisService circuitAnalysisService;
 
     @PostMapping("/animation_frame")
     @SaIgnore

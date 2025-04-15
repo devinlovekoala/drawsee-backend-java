@@ -10,10 +10,7 @@ import cn.yifan.drawsee.pojo.dto.UploadAnimationFrameDTO;
 import cn.yifan.drawsee.pojo.vo.RecognizeTextVO;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
-import cn.yifan.drawsee.service.base.PromptService;
-import cn.yifan.drawsee.service.base.StreamAiService;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStream;
 import org.redisson.api.RedissonClient;
@@ -24,11 +21,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-
-import cn.yifan.drawsee.pojo.entity.CircuitDesign;
-import cn.yifan.drawsee.converter.SpiceConverter;
-import java.util.LinkedList;
-import dev.langchain4j.data.message.ChatMessage;
 
 /**
  * @FileName ToolService
@@ -47,14 +39,6 @@ public class ToolService {
     private AiService aiService;
     @Autowired
     private MinioService minioService;
-    @Autowired
-    private SpiceConverter spiceConverter;
-    @Autowired
-    private PromptService promptService;
-    @Autowired
-    private StreamAiService streamAiService;
-    @Autowired
-    private ObjectMapper objectMapper;
 
     public void uploadAnimationFrame(UploadAnimationFrameDTO uploadAnimationFrameDTO) {
         RStream<String, Object> redisStream = redissonClient.getStream(RedisKey.AI_TASK_PREFIX + uploadAnimationFrameDTO.getTaskId());
