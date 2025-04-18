@@ -11,6 +11,8 @@ public class NodeTitle {
 
     public static final String QUERY = "用户提问";
     public static final String ANSWER = "AI解析";
+    public static final String ANSWER_POINT = "回答角度";
+    public static final String ANSWER_DETAIL = "详细解析";
     public static final String KNOWLEDGE_HEAD = "知识点";
     public static final String KNOWLEDGE_DETAIL = "知识详情";
     public static final String GENERATED_ANIMATION = "生成动画";

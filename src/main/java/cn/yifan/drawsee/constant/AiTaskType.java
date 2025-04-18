@@ -14,6 +14,11 @@ public class AiTaskType {
     public static final String GENERAL = "GENERAL";
 
     /**
+     * 通用对话详情
+     */
+    public static final String GENERAL_DETAIL = "GENERAL_DETAIL";
+
+    /**
      * 知识问答
      */
     public static final String KNOWLEDGE = "KNOWLEDGE";

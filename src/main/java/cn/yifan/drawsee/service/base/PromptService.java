@@ -20,6 +20,12 @@ public interface PromptService {
     @PromptResource(fromResource = "/prompt/general-chat.txt")
     String getGeneralChatPrompt();
 
+    @PromptResource(fromResource = "/prompt/answer-point.txt")
+    String getAnswerPointPrompt(@PromptParam("question") String question);
+
+    @PromptResource(fromResource = "/prompt/answer-detail.txt")
+    String getAnswerDetailPrompt(@PromptParam("question") String question, @PromptParam("angle") String angle);
+
     @PromptResource(fromResource = "/prompt/knowledge-detail-chat.txt")
     String getKnowledgeDetailChatPrompt(@PromptParam("knowledgePoint") String knowledgePoint);
 

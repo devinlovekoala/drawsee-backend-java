@@ -36,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.ArrayList;
+import com.fasterxml.jackson.databind.JsonNode;
 
 /**
  * @FileName WorkFlow
@@ -192,6 +194,8 @@ public class WorkFlow {
             // 是AI回答节点
             if (
                 parentNode.getType().equals(NodeType.ANSWER) ||
+                parentNode.getType().equals(NodeType.ANSWER_POINT) ||
+                parentNode.getType().equals(NodeType.ANSWER_DETAIL) ||
                 parentNode.getType().equals(NodeType.KNOWLEDGE_DETAIL)
             ) {
                 messages.addFirst(new AiMessage(text));
@@ -325,7 +329,23 @@ public class WorkFlow {
         Map<String, Object> answerNodeData = new ConcurrentHashMap<>();
         answerNodeData.put("title", NodeTitle.ANSWER);
         answerNodeData.put("text", "");
-        Node answerNode = new Node(
+        
+        // 判断是否为通用对话类型，如果是则创建回答角度节点，否则创建普通回答节点
+        if (AiTaskType.GENERAL.equals(aiTaskMessage.getType())) {
+            Node answerNode = new Node(
+                NodeType.ANSWER_POINT,
+                objectMapper.writeValueAsString(answerNodeData),
+                objectMapper.writeValueAsString(XYPosition.origin()),
+                parentNodeId,
+                aiTaskMessage.getUserId(),
+                aiTaskMessage.getConvId(),
+                true
+            );
+            answerNodeData.put("title", NodeTitle.ANSWER_POINT);
+            answerNodeData.put("subtype", NodeSubType.ANSWER_POINT);
+            insertAndPublishStreamNode(workContext, answerNode, answerNodeData);
+        } else {
+            Node answerNode = new Node(
                 NodeType.ANSWER,
                 objectMapper.writeValueAsString(answerNodeData),
                 objectMapper.writeValueAsString(XYPosition.origin()),
@@ -333,8 +353,9 @@ public class WorkFlow {
                 aiTaskMessage.getUserId(),
                 aiTaskMessage.getConvId(),
                 true
-        );
-        insertAndPublishStreamNode(workContext, answerNode, answerNodeData);
+            );
+            insertAndPublishStreamNode(workContext, answerNode, answerNodeData);
+        }
     }
 
     public void createInitNodes(WorkContext workContext) throws JsonProcessingException {
@@ -345,10 +366,131 @@ public class WorkFlow {
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         LinkedList<ChatMessage> history = workContext.getHistory();
-        streamAiService.generalChat(history, aiTaskMessage.getPrompt(), aiTaskMessage.getModel(), handler);
+        
+        // 如果是通用对话类型，则使用answerPointChat方法生成回答角度
+        if (AiTaskType.GENERAL.equals(aiTaskMessage.getType())) {
+            streamAiService.answerPointChat(history, aiTaskMessage.getPrompt(), aiTaskMessage.getModel(), handler);
+        } else {
+            // 其他情况使用原有的generalChat方法
+            streamAiService.generalChat(history, aiTaskMessage.getPrompt(), aiTaskMessage.getModel(), handler);
+        }
     }
 
-    public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {}
+    public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
+        // 如果是通用对话类型，则创建回答角度相关节点
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        if (AiTaskType.GENERAL.equals(aiTaskMessage.getType())) {
+            createAnswerPointNodes(workContext);
+        }
+    }
+    
+    /**
+     * 创建回答角度节点
+     * @param workContext 工作上下文
+     * @throws JsonProcessingException JSON处理异常
+     */
+    protected void createAnswerPointNodes(WorkContext workContext) throws JsonProcessingException {
+        Node streamNode = workContext.getStreamNode();
+        Response<AiMessage> streamResponse = workContext.getStreamResponse();
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        
+        String responseText = streamResponse.content().text();
+        
+        try {
+            // 尝试先用JSON方式解析（兼容旧格式）
+            try {
+                JsonNode jsonNode = objectMapper.readTree(responseText);
+                // 判断是否为数组
+                if (jsonNode.isArray() && jsonNode.size() > 0) {
+                    for (JsonNode pointNode : jsonNode) {
+                        String title = pointNode.has("title") ? pointNode.get("title").asText() : "未知角度";
+                        String description = pointNode.has("description") ? pointNode.get("description").asText() : "";
+                        
+                        createSingleAnswerPointNode(workContext, streamNode, aiTaskMessage, title, description);
+                    }
+                    return; // 成功用JSON解析，返回
+                }
+            } catch (Exception jsonEx) {
+                // JSON解析失败，尝试使用文本方式解析
+                log.info("JSON解析回答角度失败，尝试使用文本方式解析");
+            }
+            
+            // 使用文本方式解析（新格式）
+            String[] lines = responseText.split("\n");
+            String currentTitle = null;
+            String currentDescription = null;
+            
+            for (int i = 0; i < lines.length; i++) {
+                String line = lines[i].trim();
+                
+                if (line.isEmpty()) {
+                    // 如果是空行，且已有标题和描述，创建节点
+                    if (currentTitle != null && currentDescription != null) {
+                        createSingleAnswerPointNode(workContext, streamNode, aiTaskMessage, currentTitle, currentDescription);
+                        currentTitle = null;
+                        currentDescription = null;
+                    }
+                    continue;
+                }
+                
+                // 匹配"角度X：[标题]"格式
+                if (line.matches("^角度\\d+：.+")) {
+                    // 如果已有标题和描述，先创建之前的节点
+                    if (currentTitle != null && currentDescription != null) {
+                        createSingleAnswerPointNode(workContext, streamNode, aiTaskMessage, currentTitle, currentDescription);
+                    }
+                    
+                    // 提取标题
+                    currentTitle = line.substring(line.indexOf("：") + 1).trim();
+                    currentDescription = null;
+                } 
+                // 如果有标题但没有描述，当前行作为描述
+                else if (currentTitle != null && currentDescription == null) {
+                    currentDescription = line;
+                }
+            }
+            
+            // 处理最后一个角度
+            if (currentTitle != null && currentDescription != null) {
+                createSingleAnswerPointNode(workContext, streamNode, aiTaskMessage, currentTitle, currentDescription);
+            }
+        } catch (Exception e) {
+            log.error("解析回答角度失败: {}", responseText, e);
+        }
+    }
+
+    /**
+     * 创建单个回答角度节点
+     * @param workContext 工作上下文
+     * @param streamNode 流式节点
+     * @param aiTaskMessage AI任务消息
+     * @param title 标题
+     * @param description 描述
+     * @throws JsonProcessingException JSON处理异常
+     */
+    private void createSingleAnswerPointNode(WorkContext workContext, Node streamNode, AiTaskMessage aiTaskMessage, String title, String description) throws JsonProcessingException {
+        Map<String, Object> answerPointNodeData = new ConcurrentHashMap<>();
+        answerPointNodeData.put("title", title);
+        answerPointNodeData.put("text", description);
+        answerPointNodeData.put("subtype", NodeSubType.ANSWER_POINT);
+        
+        Node answerPointNode = new Node(
+            NodeType.ANSWER_POINT,
+            objectMapper.writeValueAsString(answerPointNodeData),
+            objectMapper.writeValueAsString(XYPosition.origin()),
+            streamNode.getId(),
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            true
+        );
+        
+        try {
+            // 使用传入的workContext
+            insertAndPublishNoneStreamNode(workContext, answerPointNode, answerPointNodeData);
+        } catch (Exception e) {
+            log.error("创建回答角度节点失败: {}", e.getMessage(), e);
+        }
+    }
 
     public void updateTaskToSuccess(WorkContext workContext) {
         AiTask aiTask = workContext.getAiTask();
@@ -369,5 +511,4 @@ public class WorkFlow {
         streamNode.setData(objectMapper.writeValueAsString(streamNodeData));
         workContext.getNodesToUpdate().add(streamNode);
     }
-
 }

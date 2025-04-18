@@ -29,7 +29,7 @@ public class CreateAiTaskDTO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @ValueSet(values = {
-        AiTaskType.GENERAL,
+        AiTaskType.GENERAL, AiTaskType.GENERAL_DETAIL,
         AiTaskType.KNOWLEDGE, AiTaskType.KNOWLEDGE_DETAIL,
         AiTaskType.ANIMATION,
         AiTaskType.SOLVER_FIRST, AiTaskType.SOLVER_CONTINUE, AiTaskType.SOLVER_SUMMARY,

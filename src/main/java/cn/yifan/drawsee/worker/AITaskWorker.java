@@ -20,6 +20,8 @@ public class AITaskWorker {
     @Autowired
     private GeneralWorkFlow generalWorkFlow;
     @Autowired
+    private GeneralDetailWorkFlow generalDetailWorkFlow;
+    @Autowired
     private KnowledgeWorkFlow knowledgeWorkFlow;
     @Autowired
     private KnowledgeDetailWorkFlow knowledgeDetailWorkFlow;
@@ -35,11 +37,14 @@ public class AITaskWorker {
     private PlannerWorkFlow plannerWorkFlow;
     @Autowired
     private HtmlMakerWorkFlow htmlMakerWorkFlow;
+    @Autowired
+    private CircuitAnalysisWorkFlow circuitAnalysisWorkFlow;
 
     public void processTask(AiTaskMessage aiTaskMessage) {
         WorkContext workContext = new WorkContext(aiTaskMessage);
         switch (aiTaskMessage.getType()) {
             case AiTaskType.GENERAL -> generalWorkFlow.execute(workContext);
+            case AiTaskType.GENERAL_DETAIL -> generalDetailWorkFlow.execute(workContext);
             case AiTaskType.KNOWLEDGE -> knowledgeWorkFlow.execute(workContext);
             case AiTaskType.KNOWLEDGE_DETAIL -> knowledgeDetailWorkFlow.execute(workContext);
             case AiTaskType.ANIMATION -> animationWorkFlow.execute(workContext);
@@ -48,6 +53,7 @@ public class AITaskWorker {
             case AiTaskType.SOLVER_SUMMARY -> solverSummaryWorkFlow.execute(workContext);
             case AiTaskType.PLANNER -> plannerWorkFlow.execute(workContext);
             case AiTaskType.HTML_MAKER -> htmlMakerWorkFlow.execute(workContext);
+            case AiTaskType.CIRCUIT_ANALYZE -> circuitAnalysisWorkFlow.execute(workContext);
             default -> log.error("未知任务类型: {}", aiTaskMessage.getType());
         }
     }

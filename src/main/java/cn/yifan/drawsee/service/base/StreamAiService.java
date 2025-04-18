@@ -47,6 +47,52 @@ public class StreamAiService {
         }
     }
 
+    /**
+     * 生成回答角度
+     * @param history 历史消息
+     * @param question 用户问题
+     * @param model 使用的AI模型
+     * @param handler 流式处理器
+     */
+    public void answerPointChat(List<ChatMessage> history, String question, String model, StreamingResponseHandler<AiMessage> handler) {
+        LinkedList<ChatMessage> messages = new LinkedList<>(history);
+        String prompt = promptService.getAnswerPointPrompt(question);
+        messages.add(new UserMessage(prompt));
+        
+        if (model.equals(AiModel.DEEPSEEKV3)) {
+            log.info("使用DeepSeekV3模型生成回答角度");
+            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
+        } else {
+            log.info("使用豆包模型生成回答角度");
+            doubaoStreamingChatLanguageModel.generate(messages, handler);
+        }
+    }
+
+    /**
+     * 根据指定角度生成详细回答
+     * 该方法由GeneralDetailWorkFlow调用，其中角度信息从父节点(ANSWER_POINT)中获取
+     * 原始问题通过findOriginalQuestion方法向上回溯QUERY节点获取
+     * 
+     * @param history 历史消息
+     * @param question 原始问题
+     * @param angle 回答角度（从父节点获取）
+     * @param model 使用的AI模型
+     * @param handler 流式处理器
+     */
+    public void answerDetailChat(List<ChatMessage> history, String question, String angle, String model, StreamingResponseHandler<AiMessage> handler) {
+        LinkedList<ChatMessage> messages = new LinkedList<>(history);
+        String prompt = promptService.getAnswerDetailPrompt(question, angle);
+        messages.add(new UserMessage(prompt));
+        
+        if (model.equals(AiModel.DEEPSEEKV3)) {
+            log.info("使用DeepSeekV3模型生成详细回答，角度: {}", angle);
+            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
+        } else {
+            log.info("使用豆包模型生成详细回答，角度: {}", angle);
+            doubaoStreamingChatLanguageModel.generate(messages, handler);
+        }
+    }
+
     public void knowledgeDetailChat(List<ChatMessage> history, String knowledgePoint, String model, StreamingResponseHandler<AiMessage> handler) {
         LinkedList<ChatMessage> messages = new LinkedList<>(history);
         String prompt = promptService.getKnowledgeDetailChatPrompt(knowledgePoint);

@@ -36,5 +36,9 @@ public class NodeSubType {
     public static final String CIRCUIT_SPICE = "circuit-spice";
 
     public static final String CIRCUIT_OPTIMIZATION = "circuit-optimization";
+    
+    public static final String ANSWER_POINT = "answer-point";
+    
+    public static final String ANSWER_DETAIL = "answer-detail";
 
 }

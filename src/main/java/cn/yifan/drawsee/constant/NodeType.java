@@ -14,6 +14,10 @@ public class NodeType {
     public static final String QUERY = "query";
 
     public static final String ANSWER = "answer";
+    
+    public static final String ANSWER_POINT = "answer-point";
+    
+    public static final String ANSWER_DETAIL = "answer-detail";
 
     public static final String KNOWLEDGE_HEAD = "knowledge-head";
 

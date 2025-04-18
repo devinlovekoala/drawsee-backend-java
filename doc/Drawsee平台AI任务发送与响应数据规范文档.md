@@ -563,6 +563,8 @@
       "createdAt": "2024-04-01T10:00:00Z",
       "updatedAt": "2024-04-01T10:00:00Z"
     }
+  },
+  "promptParams": {
   }
 }
 ```
