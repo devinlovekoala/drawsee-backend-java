@@ -124,10 +124,12 @@ public class GeneralWorkFlow extends WorkFlow {
             false // 标记为非活跃
         );
         
+        // 为虚拟节点设置一个临时ID，但不使用查询节点的ID
+        virtualNode.setId(-1L); // 使用一个明显的临时ID
+        
         // 设置到WorkContext中，但不调用insertAndPublishStreamNode
         workContext.setStreamNode(virtualNode);
         workContext.setStreamNodeData(streamNodeData);
-        virtualNode.setId(parentNodeId); // 使用查询节点的ID
     }
     
     /**
@@ -248,5 +250,15 @@ public class GeneralWorkFlow extends WorkFlow {
         } catch (Exception e) {
             log.error("创建回答角度节点失败: {}", e.getMessage(), e);
         }
+    }
+
+    @Override
+    public void updateStreamNode(WorkContext workContext) throws JsonProcessingException {
+        // 由于我们使用的是虚拟节点，不需要更新节点内容
+        // 覆盖父类方法，防止对QUERY节点进行更新
+        // 不调用super.updateStreamNode(workContext);
+        
+        // 虚拟节点的处理已在createAnswerPointNodes中完成
+        log.info("跳过虚拟流节点更新");
     }
 }
