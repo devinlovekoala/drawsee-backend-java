@@ -77,6 +77,6 @@ public class ModeAutoDetectionService {
         return taskType.equals(AiTaskType.GENERAL) ||
                taskType.equals(AiTaskType.SOLVER_FIRST) ||
                taskType.equals(AiTaskType.PLANNER) ||
-               taskType.equals(AiTaskType.HTML_MAKER);
+               taskType.equals(AiTaskType.CIRCUIT_ANALYSIS);
     }
 }

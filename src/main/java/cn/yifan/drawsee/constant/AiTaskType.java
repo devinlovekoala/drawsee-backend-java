@@ -57,11 +57,11 @@ public class AiTaskType {
      * HTML生成
      */
     public static final String HTML_MAKER = "HTML_MAKER";
-
+    
     /**
      * 电路分析
      */
-    public static final String CIRCUIT_ANALYZE = "CIRCUIT_ANALYZE";
+    public static final String CIRCUIT_ANALYSIS = "CIRCUIT_ANALYSIS";
 
     private AiTaskType() {
         // 私有构造函数，防止实例化

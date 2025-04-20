@@ -440,7 +440,7 @@
 }
 ```
 
-### 9. 电路分析 (CIRCUIT_ANALYZE)
+### 9. 电路分析 (CIRCUIT_ANALYSIS)
 
 #### 发送结构
 ```json
@@ -449,7 +449,7 @@
   "convId": 789012,
   "parentId": 345678,
   "taskId": "task_uuid",
-  "type": "CIRCUIT_ANALYZE",
+  "type": "CIRCUIT_ANALYSIS",
   "model": "deepseekV3",  // 使用的AI模型
   "prompt": {
     "elements": [
@@ -530,7 +530,7 @@
 
 1. **任务类型必须正确**：确保`type`字段使用`AiTaskType`类中定义的常量值。
 2. **父节点类型匹配**：某些任务类型（如`KNOWLEDGE_DETAIL`、`GENERAL_DETAIL`）要求特定类型的父节点。
-3. **提示内容格式**：大多数任务使用字符串作为`prompt`，但`CIRCUIT_ANALYZE`使用`CircuitDesign`对象。
+3. **提示内容格式**：大多数任务使用字符串作为`prompt`，但`CIRCUIT_ANALYSIS`使用`CircuitDesign`对象。
 4. **任务链接顺序**：
    - 解题类任务通常按照：`SOLVER_FIRST` → `SOLVER_CONTINUE` → `SOLVER_SUMMARY`的顺序使用。
    - 通用对话类任务通常按照：`GENERAL`(生成角度) → `GENERAL_DETAIL`(展开具体角度)的顺序使用。

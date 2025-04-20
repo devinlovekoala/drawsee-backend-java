@@ -35,7 +35,7 @@ public class CreateAiTaskDTO implements Serializable {
         AiTaskType.SOLVER_FIRST, AiTaskType.SOLVER_CONTINUE, AiTaskType.SOLVER_SUMMARY,
         AiTaskType.PLANNER,
         AiTaskType.HTML_MAKER,
-        AiTaskType.CIRCUIT_ANALYZE
+        AiTaskType.CIRCUIT_ANALYSIS
     })
     private String type;
 
