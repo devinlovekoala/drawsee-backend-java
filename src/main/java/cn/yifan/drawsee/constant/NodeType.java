@@ -24,5 +24,15 @@ public class NodeType {
     public static final String KNOWLEDGE_DETAIL = "knowledge-detail";
 
     public static final String RESOURCE = "resource";
+    
+    /**
+     * 电路画布节点
+     */
+    public static final String CIRCUIT_CANVAS = "circuit-canvas";
+    
+    /**
+     * 电路分析点节点
+     */
+    public static final String CIRCUIT_POINT = "circuit-point";
 
 }

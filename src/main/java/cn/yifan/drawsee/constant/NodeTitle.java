@@ -33,5 +33,20 @@ public class NodeTitle {
     public static final String CIRCUIT_ANALYSIS = "电路分析";
     public static final String CIRCUIT_SPICE = "SPICE网表生成";
     public static final String CIRCUIT_OPTIMIZATION = "电路优化建议";
+    
+    /**
+     * 电路画布标题
+     */
+    public static final String CIRCUIT_CANVAS = "电路设计";
+    
+    /**
+     * 电路分析点标题
+     */
+    public static final String CIRCUIT_POINT = "电路分析点";
+    
+    /**
+     * 电路分析点详情标题
+     */
+    public static final String CIRCUIT_DETAIL = "电路分析详情";
 
 }

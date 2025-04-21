@@ -59,9 +59,20 @@ public class AiTaskType {
     public static final String HTML_MAKER = "HTML_MAKER";
     
     /**
+     * 电路分析（旧版常量）
+     * @deprecated 请使用 CIRCUIT_ANALYSIS 代替，此常量将在未来版本移除
+     */
+    public static final String CIRCUIT_ANALYZE = "CIRCUIT_ANALYZE";
+
+    /**
      * 电路分析
      */
     public static final String CIRCUIT_ANALYSIS = "CIRCUIT_ANALYSIS";
+    
+    /**
+     * 电路分析点详情
+     */
+    public static final String CIRCUIT_DETAIL = "CIRCUIT_DETAIL";
 
     private AiTaskType() {
         // 私有构造函数，防止实例化

@@ -39,6 +39,8 @@ public class AITaskWorker {
     private HtmlMakerWorkFlow htmlMakerWorkFlow;
     @Autowired
     private CircuitAnalysisWorkFlow circuitAnalysisWorkFlow;
+    @Autowired
+    private CircuitAnalysisDetailWorkFlow circuitAnalysisDetailWorkFlow;
 
     public void processTask(AiTaskMessage aiTaskMessage) {
         WorkContext workContext = new WorkContext(aiTaskMessage);
@@ -54,6 +56,7 @@ public class AITaskWorker {
             case AiTaskType.PLANNER -> plannerWorkFlow.execute(workContext);
             case AiTaskType.HTML_MAKER -> htmlMakerWorkFlow.execute(workContext);
             case AiTaskType.CIRCUIT_ANALYSIS -> circuitAnalysisWorkFlow.execute(workContext);
+            case AiTaskType.CIRCUIT_DETAIL -> circuitAnalysisDetailWorkFlow.execute(workContext);
             default -> log.error("未知任务类型: {}", aiTaskMessage.getType());
         }
     }

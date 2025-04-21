@@ -40,5 +40,20 @@ public class NodeSubType {
     public static final String ANSWER_POINT = "answer-point";
     
     public static final String ANSWER_DETAIL = "answer-detail";
+    
+    /**
+     * 电路画布子类型
+     */
+    public static final String CIRCUIT_CANVAS = "circuit-canvas";
+    
+    /**
+     * 电路分析点子类型
+     */
+    public static final String CIRCUIT_POINT = "circuit-point";
+    
+    /**
+     * 电路分析点详情子类型
+     */
+    public static final String CIRCUIT_DETAIL = "circuit-detail";
 
 }

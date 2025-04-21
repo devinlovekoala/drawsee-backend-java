@@ -38,8 +38,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * @FileName ToolService
- * @Description
+ * @FileName CircuitAnalysisWorkFlow
+ * @Description 电路分析工作流，处理电路分析任务
  * @Author devin
  * @date 2025-04-04 16:20
  **/
@@ -79,16 +79,16 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
     public void createInitNodes(WorkContext workContext) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         
-        // 创建用户查询节点
-        Map<String, Object> queryNodeData = new ConcurrentHashMap<>();
-        queryNodeData.put("title", NodeTitle.QUERY);
-        queryNodeData.put("text", "电路分析请求");
-        queryNodeData.put("circuitDesign", objectMapper.readValue(aiTaskMessage.getPrompt(), CircuitDesign.class));
-        queryNodeData.put("mode", aiTaskMessage.getType());
+        // 创建电路画布节点（替代之前的查询节点）
+        Map<String, Object> canvasNodeData = new ConcurrentHashMap<>();
+        canvasNodeData.put("title", "电路设计");
+        canvasNodeData.put("text", "电路分析请求");
+        canvasNodeData.put("circuitDesign", objectMapper.readValue(aiTaskMessage.getPrompt(), CircuitDesign.class));
+        canvasNodeData.put("mode", aiTaskMessage.getType());
         
-        Node queryNode = new Node(
-            NodeType.QUERY,
-            objectMapper.writeValueAsString(queryNodeData),
+        Node canvasNode = new Node(
+            NodeType.CIRCUIT_CANVAS,  // 使用新的节点类型
+            objectMapper.writeValueAsString(canvasNodeData),
             objectMapper.writeValueAsString(XYPosition.origin()),
             aiTaskMessage.getParentId(),
             aiTaskMessage.getUserId(),
@@ -96,10 +96,41 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
             true
         );
         
-        insertAndPublishNoneStreamNode(workContext, queryNode, queryNodeData);
+        insertAndPublishNoneStreamNode(workContext, canvasNode, canvasNodeData);
         
-        // 创建AI回答节点
-        createInitStreamNode(workContext, queryNode.getId());
+        // 暂不创建AI回答节点，跟通用问答类似，直接在canvasNode下创建分点节点
+        setupVirtualStreamNode(workContext, canvasNode.getId());
+    }
+    
+    /**
+     * 设置一个虚拟的流式节点，用于后续的分析点节点创建
+     * 该节点不会实际插入数据库，仅用于后续处理
+     */
+    private void setupVirtualStreamNode(WorkContext workContext, Long parentId) throws JsonProcessingException {
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        
+        // 创建流式节点数据，但不实际保存到数据库
+        Map<String, Object> streamNodeData = new ConcurrentHashMap<>();
+        streamNodeData.put("title", "电路分析");
+        streamNodeData.put("text", "");
+        
+        // 创建一个Node对象，但不实际插入数据库
+        Node virtualNode = new Node(
+            NodeType.ANSWER,  // 类型无关紧要，不会被保存
+            objectMapper.writeValueAsString(streamNodeData),
+            objectMapper.writeValueAsString(XYPosition.origin()),
+            parentId,
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            false // 标记为非活跃
+        );
+        
+        // 为虚拟节点设置一个临时ID
+        virtualNode.setId(-1L);
+        
+        // 设置到WorkContext中
+        workContext.setStreamNode(virtualNode);
+        workContext.setStreamNodeData(streamNodeData);
     }
 
     @Override
@@ -114,8 +145,8 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         // 生成SPICE网表
         String spiceNetlist = spiceConverter.generateNetlist(circuitDesign);
         
-        // 生成分析提示词
-        String analysisPrompt = promptService.getCircuitAnalysisPrompt(circuitDesign, spiceNetlist);
+        // 生成分析点提示词
+        String analysisPrompt = promptService.getCircuitPointAnalysisPrompt(circuitDesign, spiceNetlist);
         
         // 调用AI进行分析
         streamAiService.circuitAnalysisChat(history, analysisPrompt, model, handler);
@@ -126,268 +157,113 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         RStream<String, Object> redisStream = workContext.getRedisStream();
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         Node streamNode = workContext.getStreamNode();
-        LinkedList<ChatMessage> history = workContext.getHistory();
-        String model = aiTaskMessage.getModel();
-
-        // 解析电路设计JSON
-        CircuitDesign circuitDesign = objectMapper.readValue(aiTaskMessage.getPrompt(), CircuitDesign.class);
-
-        // 生成SPICE网表
-        String spiceNetlist = spiceConverter.generateNetlist(circuitDesign);
+        Response<AiMessage> streamResponse = workContext.getStreamResponse();
         
-        // 1. 创建电路基本情况分析节点
-        Map<String, Object> circuitBasicNodeData = new ConcurrentHashMap<>();
-        circuitBasicNodeData.put("title", "电路基本分析");
-        circuitBasicNodeData.put("subtype", "CIRCUIT_BASIC");
-        circuitBasicNodeData.put("progress", "正在分析电路基本情况...");
+        // 获取父节点ID（电路画布节点ID）
+        Long parentId = streamNode.getParentId();
         
-        Node circuitBasicNode = new Node(
-            NodeType.ANSWER,
-            objectMapper.writeValueAsString(circuitBasicNodeData),
-            objectMapper.writeValueAsString(XYPosition.origin()),
-            streamNode.getId(),
-            aiTaskMessage.getUserId(),
-            aiTaskMessage.getConvId(),
-            true
-        );
+        // 解析分析点结果
+        String responseText = streamResponse.content().text();
         
-        insertAndPublishNoneStreamNode(workContext, circuitBasicNode, circuitBasicNodeData);
-
-        // 生成电路基本分析
-        String basicAnalysisPrompt = promptService.getCircuitBasicAnalysisPrompt(circuitDesign, spiceNetlist);
-        
-        // 创建临时响应处理器来获取结果
-        StringResponseHandler basicAnalysisHandler = new StringResponseHandler();
-        LinkedList<ChatMessage> basicAnalysisHistory = new LinkedList<>();
-        basicAnalysisHistory.add(new UserMessage(basicAnalysisPrompt));
-        
-        // 使用streamAiService进行调用
-        streamAiService.circuitAnalysisChat(basicAnalysisHistory, basicAnalysisPrompt, model, basicAnalysisHandler);
-        String basicAnalysisResult = basicAnalysisHandler.getResponse();
-        
-        // 更新电路基本分析节点数据
-        circuitBasicNodeData.put("basicAnalysis", basicAnalysisResult);
-        insertAndPublishNoneStreamNode(workContext, circuitBasicNode, circuitBasicNodeData);
-        
-        // 2. 获取Essential Nodes信息
-        String essentialNodesPrompt = promptService.getCircuitEssentialNodesPrompt(circuitDesign, spiceNetlist);
-        
-        // 创建临时响应处理器来获取结果
-        StringResponseHandler essentialNodesHandler = new StringResponseHandler();
-        LinkedList<ChatMessage> essentialNodesHistory = new LinkedList<>();
-        essentialNodesHistory.add(new UserMessage(essentialNodesPrompt));
-        
-        // 使用streamAiService进行调用
-        streamAiService.circuitAnalysisChat(essentialNodesHistory, essentialNodesPrompt, model, essentialNodesHandler);
-        String essentialNodesJson = essentialNodesHandler.getResponse();
-        
-        // 解析JSON响应
-        EssentialNodesResult essentialNodesResult = null;
         try {
-            essentialNodesResult = objectMapper.readValue(essentialNodesJson, EssentialNodesResult.class);
+            // 解析回答角度（分析点）
+            processCircuitAnalysisPoints(workContext, responseText, parentId);
         } catch (Exception e) {
-            log.error("解析Essential Nodes JSON失败", e);
-            // 创建一个默认的结果
-            essentialNodesResult = new EssentialNodesResult();
-            essentialNodesResult.setEssentialNodeCount(1);
-            EssentialNode defaultNode = new EssentialNode();
-            defaultNode.setName("未知节点");
-            defaultNode.setDescription("解析失败，无法获取节点信息");
-            essentialNodesResult.setEssentialNodes(Collections.singletonList(defaultNode));
+            log.error("解析电路分析点失败: {}", responseText, e);
         }
         
-        // 如果找到Essential Nodes，为每个创建分析节点
-        if (essentialNodesResult != null && essentialNodesResult.getEssentialNodes() != null && !essentialNodesResult.getEssentialNodes().isEmpty()) {
-            for (EssentialNode essentialNode : essentialNodesResult.getEssentialNodes()) {
-                String nodeName = essentialNode.getName();
-                
-                // 为每个Essential Node创建分析节点
-                Map<String, Object> nodeAnalysisNodeData = new ConcurrentHashMap<>();
-                nodeAnalysisNodeData.put("title", "节点[" + nodeName + "]分析");
-                nodeAnalysisNodeData.put("subtype", "CIRCUIT_NODE_ANALYSIS");
-                nodeAnalysisNodeData.put("progress", "正在分析节点[" + nodeName + "]...");
-                nodeAnalysisNodeData.put("nodeName", nodeName);
-                nodeAnalysisNodeData.put("nodeDescription", essentialNode.getDescription());
-                
-                Node nodeAnalysisNode = new Node(
-                    NodeType.ANSWER,
-                    objectMapper.writeValueAsString(nodeAnalysisNodeData),
-                    objectMapper.writeValueAsString(XYPosition.origin()),
-                    circuitBasicNode.getId(),
-                    aiTaskMessage.getUserId(),
-                    aiTaskMessage.getConvId(),
-                    true
-                );
-                
-                insertAndPublishNoneStreamNode(workContext, nodeAnalysisNode, nodeAnalysisNodeData);
-                
-                // 生成节点分析
-                String nodeAnalysisPrompt = promptService.getCircuitNodeAnalysisPrompt(circuitDesign, spiceNetlist, nodeName);
-                
-                // 创建临时响应处理器
-                StringResponseHandler nodeAnalysisHandler = new StringResponseHandler();
-                LinkedList<ChatMessage> nodeAnalysisHistory = new LinkedList<>();
-                nodeAnalysisHistory.add(new UserMessage(nodeAnalysisPrompt));
-                
-                // 使用streamAiService进行调用
-                streamAiService.circuitAnalysisChat(nodeAnalysisHistory, nodeAnalysisPrompt, model, nodeAnalysisHandler);
-                String nodeAnalysisResult = nodeAnalysisHandler.getResponse();
-                
-                // 更新节点分析数据
-                nodeAnalysisNodeData.put("nodeAnalysis", nodeAnalysisResult);
-                insertAndPublishNoneStreamNode(workContext, nodeAnalysisNode, nodeAnalysisNodeData);
-            }
-        }
-        
-        // 3. 创建电路功能分析节点
-        Map<String, Object> functionNodeData = new ConcurrentHashMap<>();
-        functionNodeData.put("title", "电路功能分析");
-        functionNodeData.put("subtype", "CIRCUIT_FUNCTION");
-        functionNodeData.put("progress", "正在分析电路功能...");
-        
-        Node functionNode = new Node(
-            NodeType.ANSWER,
-            objectMapper.writeValueAsString(functionNodeData),
-            objectMapper.writeValueAsString(XYPosition.origin()),
-            circuitBasicNode.getId(),
-            aiTaskMessage.getUserId(),
-            aiTaskMessage.getConvId(),
-            true
-        );
-        
-        insertAndPublishNoneStreamNode(workContext, functionNode, functionNodeData);
-        
-        // 生成电路功能分析
-        String functionPrompt = promptService.getCircuitFunctionPrompt(circuitDesign, spiceNetlist, basicAnalysisResult);
-        
-        // 创建临时响应处理器
-        StringResponseHandler functionHandler = new StringResponseHandler();
-        LinkedList<ChatMessage> functionHistory = new LinkedList<>();
-        functionHistory.add(new UserMessage(functionPrompt));
-        
-        // 使用streamAiService进行调用
-        streamAiService.circuitAnalysisChat(functionHistory, functionPrompt, model, functionHandler);
-        String functionResult = functionHandler.getResponse();
-        
-        // 更新电路功能分析节点数据
-        functionNodeData.put("functionAnalysis", functionResult);
-        insertAndPublishNoneStreamNode(workContext, functionNode, functionNodeData);
-        
-        // 4. 创建电路优化建议节点
-        Map<String, Object> optimizationNodeData = new ConcurrentHashMap<>();
-        optimizationNodeData.put("title", "电路优化建议");
-        optimizationNodeData.put("subtype", "CIRCUIT_OPTIMIZATION");
-        optimizationNodeData.put("progress", "正在生成优化建议...");
-        
-        Node optimizationNode = new Node(
-            NodeType.ANSWER,
-            objectMapper.writeValueAsString(optimizationNodeData),
-            objectMapper.writeValueAsString(XYPosition.origin()),
-            functionNode.getId(),
-            aiTaskMessage.getUserId(),
-            aiTaskMessage.getConvId(),
-            true
-        );
-        
-        insertAndPublishNoneStreamNode(workContext, optimizationNode, optimizationNodeData);
-        
-        // 生成优化建议
-        String optimizationPrompt = promptService.getCircuitOptimizationSuggestionPrompt(basicAnalysisResult, functionResult);
-        
-        // 创建临时响应处理器
-        StringResponseHandler optimizationHandler = new StringResponseHandler();
-        LinkedList<ChatMessage> optimizationHistory = new LinkedList<>();
-        optimizationHistory.add(new UserMessage(optimizationPrompt));
-        
-        // 使用streamAiService进行调用
-        streamAiService.circuitAnalysisChat(optimizationHistory, optimizationPrompt, model, optimizationHandler);
-        String optimizationResult = optimizationHandler.getResponse();
-        
-        // 更新优化节点数据
-        optimizationNodeData.put("optimizationResult", optimizationResult);
-        insertAndPublishNoneStreamNode(workContext, optimizationNode, optimizationNodeData);
-
         // 更新进度信息
         Map<String, Object> data = new ConcurrentHashMap<>();
-        data.put("progress", "电路分析完成");
-        data.put("nodeId", optimizationNode.getId());
+        data.put("progress", "电路分析点生成完成");
         redisStream.add(StreamAddArgs.entries(
             "type", AiTaskMessageType.DATA,
             "data", data
         ));
+        
+        // 发送结束消息
+        redisStream.add(StreamAddArgs.entries(
+            "type", AiTaskMessageType.DONE, 
+            "data", ""
+        ));
     }
     
     /**
-     * Essential Nodes结果类
+     * 处理电路分析点，创建分析点节点
      */
-    private static class EssentialNodesResult {
-        private int essentialNodeCount;
-        private List<EssentialNode> essentialNodes;
+    private void processCircuitAnalysisPoints(WorkContext workContext, String responseText, Long parentId) throws JsonProcessingException {
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         
-        public int getEssentialNodeCount() {
-            return essentialNodeCount;
+        // 使用文本方式解析
+        String[] lines = responseText.split("\n");
+        String currentTitle = null;
+        String currentDescription = null;
+        
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+            
+            if (line.isEmpty()) {
+                // 如果是空行，且已有标题和描述，创建节点
+                if (currentTitle != null && currentDescription != null) {
+                    createCircuitPointNode(workContext, parentId, aiTaskMessage, currentTitle, currentDescription);
+                    currentTitle = null;
+                    currentDescription = null;
+                }
+                continue;
+            }
+            
+            // 匹配"角度X：[标题]"格式
+            if (line.matches("^角度\\d+：.+")) {
+                // 如果已有标题和描述，先创建之前的节点
+                if (currentTitle != null && currentDescription != null) {
+                    createCircuitPointNode(workContext, parentId, aiTaskMessage, currentTitle, currentDescription);
+                }
+                
+                // 提取标题
+                currentTitle = line.substring(line.indexOf("：") + 1).trim();
+                currentDescription = null;
+            } 
+            // 如果有标题但没有描述，当前行作为描述
+            else if (currentTitle != null && currentDescription == null) {
+                currentDescription = line;
+            }
         }
         
-        public void setEssentialNodeCount(int essentialNodeCount) {
-            this.essentialNodeCount = essentialNodeCount;
-        }
-        
-        public List<EssentialNode> getEssentialNodes() {
-            return essentialNodes;
-        }
-        
-        public void setEssentialNodes(List<EssentialNode> essentialNodes) {
-            this.essentialNodes = essentialNodes;
+        // 处理最后一个角度
+        if (currentTitle != null && currentDescription != null) {
+            createCircuitPointNode(workContext, parentId, aiTaskMessage, currentTitle, currentDescription);
         }
     }
     
     /**
-     * Essential Node信息类
+     * 创建电路分析点节点
      */
-    private static class EssentialNode {
-        private String name;
-        private String description;
+    private void createCircuitPointNode(WorkContext workContext, Long parentId, AiTaskMessage aiTaskMessage, 
+                                      String title, String description) throws JsonProcessingException {
+        Map<String, Object> circuitPointNodeData = new ConcurrentHashMap<>();
+        circuitPointNodeData.put("title", title);
+        circuitPointNodeData.put("text", description);
+        circuitPointNodeData.put("subtype", "circuit-point");
         
-        public String getName() {
-            return name;
-        }
+        Node circuitPointNode = new Node(
+            NodeType.CIRCUIT_POINT,
+            objectMapper.writeValueAsString(circuitPointNodeData),
+            objectMapper.writeValueAsString(XYPosition.origin()),
+            parentId,
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            true
+        );
         
-        public void setName(String name) {
-            this.name = name;
-        }
-        
-        public String getDescription() {
-            return description;
-        }
-        
-        public void setDescription(String description) {
-            this.description = description;
+        try {
+            insertAndPublishNoneStreamNode(workContext, circuitPointNode, circuitPointNodeData);
+        } catch (Exception e) {
+            log.error("创建电路分析点节点失败: {}", e.getMessage(), e);
         }
     }
-    
-    /**
-     * 临时响应处理器，用于获取流式AI调用的结果
-     */
-    private static class StringResponseHandler implements StreamingResponseHandler<AiMessage> {
-        private final StringBuilder response = new StringBuilder();
-        
-        @Override
-        public void onNext(String token) {
-            response.append(token);
-        }
-        
-        @Override
-        public void onComplete(Response<AiMessage> response) {
-            // 不需要处理完成回调
-        }
-        
-        @Override
-        public void onError(Throwable error) {
-            log.error("流式AI调用出错", error);
-        }
-        
-        public String getResponse() {
-            return response.toString();
-        }
+
+    @Override
+    public void updateStreamNode(WorkContext workContext) throws JsonProcessingException {
+        // 由于使用虚拟节点，不需要更新节点内容
+        log.info("跳过虚拟流节点更新");
     }
 } 

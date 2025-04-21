@@ -80,49 +80,35 @@ public interface PromptService {
     @PromptResource(fromResource = "/prompt/html-maker-chat.txt")
     String getHtmlMakerChatPrompt(@PromptParam("question") String question);
 
-    @PromptResource(fromResource = "/prompt/circuit-analysis.txt")
-    String getCircuitAnalysisPrompt(
-        @PromptParam("design") CircuitDesign design,
-        @PromptParam("spiceNetlist") String spiceNetlist
-    );
-
-    @PromptResource(fromResource = "/prompt/circuit-spice.txt")
-    String getCircuitSpicePrompt(
-        @PromptParam("circuitDesign") CircuitDesign circuitDesign
-    );
-
     @PromptResource(fromResource = "/prompt/mode-detection.txt")
     String getModeDetectionPrompt(@PromptParam("prompt") String prompt);
-
-    @PromptResource(fromResource = "/prompt/circuit-basic-analysis.txt")
-    String getCircuitBasicAnalysisPrompt(
+    /**
+     * 获取电路分析点提示词模板
+     * 用于解析电路结构并生成分析点
+     * 
+     * @param design 电路设计
+     * @param spiceNetlist SPICE网表
+     * @return 提示词内容
+     */
+    @PromptResource(fromResource = "/prompt/circuit-point-analysis.txt")
+    String getCircuitPointAnalysisPrompt(
         @PromptParam("design") CircuitDesign design,
         @PromptParam("spiceNetlist") String spiceNetlist
     );
-
-    @PromptResource(fromResource = "/prompt/circuit-node-analysis.txt")
-    String getCircuitNodeAnalysisPrompt(
+    
+    /**
+     * 获取电路分析点详情提示词模板
+     * 用于展开特定分析点的详细内容
+     * 
+     * @param design 电路设计
+     * @param spiceNetlist SPICE网表
+     * @param angle 分析角度
+     * @return 提示词内容
+     */
+    @PromptResource(fromResource = "/prompt/circuit-point-detail.txt")
+    String getCircuitPointDetailPrompt(
         @PromptParam("design") CircuitDesign design,
         @PromptParam("spiceNetlist") String spiceNetlist,
-        @PromptParam("nodeName") String nodeName
-    );
-
-    @PromptResource(fromResource = "/prompt/circuit-function.txt")
-    String getCircuitFunctionPrompt(
-        @PromptParam("design") CircuitDesign design,
-        @PromptParam("spiceNetlist") String spiceNetlist,
-        @PromptParam("basicAnalysis") String basicAnalysis
-    );
-
-    @PromptResource(fromResource = "/prompt/circuit-optimization.txt")
-    String getCircuitOptimizationSuggestionPrompt(
-        @PromptParam("basicAnalysis") String basicAnalysis,
-        @PromptParam("functionAnalysis") String functionAnalysis
-    );
-
-    @PromptResource(fromResource = "/prompt/circuit-essential-nodes.txt")
-    String getCircuitEssentialNodesPrompt(
-        @PromptParam("design") CircuitDesign design,
-        @PromptParam("spiceNetlist") String spiceNetlist
+        @PromptParam("angle") String angle
     );
 }
