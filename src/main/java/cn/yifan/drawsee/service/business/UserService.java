@@ -3,6 +3,7 @@ package cn.yifan.drawsee.service.business;
 import cn.dev33.satoken.stp.SaTokenInfo;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.yifan.drawsee.constant.AiTaskLimit;
+import cn.yifan.drawsee.constant.UserRole;
 import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
 import cn.yifan.drawsee.mapper.InvitationCodeMapper;
@@ -37,15 +38,29 @@ public class UserService {
     private InvitationCodeMapper invitationCodeMapper;
     @Autowired
     private RedissonClient redissonClient;
+    @Autowired
+    private UserRoleService userRoleService;
 
     private LoginVO getLoginVO(User user) {
         SaTokenInfo tokenInfo = StpUtil.getTokenInfo();
         RAtomicLong counter = RedisUtils.getUseAiCounter(redissonClient, user.getId());
+        
+        // 获取用户角色
+        String userRole = userRoleService.getUserRole(user.getId());
+        
+        // 根据用户角色决定任务限制
+        Integer aiTaskLimit;
+        if (UserRole.ADMIN.equals(userRole) || UserRole.TEACHER.equals(userRole)) {
+            aiTaskLimit = AiTaskLimit.DAY_LIMIT; // 管理员和教师使用较大限额
+        } else {
+            aiTaskLimit = AiTaskLimit.NORMAL_USER_DAY_LIMIT; // 普通用户限制为10次
+        }
+        
         return new LoginVO(
             tokenInfo.tokenValue,
             user.getUsername(),
             counter.get(),
-            AiTaskLimit.DAY_LIMIT
+            aiTaskLimit
         );
     }
 

@@ -77,6 +77,8 @@ public class FlowService {
     private MinioService minioService;
     @Autowired
     private ModeAutoDetectionService modeAutoDetectionService;
+    @Autowired
+    private UserRoleService userRoleService;
 
     // 获取用户所有会话
     public List<ConversationVO> getConversations() {
@@ -177,9 +179,18 @@ public class FlowService {
 
     // 校验每天最多x次AI对话
     public void validateUseAiCount(Long userId) {
+        // 获取用户角色
+        String userRole = userRoleService.getUserRole(userId);
+        
+        // 管理员和教师角色不受限制
+        if (UserRole.ADMIN.equals(userRole) || UserRole.TEACHER.equals(userRole)) {
+            return;
+        }
+        
+        // 普通用户检查限制
         RAtomicLong counter = RedisUtils.getUseAiCounter(redissonClient, userId);
-        // 检查
-        if (counter.get() >= AiTaskLimit.DAY_LIMIT) {
+        // 检查是否超过限制
+        if (counter.get() >= AiTaskLimit.NORMAL_USER_DAY_LIMIT) {
             throw new ApiException(ApiError.AI_TASK_EXCEED_LIMIT);
         }
         // 加1

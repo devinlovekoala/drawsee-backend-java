@@ -9,6 +9,14 @@ package cn.yifan.drawsee.constant;
 
 public class AiTaskLimit {
 
-    public static final Integer DAY_LIMIT = 100;
+    /**
+     * 管理员/教师用户每日AI任务限制数量（实际无限制）
+     */
+    public static final Integer DAY_LIMIT = 10000;
+    
+    /**
+     * 普通用户每日AI任务限制数量
+     */
+    public static final Integer NORMAL_USER_DAY_LIMIT = 10;
 
 }
