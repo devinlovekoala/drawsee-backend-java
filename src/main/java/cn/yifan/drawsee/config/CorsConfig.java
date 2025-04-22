@@ -23,9 +23,17 @@ public class CorsConfig implements WebMvcConfigurer {
                     "http://localhost:6868",  // 课程服务端口
                     "http://127.0.0.1:3000",
                     "http://127.0.0.1:5173",
-                    "http://127.0.0.1:6868"
+                    "http://127.0.0.1:6868",
+                    "http://42.193.107.127:6868",
+                    "http://42.193.107.127:3000",
+                    "http://42.193.107.127:5173",
+                    "http://drawsee.cn",
+                    "https://drawsee.cn",
+                    "http://admin.drawsee.cn",
+                    "https://admin.drawsee.cn"
                 )
-                .allowedHeaders("*")
+                .allowedHeaders("*", "Authorization", "Content-Type", "X-Requested-With")
+                .exposedHeaders("Authorization")
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowCredentials(true)
                 .maxAge(3600); // 1小时的预检请求缓存

@@ -12,7 +12,7 @@ public class AiTaskLimit {
     /**
      * 管理员/教师用户每日AI任务限制数量（实际无限制）
      */
-    public static final Integer DAY_LIMIT = 10000;
+    public static final Integer DAY_LIMIT = 9999;
     
     /**
      * 普通用户每日AI任务限制数量
