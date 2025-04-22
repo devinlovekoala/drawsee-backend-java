@@ -85,23 +85,23 @@ CREATE TABLE `admin` (
   UNIQUE INDEX `user_id`(`user_id`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '管理员表' ROW_FORMAT = Dynamic;
 
--- 邀请码表
-DROP TABLE IF EXISTS `invitation_code`;
-CREATE TABLE `invitation_code` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `code` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '邀请码（唯一）',
-  `created_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0),
-  `used_by` bigint NULL DEFAULT NULL COMMENT '使用者的用户ID',
-  `used_at` datetime(0) NULL DEFAULT NULL,
-  `is_active` tinyint(1) NULL DEFAULT 1 COMMENT '是否可用（可做软删除）',
-  `sent_user_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '发送对象的名字',
-  `sent_email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '发送对象的邮箱',
-  `last_sent_at` datetime(0) NULL DEFAULT NULL COMMENT '上次发送的时间',
-  PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `code`(`code`) USING BTREE,
-  INDEX `idx_invitation_code_used_by`(`used_by`) USING BTREE,
-  INDEX `idx_invitation_code_created_at`(`created_at`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '邀请码表' ROW_FORMAT = Dynamic;
+-- 邀请码表（已废弃 - 保留表结构以供参考）
+-- DROP TABLE IF EXISTS `invitation_code`;
+-- CREATE TABLE `invitation_code` (
+--   `id` bigint NOT NULL AUTO_INCREMENT,
+--   `code` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '邀请码（唯一）',
+--   `created_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0),
+--   `used_by` bigint NULL DEFAULT NULL COMMENT '使用者的用户ID',
+--   `used_at` datetime(0) NULL DEFAULT NULL,
+--   `is_active` tinyint(1) NULL DEFAULT 1 COMMENT '是否可用（可做软删除）',
+--   `sent_user_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '发送对象的名字',
+--   `sent_email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '发送对象的邮箱',
+--   `last_sent_at` datetime(0) NULL DEFAULT NULL COMMENT '上次发送的时间',
+--   PRIMARY KEY (`id`) USING BTREE,
+--   UNIQUE INDEX `code`(`code`) USING BTREE,
+--   INDEX `idx_invitation_code_used_by`(`used_by`) USING BTREE,
+--   INDEX `idx_invitation_code_created_at`(`created_at`) USING BTREE
+-- ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '邀请码表' ROW_FORMAT = Dynamic;
 
 -- 教师表
 DROP TABLE IF EXISTS `teacher`;

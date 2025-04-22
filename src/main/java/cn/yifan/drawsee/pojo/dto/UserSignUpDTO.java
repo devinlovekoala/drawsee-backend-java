@@ -20,6 +20,4 @@ public class UserSignUpDTO {
     private String username;
     @NotBlank
     private String password;
-    @NotBlank
-    private String invitationCode;
 }
