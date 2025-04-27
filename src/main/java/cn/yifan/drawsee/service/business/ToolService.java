@@ -5,12 +5,15 @@ import cn.yifan.drawsee.constant.MinioObjectPath;
 import cn.yifan.drawsee.constant.RedisKey;
 import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
+import cn.yifan.drawsee.mapper.NodeMapper;
 import cn.yifan.drawsee.pojo.dto.GetSolveWaysDTO;
 import cn.yifan.drawsee.pojo.dto.UploadAnimationFrameDTO;
+import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.vo.RecognizeTextVO;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStream;
 import org.redisson.api.RedissonClient;
@@ -39,16 +42,52 @@ public class ToolService {
     private AiService aiService;
     @Autowired
     private MinioService minioService;
+    @Autowired
+    private NodeMapper nodeMapper;
+    @Autowired
+    private ObjectMapper objectMapper;
 
+    /**
+     * 处理动画渲染完成后的帧信息
+     * 1. 更新Redis流中的节点帧信息
+     * 2. 更新节点数据中的progress为"渲染完成"，添加frame字段保存视频URL
+     * 
+     * @param uploadAnimationFrameDTO 动画帧信息
+     */
     public void uploadAnimationFrame(UploadAnimationFrameDTO uploadAnimationFrameDTO) {
-        RStream<String, Object> redisStream = redissonClient.getStream(RedisKey.AI_TASK_PREFIX + uploadAnimationFrameDTO.getTaskId());
-        Map<String, Object> data = new ConcurrentHashMap<>();
-        data.put("nodeId", uploadAnimationFrameDTO.getNodeId());
-        data.put("frame", uploadAnimationFrameDTO.getFrame());
-        redisStream.add(StreamAddArgs.entries(
-        "type", AiTaskMessageType.DATA,
-        "data", data
-        ));
+        try {
+            // 1. 更新Redis流中的节点状态
+            RStream<String, Object> redisStream = redissonClient.getStream(RedisKey.AI_TASK_PREFIX + uploadAnimationFrameDTO.getTaskId());
+            Map<String, Object> data = new ConcurrentHashMap<>();
+            data.put("nodeId", uploadAnimationFrameDTO.getNodeId());
+            data.put("frame", uploadAnimationFrameDTO.getFrame());
+            data.put("progress", "渲染完成");
+            redisStream.add(StreamAddArgs.entries(
+                "type", AiTaskMessageType.DATA,
+                "data", data
+            ));
+            
+            // 2. 更新节点数据
+            Node node = nodeMapper.getById(uploadAnimationFrameDTO.getNodeId());
+            if (node != null) {
+                // 解析现有节点数据
+                Map<String, Object> nodeData = objectMapper.readValue(node.getData(), Map.class);
+                
+                // 更新节点数据
+                nodeData.put("progress", "渲染完成");
+                nodeData.put("frame", uploadAnimationFrameDTO.getFrame());
+                
+                // 保存更新后的节点数据
+                node.setData(objectMapper.writeValueAsString(nodeData));
+                nodeMapper.update(node);
+                
+                log.info("动画节点更新完成: nodeId={}, frame={}", node.getId(), uploadAnimationFrameDTO.getFrame());
+            } else {
+                log.error("未找到对应节点: nodeId={}", uploadAnimationFrameDTO.getNodeId());
+            }
+        } catch (JsonProcessingException e) {
+            log.error("更新节点数据失败: {}", e.getMessage(), e);
+        }
     }
 
     public RecognizeTextVO recognizeTextFromImage(MultipartFile file) {

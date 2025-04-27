@@ -16,4 +16,7 @@ public class MinioObjectPath {
     public static final String KNOWLEDGE_WORD_PATH = KNOWLEDGE_RESOURCE_PATH + "word/";
     public static final String KNOWLEDGE_PDF_PATH = KNOWLEDGE_RESOURCE_PATH + "pdf/";
     public static final String KNOWLEDGE_MP4_PATH = KNOWLEDGE_RESOURCE_PATH + "mp4/";
+    
+    // 动画资源路径
+    public static final String ANIMATION_PATH = "ai-animation/";
 }
