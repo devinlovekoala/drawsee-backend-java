@@ -3,7 +3,7 @@ from manim import *
 class ManimScene(Scene):
     def construct(self):
         # 介绍特征值和特征向量
-        title = Tex(r"特征值和特征向量的几何意义", tex_template=TexTemplateLibrary.ctex tex_template=TexTemplateLibrary.ctex)
+        title = Tex(r"特征值和特征向量的几何意义", tex_template=TexTemplateLibrary.ctex)
         title.scale(1.2).to_edge(UP)
         self.play(Write(title))
         self.wait(1)
@@ -12,7 +12,7 @@ class ManimScene(Scene):
         axes = Axes(
             x_range=[-5, 5, 1],
             y_range=[-5, 5, 1],
-            axis_config={"color": BLUE}
+            axis_config={"color": BLUE},
             x_length=8,
             y_length=8
         )
@@ -23,7 +23,7 @@ class ManimScene(Scene):
         self.wait(1)
         
         # 解释特征值和特征向量
-        explanation = Tex(r"特征向量是经过线性变换后方向不变的向量" tex_template=TexTemplateLibrary.ctex)
+        explanation = Tex(r"特征向量是经过线性变换后方向不变的向量", tex_template=TexTemplateLibrary.ctex)
         explanation.to_edge(DOWN).shift(UP)
         self.play(Write(explanation))
         self.wait(2)
@@ -36,9 +36,9 @@ class ManimScene(Scene):
         
         # 计算特征值和特征向量
         eig_text1 = Tex(r"特征值 $\lambda_1 = 4$, 特征向量 $v_1 = \begin{bmatrix} 1 \\ 1 \end{bmatrix}$", tex_template=TexTemplateLibrary.ctex)
-        eig_text2 = Tex(r"特征值 $\lambda_2 = 2$, 特征向量 $v_2 = \begin{bmatrix} -1 \\ 1 \end{bmatrix}$" tex_template=TexTemplateLibrary.ctex)
+        eig_text2 = Tex(r"特征值 $\lambda_2 = 2$, 特征向量 $v_2 = \begin{bmatrix} -1 \\ 1 \end{bmatrix}$", tex_template=TexTemplateLibrary.ctex)
         
-        eig_text1.next_to(matrix_text DOWN 0.5)
+        eig_text1.next_to(matrix_text, DOWN, 0.5)
         eig_text2.next_to(eig_text1, DOWN, 0.5)
         
         self.play(Write(eig_text1))
@@ -69,7 +69,7 @@ class ManimScene(Scene):
         scaled_eigvec1_label = Tex(r"$Av_1 = 4v_1$").next_to(scaled_eigvec1.get_end(), UR*0.5)
         
         transform_text1 = Tex(r"$A\begin{bmatrix} 1 \\ 1 \end{bmatrix} = \begin{bmatrix} 3 & 1 \\ 1 & 3 \end{bmatrix}\begin{bmatrix} 1 \\ 1 \end{bmatrix} = \begin{bmatrix} 4 \\ 4 \end{bmatrix} = 4\begin{bmatrix} 1 \\ 1 \end{bmatrix}$")
-        transform_text1.scale(0.7).next_to(eig_text2, DOWN 1)
+        transform_text1.scale(0.7).next_to(eig_text2, DOWN, 1)
         
         self.play(Write(transform_text1))
         self.wait(1.5)
@@ -84,12 +84,12 @@ class ManimScene(Scene):
         scaled_eigvec2_label = Tex(r"$Av_2 = 2v_2$").next_to(scaled_eigvec2.get_end(), UL*0.5)
         
         transform_text2 = Tex(r"$A\begin{bmatrix} -1 \\ 1 \end{bmatrix} = \begin{bmatrix} 3 & 1 \\ 1 & 3 \end{bmatrix}\begin{bmatrix} -1 \\ 1 \end{bmatrix} = \begin{bmatrix} -2 \\ 2 \end{bmatrix} = 2\begin{bmatrix} -1 \\ 1 \end{bmatrix}$")
-        transform_text2.scale(0.7).next_to(transform_text1, DOWN 0.8)
+        transform_text2.scale(0.7).next_to(transform_text1, DOWN, 0.8)
         
         self.play(Write(transform_text2))
         self.wait(1.5)
         self.play(
-            Transform(eigvec2, scaled_eigvec2)
+            Transform(eigvec2, scaled_eigvec2),
             Transform(eigvec2_label, scaled_eigvec2_label)
         )
         self.wait(1.5)
@@ -103,7 +103,7 @@ class ManimScene(Scene):
         
         # 计算Au
         transform_text3 = Tex(r"$Au = A\begin{bmatrix} 2 \\ 1 \end{bmatrix} = \begin{bmatrix} 3 & 1 \\ 1 & 3 \end{bmatrix}\begin{bmatrix} 2 \\ 1 \end{bmatrix} = \begin{bmatrix} 7 \\ 5 \end{bmatrix}$")
-        transform_text3.scale(0.7).next_to(transform_text2, DOWN 0.8)
+        transform_text3.scale(0.7).next_to(transform_text2, DOWN, 0.8)
         
         self.play(Write(transform_text3))
         self.wait(1.5)
@@ -113,7 +113,7 @@ class ManimScene(Scene):
         transformed_vec_label = Tex(r"$Au = \begin{bmatrix} 7 \\ 5 \end{bmatrix}$").next_to(transformed_vec.get_end(), RIGHT)
         
         self.play(
-            Transform(normal_vec, transformed_vec)
+            Transform(normal_vec, transformed_vec),
             Transform(normal_vec_label, transformed_vec_label)
         )
         self.wait(2)

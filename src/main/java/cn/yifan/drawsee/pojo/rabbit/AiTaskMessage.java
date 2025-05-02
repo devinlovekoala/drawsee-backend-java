@@ -39,4 +39,9 @@ public class AiTaskMessage implements Serializable {
 
     private Long userId;
 
+    /**
+     * 任务所属班级ID，用于指定知识库
+     */
+    private String classId;
+
 }

@@ -46,16 +46,16 @@ drawsee:
   models:
     doubao:
       baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      apiKey: 38e2b6ed-2af3-440d-a28b-2f3b1c4aaafc
-      modelName: ep-20250129233540-8rztb
+      apiKey: a923c210-64ac-43db-b0b9-5122b11a6aa7
+      modelName: doubao-1.5-pro-32k-250115
     deepseekV3:
-      baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      apiKey: 38e2b6ed-2af3-440d-a28b-2f3b1c4aaafc
-      modelName: ep-20250320211327-hgz94
+      baseUrl: https://api.siliconflow.cn/v1
+      apiKey: sk-dgjagsvunjnsdrnipkfwidyiaiotwqcsoumrbpcxfdglnqut
+      modelName: deepseek-ai/DeepSeek-V3
     doubaoVision:
       baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      apiKey: 38e2b6ed-2af3-440d-a28b-2f3b1c4aaafc
-      modelName: ep-20250323134257-7l4fn
+      apiKey: a923c210-64ac-43db-b0b9-5122b11a6aa7
+      modelName: doubao-1.5-pro-32k-250115
   rabbitmq:
     aiConfig:
       exchangeName: direct_ai_task_exchange
@@ -65,6 +65,7 @@ drawsee:
       exchangeName: direct_animation_task_exchange
       queueName: direct_animation_task_queue
       routingKey: animation_task
+      queueCount: 3
 
 spring:
   application:

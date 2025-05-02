@@ -141,8 +141,17 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         Long userId = aiTaskMessage.getUserId();
 
+        // 检查是否指定了班级ID
+        String classId = aiTaskMessage.getClassId();
+        if (classId == null || classId.isEmpty()) {
+            log.info("未指定班级ID，不查找知识点资源: userId={}, knowledgePoint={}", userId, knowledgePoint);
+            return;
+        }
+        
+        log.info("指定了班级ID，尝试查找知识点资源: classId={}, knowledgePoint={}", classId, knowledgePoint);
+        
         // 使用新的查找方法，从用户相关的班级课程知识库中查找知识点
-        Knowledge knowledge = findKnowledgeInUserBases(userId, knowledgePoint);
+        Knowledge knowledge = findKnowledgeInUserBases(userId, knowledgePoint, aiTaskMessage);
         
         if (knowledge == null) {
             log.info("未找到知识点: knowledgePoint={}, userId={}", knowledgePoint, userId);
@@ -249,10 +258,28 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
      * 在用户相关的知识库中查找知识点
      * @param userId 用户ID
      * @param knowledgePointName 知识点名称
+     * @param aiTaskMessage AI任务消息
      * @return 知识点实体
      */
-    private Knowledge findKnowledgeInUserBases(Long userId, String knowledgePointName) {
-        // 1. 查找用户所属的班级
+    private Knowledge findKnowledgeInUserBases(Long userId, String knowledgePointName, AiTaskMessage aiTaskMessage) {
+        // 获取当前任务的班级ID
+        String classId = aiTaskMessage.getClassId();
+        
+        // 如果指定了班级ID，优先使用指定的班级
+        if (classId != null && !classId.isEmpty()) {
+            // 直接查找指定班级的知识点
+            Knowledge knowledge = findKnowledgeInSpecificClass(classId, knowledgePointName);
+            
+            // 如果找到了，直接返回
+            if (knowledge != null) {
+                log.info("在指定班级中找到知识点: classId={}, knowledgePoint={}", classId, knowledgePointName);
+                return knowledge;
+            }
+            
+            log.info("在指定班级中未找到知识点，将查找用户其他班级: classId={}, knowledgePoint={}", classId, knowledgePointName);
+        }
+        
+        // 如果没有指定班级ID或者在指定班级中未找到，则查找用户所属的所有班级
         List<ClassMember> userClassMembers = classMemberMapper.getByUserId(userId);
         if (userClassMembers == null || userClassMembers.isEmpty()) {
             log.info("用户未加入任何班级: userId={}", userId);
@@ -341,10 +368,57 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
     }
     
     /**
-     * 在所有已发布的知识库中查找知识点
+     * 在指定班级中查找知识点
+     * @param classId 班级ID
      * @param knowledgePointName 知识点名称
      * @return 知识点实体
      */
+    private Knowledge findKnowledgeInSpecificClass(String classId, String knowledgePointName) {
+        // 1. 通过班级ID获取班级信息
+        cn.yifan.drawsee.pojo.entity.Class clazz = classMapper.getById(Long.parseLong(classId));
+        if (clazz == null || clazz.getIsDeleted()) {
+            log.warn("班级不存在或已删除: classId={}", classId);
+            return null;
+        }
+        
+        // 2. 获取班级对应的课程
+        Course course = courseRepository.findByClassCodeAndIsDeletedFalse(clazz.getClassCode());
+        if (course == null || course.getIsDeleted()) {
+            log.warn("课程不存在或已删除: classCode={}", clazz.getClassCode());
+            return null;
+        }
+        
+        // 3. 获取课程关联的知识库
+        List<String> knowledgeBaseIds = course.getKnowledgeBaseIds();
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            log.info("课程没有关联知识库: courseId={}, classCode={}", course.getId(), course.getClassCode());
+            return null;
+        }
+        
+        // 4. 在知识库中查找知识点
+        for (String knowledgeBaseId : knowledgeBaseIds) {
+            KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+            if (knowledgeBase == null || knowledgeBase.getIsDeleted() || !knowledgeBase.getIsPublished()) {
+                continue;
+            }
+            
+            List<String> knowledgeIds = knowledgeBase.getKnowledgeIds();
+            if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
+                for (String knowledgeId : knowledgeIds) {
+                    Knowledge knowledge = knowledgeRepository.findById(knowledgeId).orElse(null);
+                    if (knowledge != null && knowledge.getName().equals(knowledgePointName)) {
+                        log.info("在班级相关知识库中找到知识点: classId={}, knowledgeBase={}, knowledgePoint={}", 
+                                classId, knowledgeBase.getName(), knowledgePointName);
+                        return knowledge;
+                    }
+                }
+            }
+        }
+        
+        log.info("在班级相关知识库中未找到知识点: classId={}, knowledgePoint={}", classId, knowledgePointName);
+        return null;
+    }
+    
     private Knowledge findKnowledgeInPublishedBases(String knowledgePointName) {
         // 查找所有已发布的知识库
         List<KnowledgeBase> publishedBases = knowledgeBaseRepository.findByIsPublishedTrue();

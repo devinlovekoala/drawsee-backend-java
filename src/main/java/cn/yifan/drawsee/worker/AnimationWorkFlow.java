@@ -43,6 +43,7 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @FileName AnimationWorkFlow
@@ -129,17 +130,49 @@ public class AnimationWorkFlow extends WorkFlow {
             ));
 
             String question = aiTaskMessage.getPrompt();
+            log.info("开始为问题生成动画分镜: {}", question);
             String animationShotTextListPrompt = promptService.getAnimationShotTextListPrompt(question);
             Response<AiMessage> animationShotTextListResponse = deepseekV3ChatLanguageModel.generate(UserMessage.from(animationShotTextListPrompt));
             tokens.addAndGet(animationShotTextListResponse.tokenUsage().totalTokenCount());
             String animationShotTextListResult = animationShotTextListResponse.content().text();
-            TypeReference<List<Map<String, String>>> typeReference = new TypeReference<>() {};
-            List<Map<String, String>> animationShotTextList = objectMapper.readValue(animationShotTextListResult, typeReference);
+            
+            log.info("动画分镜原始结果: {}", animationShotTextListResult);
+            
+            // 尝试解析动画分镜列表
+            List<Map<String, String>> animationShotTextList;
+            try {
+                TypeReference<List<Map<String, String>>> typeReference = new TypeReference<>() {};
+                animationShotTextList = objectMapper.readValue(animationShotTextListResult, typeReference);
+                log.info("成功解析动画分镜列表，共{}个分镜", animationShotTextList.size());
+            } catch (Exception e) {
+                log.error("动画分镜列表解析失败，将使用备用动画: {}", e.getMessage(), e);
+                String fallbackCode = generateFallbackAnimation(aiTaskMessage.getPrompt());
+                data.put("progress", "分镜解析失败，使用备用方案渲染...");
+                data.put("errorDetail", "分镜解析失败: " + e.getMessage());
+                redisStream.add(StreamAddArgs.entries(
+                    "type", AiTaskMessageType.DATA,
+                    "data", data
+                ));
+                sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, fallbackCode, redisStream, workContext);
+                return;
+            }
+
+            if (animationShotTextList.isEmpty()) {
+                log.error("动画分镜列表为空，将使用备用动画");
+                String fallbackCode = generateFallbackAnimation(aiTaskMessage.getPrompt());
+                data.put("progress", "分镜列表为空，使用备用方案渲染...");
+                data.put("errorDetail", "分镜列表为空");
+                redisStream.add(StreamAddArgs.entries(
+                    "type", AiTaskMessageType.DATA,
+                    "data", data
+                ));
+                sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, fallbackCode, redisStream, workContext);
+                return;
+            }
 
             Map<Integer, Map<String, String>> animationShotInfoMap = new ConcurrentHashMap<>();
 
-            log.info("动画分镜生成成功：{}", animationShotTextList);
-
+            log.info("开始生成动画代码，分镜数量: {}", animationShotTextList.size());
             data.put("progress", "正在生成动画代码...");
             redisStream.add(StreamAddArgs.entries(
             "type", AiTaskMessageType.DATA,
@@ -149,35 +182,97 @@ public class AnimationWorkFlow extends WorkFlow {
             // 创建CompletableFuture列表
             List<CompletableFuture<Void>> futures = new ArrayList<>();
 
+            // 创建失败计数器和错误信息收集器
+            AtomicInteger failedCount = new AtomicInteger(0);
+            ConcurrentHashMap<Integer, String> errorMessages = new ConcurrentHashMap<>();
+
             for (int i = 0; i < animationShotTextList.size(); i++) {
                 Map<String, String> animationShotText = animationShotTextList.get(i);
                 String shotDescription = animationShotText.get("shotDescription");
                 String shotScript = animationShotText.get("shotScript");
                 final int index = i + 1; // 创建final变量用于lambda表达式
 
+                if (shotDescription == null || shotScript == null) {
+                    log.error("第{}个分镜缺少必要信息: shotDescription={}, shotScript={}", 
+                            index, shotDescription, shotScript);
+                    failedCount.incrementAndGet();
+                    errorMessages.put(index, "分镜缺少必要信息");
+                    continue;
+                }
+
                 // 为每个镜头创建异步任务
                 CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-                    String animationShotCodePrompt = promptService.getAnimationShotCodePrompt(shotDescription, shotScript);
-                    Response<AiMessage> animationShotCodeResponse = deepseekV3ChatLanguageModel.generate(UserMessage.from(animationShotCodePrompt));
-                    tokens.addAndGet(animationShotCodeResponse.tokenUsage().totalTokenCount());
-                    String animationShotCodeResult = animationShotCodeResponse.content().text();
-                    
-                    // 执行代码语法检查
-                    String checkedCode = checkAndFixPythonCode(animationShotCodeResult);
-                    
-                    Map<String, String> animationShotInfo = new ConcurrentHashMap<>();
-                    animationShotInfo.put("镜头描述：", shotDescription);
-                    animationShotInfo.put("镜头脚本：", shotScript);
-                    animationShotInfo.put("manim代码：", checkedCode);
-                    animationShotInfoMap.put(index, animationShotInfo);
+                    try {
+                        log.info("开始生成第{}个分镜的代码", index);
+                        String animationShotCodePrompt = promptService.getAnimationShotCodePrompt(shotDescription, shotScript);
+                        Response<AiMessage> animationShotCodeResponse = deepseekV3ChatLanguageModel.generate(UserMessage.from(animationShotCodePrompt));
+                        tokens.addAndGet(animationShotCodeResponse.tokenUsage().totalTokenCount());
+                        String animationShotCodeResult = animationShotCodeResponse.content().text();
+                        
+                        // 检查是否返回了有效的Python代码
+                        if (!animationShotCodeResult.contains("```python") || !animationShotCodeResult.contains("```")) {
+                            log.error("第{}个分镜返回的不是有效Python代码: {}", index, animationShotCodeResult);
+                            failedCount.incrementAndGet();
+                            errorMessages.put(index, "返回的不是有效Python代码");
+                            return;
+                        }
+                        
+                        // 执行代码语法检查
+                        String checkedCode;
+                        try {
+                            checkedCode = checkAndFixPythonCode(animationShotCodeResult);
+                            log.info("第{}个分镜代码语法检查完成", index);
+                        } catch (Exception e) {
+                            log.error("第{}个分镜代码语法检查失败: {}", index, e.getMessage(), e);
+                            failedCount.incrementAndGet();
+                            errorMessages.put(index, "代码语法检查失败: " + e.getMessage());
+                            return;
+                        }
+                        
+                        Map<String, String> animationShotInfo = new ConcurrentHashMap<>();
+                        animationShotInfo.put("镜头描述：", shotDescription);
+                        animationShotInfo.put("镜头脚本：", shotScript);
+                        animationShotInfo.put("manim代码：", checkedCode);
+                        animationShotInfoMap.put(index, animationShotInfo);
 
-                    log.info("第{}个动画镜头代码生成成功：{}", index, animationShotInfo);
+                        log.info("第{}个动画镜头代码生成成功", index);
+                    } catch (Exception e) {
+                        log.error("第{}个分镜代码生成过程中出现异常: {}", index, e.getMessage(), e);
+                        failedCount.incrementAndGet();
+                        errorMessages.put(index, "生成过程异常: " + e.getMessage());
+                    }
                 });
                 futures.add(future);
             }
 
             // 等待所有异步任务完成
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            
+            // 检查是否所有分镜都生成失败
+            if (failedCount.get() == animationShotTextList.size()) {
+                log.error("所有分镜代码生成都失败了，错误信息: {}", errorMessages);
+                String fallbackCode = generateFallbackAnimation(aiTaskMessage.getPrompt());
+                data.put("progress", "所有分镜代码生成失败，使用备用方案渲染...");
+                data.put("errorDetail", errorMessages.toString());
+                redisStream.add(StreamAddArgs.entries(
+                    "type", AiTaskMessageType.DATA,
+                    "data", data
+                ));
+                sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, fallbackCode, redisStream, workContext);
+                return;
+            }
+            
+            // 检查是否有部分分镜生成失败
+            if (failedCount.get() > 0) {
+                log.warn("{}个分镜代码生成失败，将使用成功生成的{}个分镜继续", 
+                        failedCount.get(), animationShotTextList.size() - failedCount.get());
+                data.put("warningDetail", String.format("%d个分镜生成失败: %s", 
+                        failedCount.get(), errorMessages.toString()));
+                redisStream.add(StreamAddArgs.entries(
+                    "type", AiTaskMessageType.DATA,
+                    "data", data
+                ));
+            }
 
             // 根据animationShotInfoMap的key排序获取animationShotInfoList
             List<Map<String, String>> animationShotInfoList = animationShotInfoMap.entrySet().stream()
@@ -185,45 +280,130 @@ public class AnimationWorkFlow extends WorkFlow {
                     .map(Map.Entry::getValue)
                     .toList();
 
+            if (animationShotInfoList.isEmpty()) {
+                log.error("没有成功生成的分镜代码，将使用备用动画");
+                String fallbackCode = generateFallbackAnimation(aiTaskMessage.getPrompt());
+                data.put("progress", "没有成功生成分镜代码，使用备用方案渲染...");
+                redisStream.add(StreamAddArgs.entries(
+                    "type", AiTaskMessageType.DATA,
+                    "data", data
+                ));
+                sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, fallbackCode, redisStream, workContext);
+                return;
+            }
+
+            log.info("开始合并分镜代码，共{}个成功生成的分镜", animationShotInfoList.size());
+            data.put("progress", "正在合并分镜代码...");
+            redisStream.add(StreamAddArgs.entries(
+                "type", AiTaskMessageType.DATA,
+                "data", data
+            ));
+
             String animationShotMergeCodePrompt = promptService.getAnimationShotMergeCodePrompt(animationShotInfoList.toString());
             Response<AiMessage> animationShotMergeCodeResponse = deepseekV3ChatLanguageModel.generate(UserMessage.from(animationShotMergeCodePrompt));
             tokens.addAndGet(animationShotMergeCodeResponse.tokenUsage().totalTokenCount());
             String animationShotMergeCodeResult = animationShotMergeCodeResponse.content().text();
 
-            log.info("动画最终代码合并成功：{}", animationShotMergeCodeResult);
+            log.info("动画最终代码合并返回结果: {}", animationShotMergeCodeResult);
+
+            // 检查合并结果是否是有效的Python代码
+            if (!animationShotMergeCodeResult.contains("```python") || !animationShotMergeCodeResult.contains("```")) {
+                log.error("合并结果不是有效的Python代码，将使用备用动画");
+                String fallbackCode = generateFallbackAnimation(aiTaskMessage.getPrompt());
+                data.put("progress", "合并结果无效，使用备用方案渲染...");
+                data.put("errorDetail", "合并后不是有效Python代码");
+                redisStream.add(StreamAddArgs.entries(
+                    "type", AiTaskMessageType.DATA,
+                    "data", data
+                ));
+                sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, fallbackCode, redisStream, workContext);
+                return;
+            }
 
             // 取animationShotMergeCodeResult中```python和```之间的内容
-            // 去掉animationShotMergeCodeResult前九个字符和最后三个字符
-            String code = animationShotMergeCodeResult.substring(9, animationShotMergeCodeResult.length() - 3);
+            String code;
+            try {
+                // 尝试提取代码块内容
+                int startIndex = animationShotMergeCodeResult.indexOf("```python") + 9;
+                int endIndex = animationShotMergeCodeResult.lastIndexOf("```");
+                
+                if (startIndex <= 9 || endIndex <= 0 || endIndex <= startIndex) {
+                    throw new IllegalArgumentException("无法提取Python代码块，格式不正确");
+                }
+                
+                code = animationShotMergeCodeResult.substring(startIndex, endIndex).trim();
+                log.info("成功提取到Python代码，长度为{}字符", code.length());
+            } catch (Exception e) {
+                log.error("提取Python代码时出错: {}", e.getMessage(), e);
+                String fallbackCode = generateFallbackAnimation(aiTaskMessage.getPrompt());
+                data.put("progress", "代码提取失败，使用备用方案渲染...");
+                data.put("errorDetail", "代码提取失败: " + e.getMessage());
+                redisStream.add(StreamAddArgs.entries(
+                    "type", AiTaskMessageType.DATA,
+                    "data", data
+                ));
+                sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, fallbackCode, redisStream, workContext);
+                return;
+            }
+            
+            // 判断代码是否为空
+            if (code.trim().isEmpty()) {
+                log.error("提取的Python代码为空，将使用备用动画");
+                String fallbackCode = generateFallbackAnimation(aiTaskMessage.getPrompt());
+                data.put("progress", "提取的代码为空，使用备用方案渲染...");
+                redisStream.add(StreamAddArgs.entries(
+                    "type", AiTaskMessageType.DATA,
+                    "data", data
+                ));
+                sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, fallbackCode, redisStream, workContext);
+                return;
+            }
             
             // 对最终合并的代码再次进行语法检查
-            code = checkAndFixPythonCode(code);
+            String finalCode;
+            try {
+                finalCode = checkAndFixPythonCode(code);
+                log.info("最终代码语法检查完成，准备发送渲染任务");
+            } catch (Exception e) {
+                log.error("最终代码语法检查失败: {}", e.getMessage(), e);
+                String fallbackCode = generateFallbackAnimation(aiTaskMessage.getPrompt());
+                data.put("progress", "最终代码语法检查失败，使用备用方案渲染...");
+                data.put("errorDetail", "语法检查失败: " + e.getMessage());
+                redisStream.add(StreamAddArgs.entries(
+                    "type", AiTaskMessageType.DATA,
+                    "data", data
+                ));
+                sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, fallbackCode, redisStream, workContext);
+                return;
+            }
 
             // 渲染动画
-            sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, code, redisStream);
+            log.info("发送动画渲染任务到RabbitMQ");
+            sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, finalCode, redisStream, workContext);
             
         } catch (Exception e) {
             log.error("动画生成过程中出现错误：", e);
             
             // 生成一个简单的备用动画代码
             String fallbackCode = generateFallbackAnimation(aiTaskMessage.getPrompt());
-            log.info("生成备用动画代码: {}", fallbackCode);
+            log.info("生成备用动画代码: 长度={}", fallbackCode.length());
             
             Map<String, Object> data = new ConcurrentHashMap<>();
             data.put("progress", "正在使用备用方案渲染...");
             data.put("nodeId", animationNode.getId());
+            data.put("errorDetail", "生成过程出错: " + e.getMessage());
             redisStream.add(StreamAddArgs.entries(
                 "type", AiTaskMessageType.DATA,
                 "data", data
             ));
             
             // 使用备用动画代码进行渲染
-            sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, fallbackCode, redisStream);
+            sendAnimationTaskToRabbitMQ(aiTaskMessage, animationNode, fallbackCode, redisStream, workContext);
         }
     }
     
     // 发送动画任务到RabbitMQ
-    private void sendAnimationTaskToRabbitMQ(AiTaskMessage aiTaskMessage, Node animationNode, String code, RStream<String, Object> redisStream) {
+    private void sendAnimationTaskToRabbitMQ(AiTaskMessage aiTaskMessage, Node animationNode, String code, RStream<String, Object> redisStream, WorkContext workContext) {
         Map<String, Object> data = new ConcurrentHashMap<>();
         data.put("progress", "开始渲染动画...");
         data.put("nodeId", animationNode.getId());
@@ -242,8 +422,8 @@ public class AnimationWorkFlow extends WorkFlow {
                 code
             );
             
-            log.info("准备发送动画任务到RabbitMQ队列, taskId={}, nodeId={}, queue={}", 
-                    aiTaskMessage.getTaskId(), animationNode.getId(), queue.getName());
+            log.info("准备发送动画任务到RabbitMQ队列, taskId={}, nodeId={}, queue={}, 代码长度={}", 
+                    aiTaskMessage.getTaskId(), animationNode.getId(), queue.getName(), code.length());
             
             // 发送到RabbitMQ
             rabbitTemplate.convertAndSend(
@@ -252,14 +432,20 @@ public class AnimationWorkFlow extends WorkFlow {
                 animationTaskMessage
             );
             
-            log.info("动画任务已发送到RabbitMQ队列, taskId={}, nodeId={}, queue={}", 
+            log.info("动画任务已成功发送到RabbitMQ队列, taskId={}, nodeId={}, queue={}", 
                     aiTaskMessage.getTaskId(), animationNode.getId(), queue.getName());
+            
+            // 设置任务完成标志，使前端能收到完成通知
+            workContext.setIsSendDone(true);
+            
+            log.info("已设置任务完成标志(isSendDone=true)，前端将收到完成通知");
         } catch (Exception e) {
             log.error("发送动画任务到RabbitMQ失败, taskId={}, nodeId={}, 错误信息: {}", 
                     aiTaskMessage.getTaskId(), animationNode.getId(), e.getMessage(), e);
                     
             // 更新节点状态为生成失败
             data.put("progress", "渲染准备失败，请重试");
+            data.put("errorDetail", "发送任务失败: " + e.getMessage());
             redisStream.add(StreamAddArgs.entries(
                 "type", AiTaskMessageType.DATA,
                 "data", data
@@ -326,271 +512,234 @@ public class AnimationWorkFlow extends WorkFlow {
 
     // 检查并修复Python代码中的语法错误，特别是数学表达式中缺少运算符的问题
     private String checkAndFixPythonCode(String code) {
-        log.info("开始进行Python代码语法检查...");
-        
-        // 提取实际Python代码（如果有```python包装）
+        log.info("开始对Python代码进行语法检查和修复");
         String pythonCode = code;
-        if (code.startsWith("```python") && code.endsWith("```")) {
-            pythonCode = code.substring(9, code.length() - 3);
+        
+        // 1. 如果输入是带有```python和```的，提取其中的内容
+        if (pythonCode.contains("```python") && pythonCode.contains("```")) {
+            int startIndex = pythonCode.indexOf("```python") + 9;
+            int endIndex = pythonCode.lastIndexOf("```");
+            if (startIndex > 9 && endIndex > 0 && endIndex > startIndex) {
+                pythonCode = pythonCode.substring(startIndex, endIndex).trim();
+                log.info("从代码块中提取Python代码，长度: {}", pythonCode.length());
+            }
         }
         
-        // 检查并修复数学表达式中缺少运算符的问题
-        // 使用正则表达式查找可能的语法错误模式
-        // 模式1: 数字/变量 后跟空格再跟数字/变量，中间可能缺少运算符
-        Pattern pattern1 = Pattern.compile("(\\w+)\\s+(\\d+\\.?\\d*|\\w+)");
-        Matcher matcher = pattern1.matcher(pythonCode);
+        // 检查代码是否为空
+        if (pythonCode.trim().isEmpty()) {
+            throw new IllegalArgumentException("Python代码为空");
+        }
+        
+        // 收集已处理的错误
+        List<String> fixedIssues = new ArrayList<>();
+        
+        // 2. 检查并修复类名
+        if (!pythonCode.contains("class ManimScene(Scene)")) {
+            if (pythonCode.contains("class ") && pythonCode.contains("(Scene)")) {
+                String originalClassDef = pythonCode.substring(
+                    pythonCode.indexOf("class "), 
+                    pythonCode.indexOf("{", pythonCode.indexOf("class ")) != -1 
+                        ? pythonCode.indexOf("{", pythonCode.indexOf("class "))
+                        : pythonCode.indexOf(":", pythonCode.indexOf("class ")) + 1
+                );
+                
+                String newClassDef = "class ManimScene(Scene):";
+                pythonCode = pythonCode.replace(originalClassDef, newClassDef);
+                fixedIssues.add("将类名修改为ManimScene");
+                log.info("修复: 类名不是ManimScene，已修改");
+            }
+        }
+        
+        // 3. 检查Tex组件参数
+        if (pythonCode.contains("tex_template=TexTemplateLibrary.ctex tex_template=")) {
+            pythonCode = pythonCode.replace("tex_template=TexTemplateLibrary.ctex tex_template=", "tex_template=");
+            fixedIssues.add("修复重复的tex_template参数");
+            log.info("修复: 删除重复的tex_template参数");
+        }
+        
+        // 4. 检查方法参数缺少逗号的情况
+        Pattern paramPattern = Pattern.compile("([a-zA-Z0-9_]+)\\s+([a-zA-Z0-9_]+)\\s*\\)");
+        Matcher paramMatcher = paramPattern.matcher(pythonCode);
         StringBuffer sb = new StringBuffer();
-        
-        while (matcher.find()) {
-            String group = matcher.group();
-            // 检查这不是一个变量声明或其他合法语法
-            // 排除常见的合法模式如"def construct"、"class ManimScene"等
-            if (!group.matches("(def|class|return|import|from|in|as|if|else|elif)\\s+\\w+") && 
-                !group.matches("\\w+\\s+(=|==|!=|>=|<=|>|<|\\+=|-=|\\*=|/=).*")) {
-                // 如果看起来是缺少运算符的数学表达式
-                log.warn("发现可能缺少运算符的表达式: {}", group);
-                // 在这里默认添加一个加号，当然这是一个简单修复，可能不适用所有情况
-                matcher.appendReplacement(sb, matcher.group(1) + " + " + matcher.group(2));
-                log.info("修复为: {}", matcher.group(1) + " + " + matcher.group(2));
-            } else {
-                matcher.appendReplacement(sb, group);
-            }
+        while (paramMatcher.find()) {
+            paramMatcher.appendReplacement(sb, paramMatcher.group(1) + ", " + paramMatcher.group(2) + ")");
+            fixedIssues.add("在方法参数之间添加缺失的逗号");
+            log.info("修复: 参数 {} 和 {} 之间缺少逗号，已添加", paramMatcher.group(1), paramMatcher.group(2));
         }
-        matcher.appendTail(sb);
-        
-        // 模式2: 查找可能缺少操作符的赋值语句，例如 "x = 2 3"
-        Pattern pattern2 = Pattern.compile("(\\w+)\\s*=\\s*(\\d+\\.?\\d*|\\w+)\\s+(\\d+\\.?\\d*|\\w+)");
-        matcher = pattern2.matcher(sb.toString());
-        sb = new StringBuffer();
-        
-        while (matcher.find()) {
-            String group = matcher.group();
-            // 检查是否在语句中间缺少运算符
-            if (!group.contains("+") && !group.contains("-") && 
-                !group.contains("*") && !group.contains("/")) {
-                log.warn("发现可能缺少运算符的赋值语句: {}", group);
-                // 在数字/变量之间添加加号
-                matcher.appendReplacement(sb, matcher.group(1) + " = " + matcher.group(2) + " + " + matcher.group(3));
-                log.info("修复为: {}", matcher.group(1) + " = " + matcher.group(2) + " + " + matcher.group(3));
-            } else {
-                matcher.appendReplacement(sb, group);
-            }
-        }
-        matcher.appendTail(sb);
-        
-        // 模式3: 查找重复的关键字参数
-        // 例如: func(param=value, param=value)
-        String fixedCode = sb.toString();
-        Pattern pattern3 = Pattern.compile("(\\w+)\\s*\\(([^\\)]+)\\)");
-        matcher = pattern3.matcher(fixedCode);
-        sb = new StringBuffer();
-        
-        while (matcher.find()) {
-            String functionName = matcher.group(1);
-            String params = matcher.group(2);
-            
-            // 检查参数列表中是否有重复的关键字参数
-            Map<String, String> keywordArgs = new HashMap<>();
-            List<String> positionalArgs = new ArrayList<>();
-            boolean paramsModified = false;
-            
-            // 简单分割参数
-            String[] paramList = params.split(",");
-            StringBuilder newParams = new StringBuilder();
-            
-            for (int i = 0; i < paramList.length; i++) {
-                String param = paramList[i].trim();
-                if (param.contains("=")) {
-                    // 关键字参数
-                    String[] parts = param.split("=", 2);
-                    String key = parts[0].trim();
-                    String value = parts[1].trim();
-                    
-                    if (keywordArgs.containsKey(key)) {
-                        // 发现重复的关键字参数，跳过
-                        log.warn("发现重复的关键字参数: {} 在函数 {}", key, functionName);
-                        paramsModified = true;
-                    } else {
-                        keywordArgs.put(key, value);
-                        if (newParams.length() > 0) {
-                            newParams.append(", ");
-                        }
-                        newParams.append(key).append("=").append(value);
-                    }
-                } else {
-                    // 位置参数
-                    positionalArgs.add(param);
-                    if (newParams.length() > 0) {
-                        newParams.append(", ");
-                    }
-                    newParams.append(param);
-                }
-            }
-            
-            if (paramsModified) {
-                String replacement = functionName + "(" + newParams.toString() + ")";
-                log.info("修复重复参数: {} -> {}", matcher.group(0), replacement);
-                matcher.appendReplacement(sb, replacement);
-            } else {
-                matcher.appendReplacement(sb, matcher.group(0));
-            }
-        }
-        matcher.appendTail(sb);
-        fixedCode = sb.toString();
-        
-        // 模式4: 修复LaTeX中常见的错误
-        // 检查末尾缺少闭合的括号或引号
-        Pattern pattern4 = Pattern.compile("Tex\\(r?\"([^\"]*)\"");
-        matcher = pattern4.matcher(fixedCode);
-        sb = new StringBuffer();
-        
-        while (matcher.find()) {
-            String texContent = matcher.group(1);
-            String fixedTexContent = texContent;
-            
-            // 检查未闭合的花括号
-            int openBraces = 0;
-            int closeBraces = 0;
-            for (char c : texContent.toCharArray()) {
-                if (c == '{') openBraces++;
-                if (c == '}') closeBraces++;
-            }
-            
-            if (openBraces > closeBraces) {
-                // 添加缺失的闭合花括号
-                for (int i = 0; i < (openBraces - closeBraces); i++) {
-                    fixedTexContent += "}";
-                }
-                log.warn("修复LaTeX未闭合的花括号: {} -> {}", texContent, fixedTexContent);
-            }
-            
-            // 检查是否有"There's no line here to end"错误，这通常是由于错误的\\\\用法导致的
-            if (fixedTexContent.contains("\\\\") && 
-                (fixedTexContent.trim().endsWith("\\\\") || fixedTexContent.contains("\\\\\n"))) {
-                // 移除末尾的\\\\或者替换掉换行前的\\\\
-                fixedTexContent = fixedTexContent.replaceAll("\\\\\\\\\\s*$", "");
-                fixedTexContent = fixedTexContent.replaceAll("\\\\\\\\\\s*\n", "\n");
-                log.warn("修复LaTeX中不正确的换行: {} -> {}", texContent, fixedTexContent);
-            }
-            
-            if (!texContent.equals(fixedTexContent)) {
-                matcher.appendReplacement(sb, "Tex(r\"" + fixedTexContent + "\"");
-            } else {
-                matcher.appendReplacement(sb, matcher.group(0));
-            }
-        }
-        matcher.appendTail(sb);
-        
-        // 模式5: 专门检测并修复重复关键字参数的问题（尤其针对Tex函数）
-        Pattern pattern5 = Pattern.compile("Tex\\(([^\\)]+)\\)");
-        matcher = pattern5.matcher(sb.toString());
-        sb = new StringBuffer();
-        
-        while (matcher.find()) {
-            String texArgs = matcher.group(1);
-            
-            // 检查是否包含多个tex_template参数
-            if (texArgs.contains("tex_template=") && texArgs.indexOf("tex_template=") != texArgs.lastIndexOf("tex_template=")) {
-                log.warn("发现Tex函数包含重复的tex_template参数: {}", texArgs);
-                
-                // 使用简单的字符串处理来保留第一个tex_template参数并移除其他的
-                String firstPart = texArgs.substring(0, texArgs.indexOf("tex_template="));
-                String texTemplateParam = texArgs.substring(texArgs.indexOf("tex_template="));
-                String restPart = "";
-                
-                if (texTemplateParam.contains(",")) {
-                    restPart = texTemplateParam.substring(texTemplateParam.indexOf(",") + 1);
-                    texTemplateParam = texTemplateParam.substring(0, texTemplateParam.indexOf(","));
-                }
-                
-                // 从剩余部分移除所有tex_template参数
-                StringBuilder cleanRestPart = new StringBuilder();
-                String[] parts = restPart.split(",");
-                for (String part : parts) {
-                    if (!part.trim().startsWith("tex_template=")) {
-                        if (cleanRestPart.length() > 0) {
-                            cleanRestPart.append(", ");
-                        }
-                        cleanRestPart.append(part.trim());
-                    }
-                }
-                
-                String fixedTexArgs = firstPart + texTemplateParam;
-                if (cleanRestPart.length() > 0) {
-                    fixedTexArgs += ", " + cleanRestPart;
-                }
-                
-                log.info("修复Tex函数的重复tex_template参数: {} -> {}", texArgs, fixedTexArgs);
-                matcher.appendReplacement(sb, "Tex(" + fixedTexArgs + ")");
-            } else {
-                matcher.appendReplacement(sb, matcher.group(0));
-            }
-        }
-        matcher.appendTail(sb);
-        
-        // 模式6：修复缺少逗号的Tex函数调用（特别是r"..." 后面缺少逗号的情况）
-        Pattern pattern6 = Pattern.compile("Tex\\(r?\"([^\"]*)\"\\s*(\\w+)");
-        matcher = pattern6.matcher(sb.toString());
-        sb = new StringBuffer();
-        
-        while (matcher.find()) {
-            // 字符串后面紧跟着一个标识符，这说明缺少逗号
-            log.warn("发现可能缺少逗号的Tex调用: {}{}...", matcher.group(0), matcher.group(2));
-            // 在字符串和标识符之间添加逗号
-            matcher.appendReplacement(sb, "Tex(r\"" + matcher.group(1) + "\", " + matcher.group(2));
-            log.info("修复为: Tex(r\"{}\"，{}...)", matcher.group(1), matcher.group(2));
-        }
-        matcher.appendTail(sb);
-        
-        // 模式7：检查并修复未完成的Tex函数调用语句
-        // 例如：Tex(r"文本", tex_template=TexTemplateLibrary.ctex 缺少右括号的情况
-        String code7 = sb.toString();
-        Pattern pattern7 = Pattern.compile("Tex\\(([^\\)\\(]*)$", Pattern.MULTILINE);  // 在行尾查找未闭合的Tex调用
-        matcher = pattern7.matcher(code7);
-        sb = new StringBuffer();
-        
-        while (matcher.find()) {
-            String texArgs = matcher.group(1);
-            log.warn("发现未完成的Tex函数调用: Tex({}...没有闭合括号", texArgs);
-            matcher.appendReplacement(sb, "Tex(" + texArgs + ")");
-            log.info("修复为: Tex({})", texArgs);
-        }
-        matcher.appendTail(sb);
-        
+        paramMatcher.appendTail(sb);
         pythonCode = sb.toString();
         
-        // 最后一步：检查行内不平衡的括号问题
-        Pattern linePattern = Pattern.compile("([^\\n]*?)\\n");
-        matcher = linePattern.matcher(pythonCode);
+        // 5. 检查缺少逗号的位置：next_to方法
+        Pattern nextToPattern = Pattern.compile("next_to\\([^,)]+\\s+([A-Za-z0-9_]+)\\s+([0-9.]+)\\)");
+        Matcher nextToMatcher = nextToPattern.matcher(pythonCode);
         sb = new StringBuffer();
-        
-        while (matcher.find()) {
-            String line = matcher.group(1);
-            // 统计括号计数
-            int parenCount = 0;
-            for (char c : line.toCharArray()) {
-                if (c == '(') parenCount++;
-                else if (c == ')') parenCount--;
-            }
-            
-            // 如果左括号多于右括号，并且不是在注释行，添加缺少的右括号
-            if (parenCount > 0 && !line.trim().startsWith("#") && !line.contains("'''") && !line.contains("\"\"\"")) {
-                log.warn("发现行内括号不平衡: {}", line);
-                for (int i = 0; i < parenCount; i++) {
-                    line += ")";
-                }
-                log.info("修复为: {}", line);
-            }
-            
-            matcher.appendReplacement(sb, line + "\n");
+        while (nextToMatcher.find()) {
+            String replacement = nextToMatcher.group(0).replace(
+                nextToMatcher.group(1) + " " + nextToMatcher.group(2), 
+                nextToMatcher.group(1) + ", " + nextToMatcher.group(2)
+            );
+            nextToMatcher.appendReplacement(sb, replacement);
+            fixedIssues.add("在next_to方法参数之间添加缺失的逗号");
+            log.info("修复: next_to方法参数之间缺少逗号，已添加");
         }
-        matcher.appendTail(sb);
-        
+        nextToMatcher.appendTail(sb);
         pythonCode = sb.toString();
         
-        // 如果输入是带有```python标记的，那么输出也保持一致
-        if (code.startsWith("```python") && code.endsWith("```")) {
-            return "```python\n" + pythonCode + "\n```";
+        // 6. 检查shift方法缺少逗号
+        Pattern shiftPattern = Pattern.compile("shift\\(([A-Za-z]+)\\s+([0-9.]+)\\)");
+        Matcher shiftMatcher = shiftPattern.matcher(pythonCode);
+        sb = new StringBuffer();
+        while (shiftMatcher.find()) {
+            shiftMatcher.appendReplacement(sb, "shift(" + shiftMatcher.group(1) + ", " + shiftMatcher.group(2) + ")");
+            fixedIssues.add("在shift方法参数之间添加缺失的逗号");
+            log.info("修复: shift方法参数之间缺少逗号，已添加");
+        }
+        shiftMatcher.appendTail(sb);
+        pythonCode = sb.toString();
+        
+        // 7. 检查Transform方法之间缺少逗号
+        Pattern transformPattern = Pattern.compile("Transform\\([^,)]+,[^,)]+\\)\\s+Transform");
+        Matcher transformMatcher = transformPattern.matcher(pythonCode);
+        sb = new StringBuffer();
+        while (transformMatcher.find()) {
+            String replacement = transformMatcher.group(0).replace(") Transform", "), Transform");
+            transformMatcher.appendReplacement(sb, replacement);
+            fixedIssues.add("在Transform调用之间添加缺失的逗号");
+            log.info("修复: Transform调用之间缺少逗号，已添加");
+        }
+        transformMatcher.appendTail(sb);
+        pythonCode = sb.toString();
+        
+        // 8. 检查Axes参数配置缺少逗号
+        Pattern axesConfigPattern = Pattern.compile("axis_config=\\{[^}]+\\}\\s+([a-zA-Z_]+)");
+        Matcher axesConfigMatcher = axesConfigPattern.matcher(pythonCode);
+        sb = new StringBuffer();
+        while (axesConfigMatcher.find()) {
+            axesConfigMatcher.appendReplacement(sb, axesConfigMatcher.group(0).replace("} " + axesConfigMatcher.group(1), "}, " + axesConfigMatcher.group(1)));
+            fixedIssues.add("在axis_config后添加缺失的逗号");
+            log.info("修复: axis_config后缺少逗号，已添加");
+        }
+        axesConfigMatcher.appendTail(sb);
+        pythonCode = sb.toString();
+        
+        // 9. 检查引号匹配
+        int singleQuotes = 0;
+        int doubleQuotes = 0;
+        boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
+        
+        for (int i = 0; i < pythonCode.length(); i++) {
+            char c = pythonCode.charAt(i);
+            if (c == '\'' && (i == 0 || pythonCode.charAt(i-1) != '\\')) {
+                inSingleQuote = !inSingleQuote;
+                singleQuotes++;
+            } else if (c == '\"' && (i == 0 || pythonCode.charAt(i-1) != '\\')) {
+                inDoubleQuote = !inDoubleQuote;
+                doubleQuotes++;
+            }
+        }
+        
+        if (singleQuotes % 2 != 0) {
+            log.warn("引号不匹配: 发现{}个单引号，可能有未闭合的引号", singleQuotes);
+        }
+        
+        if (doubleQuotes % 2 != 0) {
+            log.warn("引号不匹配: 发现{}个双引号，可能有未闭合的引号", doubleQuotes);
+        }
+        
+        // 10. 检查括号匹配
+        int parentheses = 0;
+        int squareBrackets = 0;
+        int curlyBraces = 0;
+        
+        for (char c : pythonCode.toCharArray()) {
+            switch (c) {
+                case '(': parentheses++; break;
+                case ')': parentheses--; break;
+                case '[': squareBrackets++; break;
+                case ']': squareBrackets--; break;
+                case '{': curlyBraces++; break;
+                case '}': curlyBraces--; break;
+            }
+        }
+        
+        if (parentheses != 0) {
+            log.warn("括号不匹配: 圆括号嵌套级别为{}，可能有未闭合的括号", parentheses);
+        }
+        
+        if (squareBrackets != 0) {
+            log.warn("括号不匹配: 方括号嵌套级别为{}，可能有未闭合的括号", squareBrackets);
+        }
+        
+        if (curlyBraces != 0) {
+            log.warn("括号不匹配: 花括号嵌套级别为{}，可能有未闭合的括号", curlyBraces);
+        }
+        
+        // 11. 检查manim的特定方法调用格式
+        // 检查play()方法调用中缺少逗号的模式
+        Pattern playMethodPattern = Pattern.compile("self\\.play\\(([^,)]+)\\s+([A-Za-z]+\\([^)]*\\))");
+        Matcher playMethodMatcher = playMethodPattern.matcher(pythonCode);
+        sb = new StringBuffer();
+        while (playMethodMatcher.find()) {
+            String replacement = "self.play(" + playMethodMatcher.group(1) + ", " + playMethodMatcher.group(2);
+            playMethodMatcher.appendReplacement(sb, replacement);
+            fixedIssues.add("在play方法参数之间添加缺失的逗号");
+            log.info("修复: play方法参数之间缺少逗号，已添加");
+        }
+        playMethodMatcher.appendTail(sb);
+        pythonCode = sb.toString();
+        
+        // 12. 确保所有Python行正确缩进
+        String[] lines = pythonCode.split("\n");
+        StringBuilder indentedCode = new StringBuilder();
+        int currentIndent = 0;
+        boolean inClassDef = false;
+        boolean inMethodDef = false;
+        
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+            
+            // 跳过空行，保持原样
+            if (trimmedLine.isEmpty()) {
+                indentedCode.append("\n");
+                continue;
+            }
+            
+            // 检测缩进级别变化
+            if (trimmedLine.startsWith("class ")) {
+                currentIndent = 0;
+                inClassDef = true;
+            } else if (trimmedLine.startsWith("def ")) {
+                if (inClassDef && !inMethodDef) {
+                    currentIndent = 4;
+                }
+                inMethodDef = true;
+            } else if (trimmedLine.endsWith(":")) {
+                // 如果是控制结构或其他需要缩进的行
+                currentIndent += 4;
+            } else if (trimmedLine.equals("return") || trimmedLine.startsWith("return ") ||
+                      trimmedLine.equals("break") || trimmedLine.equals("continue") ||
+                      trimmedLine.equals("pass")) {
+                // 这些语句通常标志着一个块的结束
+                if (currentIndent >= 4) {
+                    // 保持当前缩进，但下一行可能需要减少
+                }
+            }
+            
+            // 应用缩进
+            for (int i = 0; i < currentIndent; i++) {
+                indentedCode.append(" ");
+            }
+            indentedCode.append(trimmedLine).append("\n");
+        }
+        
+        pythonCode = indentedCode.toString();
+        
+        // 日志输出修复结果
+        if (!fixedIssues.isEmpty()) {
+            log.info("Python代码语法检查完成，修复了{}个问题: {}", fixedIssues.size(), fixedIssues);
+        } else {
+            log.info("Python代码语法检查完成，未发现需要修复的问题");
         }
         
         return pythonCode;

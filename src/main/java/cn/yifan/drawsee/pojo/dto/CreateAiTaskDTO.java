@@ -50,4 +50,9 @@ public class CreateAiTaskDTO implements Serializable {
 
     private Long parentId;
 
+    /**
+     * 任务所属班级ID，用于在处理知识问答模式时确定使用哪个知识库
+     */
+    private String classId;
+
 }

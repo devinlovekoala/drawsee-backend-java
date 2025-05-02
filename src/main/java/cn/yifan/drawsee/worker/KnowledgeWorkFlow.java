@@ -5,6 +5,7 @@ import cn.yifan.drawsee.constant.NodeTitle;
 import cn.yifan.drawsee.constant.NodeType;
 import cn.yifan.drawsee.constant.RedisKey;
 import cn.yifan.drawsee.mapper.AiTaskMapper;
+import cn.yifan.drawsee.mapper.ClassMapper;
 import cn.yifan.drawsee.mapper.ConversationMapper;
 import cn.yifan.drawsee.mapper.NodeMapper;
 import cn.yifan.drawsee.mapper.UserMapper;
@@ -47,6 +48,7 @@ public class KnowledgeWorkFlow extends WorkFlow {
 
     private final CourseRepository courseRepository;
     private final KnowledgeBaseRepository knowledgeBaseRepository;
+    private final ClassMapper classMapper;
 
     public KnowledgeWorkFlow(
         UserMapper userMapper,
@@ -59,11 +61,13 @@ public class KnowledgeWorkFlow extends WorkFlow {
         AiTaskMapper aiTaskMapper,
         ObjectMapper objectMapper,
         CourseRepository courseRepository,
-        KnowledgeBaseRepository knowledgeBaseRepository
+        KnowledgeBaseRepository knowledgeBaseRepository,
+        ClassMapper classMapper
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, knowledgeRepository, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.courseRepository = courseRepository;
         this.knowledgeBaseRepository = knowledgeBaseRepository;
+        this.classMapper = classMapper;
         
         // 全局默认知识点列表 - 这里将保留用于通用模式
         refreshGlobalKnowledgePoints();
@@ -87,11 +91,27 @@ public class KnowledgeWorkFlow extends WorkFlow {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         Node streamNode = workContext.getStreamNode();
         
-        // 获取知识点列表，优先从用户加入的课程和知识库中获取
-        List<String> knowledgePoints = getUserRelatedKnowledgePoints(aiTaskMessage.getUserId());
+        List<String> knowledgePoints;
+        String classId = aiTaskMessage.getClassId();
+        
+        // 如果指定了班级ID，则优先使用该班级对应的知识库
+        if (classId != null && !classId.isEmpty()) {
+            log.info("使用指定班级ID获取知识点: classId={}", classId);
+            knowledgePoints = getClassRelatedKnowledgePoints(classId);
+            
+            // 如果指定班级没有关联知识库或知识点为空，则退化为使用用户相关知识点
+            if (knowledgePoints.isEmpty()) {
+                log.info("指定班级无关联知识点，退化为用户相关知识点: classId={}", classId);
+                knowledgePoints = getUserRelatedKnowledgePoints(aiTaskMessage.getUserId());
+            }
+        } else {
+            // 获取知识点列表，优先从用户加入的课程和知识库中获取
+            knowledgePoints = getUserRelatedKnowledgePoints(aiTaskMessage.getUserId());
+        }
         
         // 如果用户没有加入任何课程或知识库，则使用全局知识点列表
         if (knowledgePoints.isEmpty()) {
+            log.info("无法获取到任何关联知识点，使用全局知识点列表");
             RList<String> rList = redissonClient.getList(RedisKey.CACHE_PREFIX + "knowledge-points");
             knowledgePoints = rList.stream().toList();
         }
@@ -185,5 +205,51 @@ public class KnowledgeWorkFlow extends WorkFlow {
                 }
             }
         }
+    }
+    
+    /**
+     * 获取班级相关的知识点列表
+     * @param classId 班级ID
+     * @return 知识点列表
+     */
+    private List<String> getClassRelatedKnowledgePoints(String classId) {
+        Set<String> knowledgePoints = new HashSet<>();
+        
+        // 通过班级ID获取班级信息
+        cn.yifan.drawsee.pojo.entity.Class clazz = classMapper.getById(Long.parseLong(classId));
+        if (clazz == null || clazz.getIsDeleted()) {
+            log.warn("班级不存在或已删除: classId={}", classId);
+            return new ArrayList<>();
+        }
+        
+        // 获取该班级对应的课程
+        Course course = courseRepository.findByClassCodeAndIsDeletedFalse(clazz.getClassCode());
+        if (course == null) {
+            log.warn("没有找到班级对应的课程: classCode={}", clazz.getClassCode());
+            return new ArrayList<>();
+        }
+        
+        // 获取课程关联的知识库
+        List<String> knowledgeBaseIds = course.getKnowledgeBaseIds();
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            log.info("课程没有关联知识库: courseId={}, classCode={}", course.getId(), course.getClassCode());
+            return new ArrayList<>();
+        }
+        
+        // 从课程关联的知识库中获取知识点
+        for (String knowledgeBaseId : knowledgeBaseIds) {
+            KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+            if (knowledgeBase != null && !knowledgeBase.getIsDeleted() && knowledgeBase.getIsPublished()) {
+                addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
+            }
+        }
+        
+        if (knowledgePoints.isEmpty()) {
+            log.info("班级相关知识库中未找到知识点: classId={}", classId);
+        } else {
+            log.info("从班级相关知识库中找到{}\u4e2a知识点: classId={}", knowledgePoints.size(), classId);
+        }
+        
+        return new ArrayList<>(knowledgePoints);
     }
 }

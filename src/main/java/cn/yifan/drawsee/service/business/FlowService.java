@@ -275,6 +275,12 @@ public class FlowService {
         aiTaskMessage.setTaskId(aiTask.getId());
         aiTaskMessage.setUserId(userId);
         BeanUtils.copyProperties(createAiTaskDTO, aiTaskMessage);
+        
+        // 设置班级ID，用于知识库选择
+        if (createAiTaskDTO.getClassId() != null && !createAiTaskDTO.getClassId().isEmpty()) {
+            log.info("AI任务使用指定班级ID: taskId={}, classId={}", aiTask.getId(), createAiTaskDTO.getClassId());
+            aiTaskMessage.setClassId(createAiTaskDTO.getClassId());
+        }
 
         // 随机选取队列
         LinkedQueue queue = getRandomQueue();
