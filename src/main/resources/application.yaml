@@ -50,8 +50,8 @@ drawsee:
       modelName: doubao-1.5-pro-32k-250115
     deepseekV3:
       baseUrl: https://api.siliconflow.cn/v1
-      apiKey: sk-dgjagsvunjnsdrnipkfwidyiaiotwqcsoumrbpcxfdglnqut
-      modelName: deepseek-ai/DeepSeek-V3
+      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
+      modelName: Pro/deepseek-ai/DeepSeek-V3
     doubaoVision:
       baseUrl: https://ark.cn-beijing.volces.com/api/v3
       apiKey: a923c210-64ac-43db-b0b9-5122b11a6aa7
