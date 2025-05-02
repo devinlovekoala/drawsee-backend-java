@@ -75,6 +75,7 @@ public class ModeAutoDetectionService {
         
         // 检查是否是已定义的任务类型
         return taskType.equals(AiTaskType.GENERAL) ||
+               taskType.equals(AiTaskType.KNOWLEDGE) ||
                taskType.equals(AiTaskType.SOLVER_FIRST) ||
                taskType.equals(AiTaskType.PLANNER) ||
                taskType.equals(AiTaskType.HTML_MAKER) ||
