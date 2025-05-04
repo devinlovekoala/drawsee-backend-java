@@ -7,32 +7,28 @@ import cn.yifan.drawsee.constant.UserRole;
 import cn.yifan.drawsee.pojo.dto.SendInvitationCodeDTO;
 import cn.yifan.drawsee.pojo.dto.AdminRegisterDTO;
 import cn.yifan.drawsee.pojo.dto.CreateInvitationCodeDTO;
-import cn.yifan.drawsee.pojo.dto.UserLoginDTO;
 import cn.yifan.drawsee.pojo.entity.InvitationCode;
-import cn.yifan.drawsee.pojo.vo.AdminLoginVO;
-import cn.yifan.drawsee.pojo.vo.LoginVO;
 import cn.yifan.drawsee.pojo.vo.StatisticsVO;
 import cn.yifan.drawsee.service.business.AdminService;
 import cn.yifan.drawsee.service.business.StatisticsService;
-import cn.yifan.drawsee.service.business.UserService;
 import jakarta.validation.Valid;
-import org.apache.catalina.filters.ExpiresFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-import org.thymeleaf.spring6.processor.SpringActionTagProcessor;
 
 import java.util.List;
 
 /**
  * @FileName AdminController
- * @Description
+ * @Description 管理员控制器，只包含管理员特有的功能
  * @Author yifan
  * @date 2025-03-25 08:54
+ * @update 2025-08-16 10:20 移除专用登录逻辑，使用通用用户登录
  **/
 
 @RestController
 @RequestMapping("/admin")
 @SaCheckRole({UserRole.ADMIN})
+@SaCheckLogin
 public class AdminController {
 
     @Autowired
@@ -44,19 +40,6 @@ public class AdminController {
     @PostMapping("/register")
     public void register(@RequestBody @Valid AdminRegisterDTO adminRegisterDTO) {
         adminService.register(adminRegisterDTO);
-    }
-
-    /* 管理员登录 */
-
-    @PostMapping("/login")
-    @SaIgnore
-    public AdminLoginVO login(@RequestBody @Valid UserLoginDTO userLoginDTO) {
-        return adminService.login(userLoginDTO);
-    }
-
-    @GetMapping("/check_login")
-    public void checkLogin() {
-        adminService.checkLogin();
     }
 
     /* 邀请码管理 */

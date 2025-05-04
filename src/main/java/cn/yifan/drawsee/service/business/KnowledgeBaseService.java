@@ -4,22 +4,17 @@ import cn.dev33.satoken.stp.StpUtil;
 import cn.yifan.drawsee.constant.UserRole;
 import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
-import cn.yifan.drawsee.pojo.dto.AddKnowledgeDTO;
 import cn.yifan.drawsee.pojo.dto.CreateKnowledgeBaseDTO;
 import cn.yifan.drawsee.pojo.dto.JoinKnowledgeBaseDTO;
-import cn.yifan.drawsee.pojo.dto.UpdateKnowledgeDTO;
 import cn.yifan.drawsee.pojo.dto.UploadResourceDTO;
 import cn.yifan.drawsee.pojo.mongo.Course;
 import cn.yifan.drawsee.pojo.mongo.Knowledge;
 import cn.yifan.drawsee.pojo.mongo.KnowledgeBase;
-import cn.yifan.drawsee.pojo.mongo.KnowledgePosition;
 import cn.yifan.drawsee.pojo.mongo.KnowledgeResource;
 import cn.yifan.drawsee.pojo.vo.KnowledgeBaseVO;
 import cn.yifan.drawsee.pojo.vo.ResourceCountVO;
 import cn.yifan.drawsee.constant.KnowledgeResourceType;
 import cn.yifan.drawsee.repository.CourseRepository;
-import cn.yifan.drawsee.repository.KnowledgeBaseRepository;
-import cn.yifan.drawsee.repository.KnowledgeRepository;
 import cn.yifan.drawsee.service.base.MinioService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +29,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Random;
 
 /**
@@ -453,67 +447,6 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
     }
 
     /**
-     * 获取知识库中的知识图谱数据
-     * @param knowledgeBaseId 知识库ID
-     * @return 知识图谱数据（节点和连接）
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getKnowledgeBaseGraph(String knowledgeBaseId) {
-        // 验证知识库是否存在
-        KnowledgeBase knowledgeBase = validateKnowledgeBase(knowledgeBaseId);
-        
-        // 验证用户是否有权限访问该知识库
-        validateUserAccess(knowledgeBase);
-        
-        // 获取知识库中的知识点列表
-        List<Knowledge> knowledgePoints = getKnowledgeBaseKnowledgePoints(knowledgeBaseId);
-        
-        // 准备返回数据
-        Map<String, Object> result = new HashMap<>();
-        
-        // 准备节点数据
-        List<Map<String, Object>> nodes = new ArrayList<>();
-        for (Knowledge knowledge : knowledgePoints) {
-            Map<String, Object> node = new HashMap<>();
-            node.put("id", knowledge.getId());
-            node.put("type", "knowledge");
-            
-            Map<String, Object> data = new HashMap<>();
-            data.put("label", knowledge.getName());
-            data.put("level", knowledge.getLevel());
-            data.put("subject", knowledge.getSubject());
-            data.put("hasResources", knowledge.getResources() != null && !knowledge.getResources().isEmpty());
-            
-            node.put("data", data);
-            nodes.add(node);
-        }
-        
-        // 准备边数据
-        List<Map<String, Object>> edges = new ArrayList<>();
-        
-        // 添加父子关系边
-        for (Knowledge knowledge : knowledgePoints) {
-            if (knowledge.getParentId() != null && !knowledge.getParentId().isEmpty()) {
-                Map<String, Object> edge = new HashMap<>();
-                edge.put("id", "e-" + knowledge.getParentId() + "-" + knowledge.getId());
-                edge.put("source", knowledge.getParentId());
-                edge.put("target", knowledge.getId());
-                
-                Map<String, Object> data = new HashMap<>();
-                data.put("type", "parent-child");
-                
-                edge.put("data", data);
-                edges.add(edge);
-            }
-        }
-        
-        result.put("nodes", nodes);
-        result.put("edges", edges);
-        
-        return result;
-    }
-
-    /**
      * 为课程创建知识库
      * @param courseId 课程ID
      * @param createKnowledgeBaseDTO 创建知识库DTO
@@ -594,5 +527,82 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         }
         
         return vo;
+    }
+
+    /**
+     * 管理员获取所有知识库列表
+     * 注意：仅展示未删除的知识库
+     * @return 知识库列表
+     */
+    public List<KnowledgeBaseVO> getAllKnowledgeBases() {
+        List<KnowledgeBase> knowledgeBases = knowledgeBaseRepository.findAll();
+        return convertToVOList(knowledgeBases);
+    }
+
+    /**
+     * 删除知识库
+     * @param knowledgeBaseId 知识库ID
+     */
+    public void deleteKnowledgeBase(String knowledgeBaseId) {
+        // 验证知识库是否存在
+        KnowledgeBase knowledgeBase = validateKnowledgeBase(knowledgeBaseId);
+        
+        // 检查当前用户是否有权限删除（仅限知识库创建者）
+        Long userId = StpUtil.getLoginIdAsLong();
+        if (!knowledgeBase.getCreatorId().equals(userId)) {
+            throw new ApiException(ApiError.PERMISSION_DENIED);
+        }
+        
+        // 逻辑删除知识库
+        knowledgeBase.setIsDeleted(true);
+        knowledgeBaseRepository.save(knowledgeBase);
+        
+        logger.info("知识库已删除: knowledgeBaseId={}, userId={}", knowledgeBaseId, userId);
+    }
+
+    /**
+     * 获取当前用户可以访问的所有知识库列表
+     * 包括：自己创建的和已加入的知识库
+     * @return 知识库列表
+     */
+    public List<KnowledgeBaseVO> getKnowledgeBasesForCurrentUser() {
+        Long userId = StpUtil.getLoginIdAsLong();
+        
+        // 查询用户创建的和加入的知识库
+        List<KnowledgeBase> createdKnowledgeBases = knowledgeBaseRepository.findAllByCreatorId(userId);
+        List<KnowledgeBase> joinedKnowledgeBases = knowledgeBaseRepository.findByMembersContaining(userId);
+        
+        // 合并去重
+        Map<String, KnowledgeBase> knowledgeBaseMap = new HashMap<>();
+        
+        // 添加创建的知识库
+        for (KnowledgeBase kb : createdKnowledgeBases) {
+            if (!kb.getIsDeleted()) {
+                knowledgeBaseMap.put(kb.getId(), kb);
+            }
+        }
+        
+        // 添加加入的知识库
+        for (KnowledgeBase kb : joinedKnowledgeBases) {
+            if (!kb.getIsDeleted() && !knowledgeBaseMap.containsKey(kb.getId())) {
+                knowledgeBaseMap.put(kb.getId(), kb);
+            }
+        }
+        
+        // 转换为VO
+        List<KnowledgeBaseVO> result = new ArrayList<>();
+        for (KnowledgeBase kb : knowledgeBaseMap.values()) {
+            KnowledgeBaseVO vo = new KnowledgeBaseVO();
+            BeanUtils.copyProperties(kb, vo);
+            vo.setMemberCount(kb.getMembers().size());
+            if (kb.getKnowledgeIds() != null) {
+                vo.setKnowledgeCount(kb.getKnowledgeIds().size());
+            } else {
+                vo.setKnowledgeCount(0);
+            }
+            result.add(vo);
+        }
+        
+        return result;
     }
 } 

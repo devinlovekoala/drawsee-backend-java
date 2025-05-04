@@ -28,4 +28,8 @@ public class AddKnowledgeDTO {
     
     private List<String> aliases;
     
+    /**
+     * 知识点内容描述
+     */
+    private String content;
 }

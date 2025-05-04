@@ -120,60 +120,53 @@ public class KnowledgeBaseServiceExtension {
         // 验证用户是否有编辑权限
         validateUserEditPermission(knowledgeBase);
         
-        // 验证知识点是否存在于该知识库中
-        Knowledge knowledge = validateKnowledgeInKnowledgeBase(knowledgeBase, knowledgeId);
+        // 验证知识点是否属于该知识库
+        validateKnowledgeBelongsToBase(knowledgeBase, knowledgeId);
         
-        // 更新知识点
-        if (updateKnowledgeDTO.getName() != null) {
-            knowledge.setName(updateKnowledgeDTO.getName());
-        }
-        if (updateKnowledgeDTO.getSubject() != null) {
-            knowledge.setSubject(updateKnowledgeDTO.getSubject());
-        }
-        if (updateKnowledgeDTO.getAliases() != null) {
-            knowledge.setAliases(updateKnowledgeDTO.getAliases());
-        }
-        if (updateKnowledgeDTO.getLevel() != null) {
-            knowledge.setLevel(updateKnowledgeDTO.getLevel());
-        }
+        // 验证知识点是否存在
+        Knowledge knowledge = validateKnowledge(knowledgeId);
         
-        // 如果更改了父节点，需要更新父子关系
-        if (updateKnowledgeDTO.getParentId() != null 
-                && !Objects.equals(updateKnowledgeDTO.getParentId(), knowledge.getParentId())) {
+        // 更新知识点属性
+        knowledge.setName(updateKnowledgeDTO.getName());
+        knowledge.setSubject(updateKnowledgeDTO.getSubject());
+        knowledge.setAliases(updateKnowledgeDTO.getAliases());
+        knowledge.setLevel(updateKnowledgeDTO.getLevel());
+        
+        // 更新父节点关系
+        String oldParentId = knowledge.getParentId();
+        String newParentId = updateKnowledgeDTO.getParentId();
+        
+        // 如果父节点发生变化
+        if ((oldParentId == null && newParentId != null) || 
+            (oldParentId != null && !oldParentId.equals(newParentId))) {
             
-            // 如果有旧的父节点，从旧父节点的子节点列表中移除
-            if (knowledge.getParentId() != null && !knowledge.getParentId().isEmpty()) {
-                Knowledge oldParent = knowledgeRepository.findById(knowledge.getParentId()).orElse(null);
+            // 如果有旧父节点，从其子节点列表中移除
+            if (oldParentId != null && !oldParentId.isEmpty()) {
+                Knowledge oldParent = knowledgeRepository.findById(oldParentId).orElse(null);
                 if (oldParent != null && oldParent.getChildrenIds() != null) {
                     oldParent.getChildrenIds().remove(knowledgeId);
                     knowledgeRepository.save(oldParent);
                 }
             }
             
-            // 设置新的父节点
-            knowledge.setParentId(updateKnowledgeDTO.getParentId());
-            
-            // 如果有新的父节点，添加到新父节点的子节点列表中
-            if (!updateKnowledgeDTO.getParentId().isEmpty()) {
-                Knowledge newParent = knowledgeRepository.findById(updateKnowledgeDTO.getParentId()).orElse(null);
+            // 如果有新父节点，添加到其子节点列表中
+            if (newParentId != null && !newParentId.isEmpty()) {
+                Knowledge newParent = knowledgeRepository.findById(newParentId).orElse(null);
                 if (newParent != null) {
                     if (newParent.getChildrenIds() == null) {
                         newParent.setChildrenIds(new ArrayList<>());
                     }
-                    if (!newParent.getChildrenIds().contains(knowledgeId)) {
-                        newParent.getChildrenIds().add(knowledgeId);
-                        knowledgeRepository.save(newParent);
-                    }
+                    newParent.getChildrenIds().add(knowledgeId);
+                    knowledgeRepository.save(newParent);
                 }
             }
+            
+            // 更新知识点的父节点ID
+            knowledge.setParentId(newParentId);
         }
         
-        // 保存知识点
+        // 保存更新后的知识点
         knowledgeRepository.save(knowledge);
-        
-        // 更新知识库的更新时间
-        knowledgeBase.setUpdatedAt(new Date());
-        knowledgeBaseRepository.save(knowledgeBase);
     }
     
     /**
@@ -188,168 +181,40 @@ public class KnowledgeBaseServiceExtension {
         // 验证用户是否有编辑权限
         validateUserEditPermission(knowledgeBase);
         
-        // 验证知识点是否存在于该知识库中
-        Knowledge knowledge = validateKnowledgeInKnowledgeBase(knowledgeBase, knowledgeId);
+        // 验证知识点是否属于该知识库
+        validateKnowledgeBelongsToBase(knowledgeBase, knowledgeId);
+        
+        // 验证知识点是否存在
+        Knowledge knowledge = validateKnowledge(knowledgeId);
+        
+        // 从知识库的知识点列表中移除
+        knowledgeBase.getKnowledgeIds().remove(knowledgeId);
+        knowledgeBaseRepository.save(knowledgeBase);
         
         // 如果有父节点，从父节点的子节点列表中移除
-        if (knowledge.getParentId() != null && !knowledge.getParentId().isEmpty()) {
-            Knowledge parent = knowledgeRepository.findById(knowledge.getParentId()).orElse(null);
+        String parentId = knowledge.getParentId();
+        if (parentId != null && !parentId.isEmpty()) {
+            Knowledge parent = knowledgeRepository.findById(parentId).orElse(null);
             if (parent != null && parent.getChildrenIds() != null) {
                 parent.getChildrenIds().remove(knowledgeId);
                 knowledgeRepository.save(parent);
             }
         }
         
-        // 递归删除所有子节点
-        if (knowledge.getChildrenIds() != null && !knowledge.getChildrenIds().isEmpty()) {
-            for (String childId : new ArrayList<>(knowledge.getChildrenIds())) {
-                deleteKnowledgeBaseKnowledgePoint(knowledgeBaseId, childId);
+        // 如果有子节点，更新子节点的父节点引用
+        List<String> childrenIds = knowledge.getChildrenIds();
+        if (childrenIds != null && !childrenIds.isEmpty()) {
+            for (String childId : childrenIds) {
+                Knowledge child = knowledgeRepository.findById(childId).orElse(null);
+                if (child != null) {
+                    child.setParentId(null);
+                    knowledgeRepository.save(child);
+                }
             }
         }
-        
-        // 删除知识点位置信息
-        knowledgePositionRepository.deleteByKnowledgeId(knowledgeId);
         
         // 删除知识点
-        knowledgeRepository.deleteById(knowledgeId);
-        
-        // 更新知识库的知识点列表
-        knowledgeBase.getKnowledgeIds().remove(knowledgeId);
-        knowledgeBase.setUpdatedAt(new Date());
-        knowledgeBaseRepository.save(knowledgeBase);
-    }
-    
-    /**
-     * 获取知识库中的知识图谱数据
-     * @param knowledgeBaseId 知识库ID
-     * @return 知识图谱数据（节点和连接）
-     */
-    public Map<String, Object> getKnowledgeBaseGraph(String knowledgeBaseId) {
-        // 验证知识库是否存在
-        KnowledgeBase knowledgeBase = validateKnowledgeBase(knowledgeBaseId);
-        
-        // 验证用户是否有权限访问该知识库
-        validateUserAccess(knowledgeBase);
-        
-        // 获取知识库中的知识点列表
-        List<Knowledge> knowledgePoints = getKnowledgeBaseKnowledgePoints(knowledgeBaseId);
-        
-        // 获取知识点位置列表
-        List<KnowledgePosition> positions = knowledgePositionRepository.findAllByKnowledgeBaseId(knowledgeBaseId);
-        Map<String, KnowledgePosition> positionMap = new HashMap<>();
-        for (KnowledgePosition position : positions) {
-            positionMap.put(position.getKnowledgeId(), position);
-        }
-        
-        // 准备返回数据
-        Map<String, Object> result = new HashMap<>();
-        
-        // 准备节点数据
-        List<Map<String, Object>> nodes = new ArrayList<>();
-        for (Knowledge knowledge : knowledgePoints) {
-            Map<String, Object> node = new HashMap<>();
-            node.put("id", knowledge.getId());
-            node.put("type", "knowledge");
-            
-            Map<String, Object> data = new HashMap<>();
-            data.put("label", knowledge.getName());
-            data.put("level", knowledge.getLevel());
-            data.put("subject", knowledge.getSubject());
-            
-            // 获取节点位置信息（如果存在）
-            KnowledgePosition position = positionMap.get(knowledge.getId());
-            if (position != null) {
-                data.put("x", position.getX());
-                data.put("y", position.getY());
-            }
-            
-            node.put("data", data);
-            nodes.add(node);
-        }
-        
-        // 准备边数据
-        List<Map<String, Object>> edges = new ArrayList<>();
-        
-        // 添加父子关系边
-        for (Knowledge knowledge : knowledgePoints) {
-            if (knowledge.getParentId() != null && !knowledge.getParentId().isEmpty()) {
-                Map<String, Object> edge = new HashMap<>();
-                edge.put("id", "e-" + knowledge.getParentId() + "-" + knowledge.getId());
-                edge.put("source", knowledge.getParentId());
-                edge.put("target", knowledge.getId());
-                
-                Map<String, Object> data = new HashMap<>();
-                data.put("type", "parent-child");
-                
-                edge.put("data", data);
-                edges.add(edge);
-            }
-        }
-        
-        result.put("nodes", nodes);
-        result.put("edges", edges);
-        
-        return result;
-    }
-    
-    /**
-     * 批量更新知识图谱节点位置
-     * @param knowledgeBaseId 知识库ID
-     * @param nodePositions 节点位置信息
-     */
-    @SuppressWarnings("unchecked")
-    public void updateKnowledgeBaseNodePositions(String knowledgeBaseId, Map<String, Object> nodePositions) {
-        // 验证知识库是否存在
-        KnowledgeBase knowledgeBase = validateKnowledgeBase(knowledgeBaseId);
-        
-        // 验证用户是否有编辑权限
-        validateUserEditPermission(knowledgeBase);
-        
-        // 获取节点位置数据
-        List<Map<String, Object>> positions = (List<Map<String, Object>>) nodePositions.get("positions");
-        if (positions == null || positions.isEmpty()) {
-            return;
-        }
-        
-        // 获取当前已存在的位置信息
-        List<KnowledgePosition> existingPositions = knowledgePositionRepository.findAllByKnowledgeBaseId(knowledgeBaseId);
-        Map<String, KnowledgePosition> existingPositionMap = new HashMap<>();
-        for (KnowledgePosition position : existingPositions) {
-            existingPositionMap.put(position.getKnowledgeId(), position);
-        }
-        
-        // 准备新的或更新的节点位置
-        Date now = new Date();
-        List<KnowledgePosition> positionsToSave = new ArrayList<>();
-        for (Map<String, Object> position : positions) {
-            String knowledgeId = (String) position.get("id");
-            Double x = ((Number) position.get("x")).doubleValue();
-            Double y = ((Number) position.get("y")).doubleValue();
-            
-            // 查找是否已存在位置信息
-            KnowledgePosition knowledgePosition = existingPositionMap.get(knowledgeId);
-            if (knowledgePosition == null) {
-                // 创建新的位置信息
-                knowledgePosition = new KnowledgePosition();
-                knowledgePosition.setKnowledgeId(knowledgeId);
-                knowledgePosition.setKnowledgeBaseId(knowledgeBaseId);
-                knowledgePosition.setCreatedAt(now);
-            }
-            
-            // 更新位置信息
-            knowledgePosition.setX(x);
-            knowledgePosition.setY(y);
-            knowledgePosition.setUpdatedAt(now);
-            
-            positionsToSave.add(knowledgePosition);
-        }
-        
-        // 保存位置信息到MongoDB
-        knowledgePositionRepository.saveAll(positionsToSave);
-        
-        // 更新知识库的更新时间
-        knowledgeBase.setUpdatedAt(now);
-        knowledgeBaseRepository.save(knowledgeBase);
+        knowledgeRepository.delete(knowledge);
     }
     
     // 辅助方法
@@ -373,48 +238,45 @@ public class KnowledgeBaseServiceExtension {
      */
     private void validateUserAccess(KnowledgeBase knowledgeBase) {
         Long userId = StpUtil.getLoginIdAsLong();
-        if (!knowledgeBase.getMembers().contains(userId)) {
+        // 如果是公开的知识库或用户是知识库的成员，允许访问
+        if (knowledgeBase.getIsPublished() || knowledgeBase.getMembers().contains(userId)) {
+            return;
+        }
+        throw new ApiException(ApiError.PERMISSION_DENIED);
+    }
+    
+    /**
+     * 验证用户是否有编辑权限（仅限知识库创建者）
+     * @param knowledgeBase 知识库对象
+     */
+    private void validateUserEditPermission(KnowledgeBase knowledgeBase) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        if (!knowledgeBase.getCreatorId().equals(userId)) {
             throw new ApiException(ApiError.PERMISSION_DENIED);
         }
     }
     
     /**
-     * 验证用户是否有编辑权限（创建者或管理员）
+     * 验证知识点是否属于该知识库
      * @param knowledgeBase 知识库对象
+     * @param knowledgeId 知识点ID
      */
-    private void validateUserEditPermission(KnowledgeBase knowledgeBase) {
-        Long userId = StpUtil.getLoginIdAsLong();
-        
-        // 如果是创建者，允许编辑
-        if (knowledgeBase.getCreatorId().equals(userId)) {
-            return;
+    private void validateKnowledgeBelongsToBase(KnowledgeBase knowledgeBase, String knowledgeId) {
+        if (knowledgeBase.getKnowledgeIds() == null || !knowledgeBase.getKnowledgeIds().contains(knowledgeId)) {
+            throw new ApiException(ApiError.KNOWLEDGE_NOT_IN_BASE);
         }
-        
-        // 如果是管理员，允许编辑
-        // TODO: 添加管理员权限验证
-        
-        throw new ApiException(ApiError.PERMISSION_DENIED);
     }
     
     /**
-     * 验证知识点是否存在于该知识库中
-     * @param knowledgeBase 知识库对象
+     * 验证知识点是否存在
      * @param knowledgeId 知识点ID
      * @return 知识点对象
      */
-    private Knowledge validateKnowledgeInKnowledgeBase(KnowledgeBase knowledgeBase, String knowledgeId) {
-        // 验证知识点ID是否在知识库的知识点列表中
-        if (knowledgeBase.getKnowledgeIds() == null 
-                || !knowledgeBase.getKnowledgeIds().contains(knowledgeId)) {
-            throw new ApiException(ApiError.KNOWLEDGE_NOT_IN_KNOWLEDGE_BASE);
-        }
-        
-        // 验证知识点是否存在
+    private Knowledge validateKnowledge(String knowledgeId) {
         Knowledge knowledge = knowledgeRepository.findById(knowledgeId).orElse(null);
         if (knowledge == null) {
             throw new ApiException(ApiError.KNOWLEDGE_NOT_EXISTED);
         }
-        
         return knowledge;
     }
 }

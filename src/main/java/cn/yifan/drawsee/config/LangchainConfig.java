@@ -49,7 +49,7 @@ public class LangchainConfig {
                 .apiKey(deepseekV3.getApiKey())
                 .modelName(deepseekV3.getModelName())
                 .timeout(Duration.ofDays(7))
-                .maxTokens(16000)
+                .maxTokens(8192)
                 .temperature(0.1)
                 .logRequests(false)
                 .logResponses(false)

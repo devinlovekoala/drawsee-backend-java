@@ -6,7 +6,6 @@ import cn.yifan.drawsee.constant.AiTaskLimit;
 import cn.yifan.drawsee.constant.UserRole;
 import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
-import cn.yifan.drawsee.mapper.InvitationCodeMapper;
 import cn.yifan.drawsee.mapper.UserMapper;
 import cn.yifan.drawsee.pojo.dto.UserLoginDTO;
 import cn.yifan.drawsee.pojo.dto.UserSignUpDTO;
@@ -18,6 +17,8 @@ import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * @FileName UserService
@@ -69,7 +70,17 @@ public class UserService {
         if (!user.getPassword().equals(userLoginDTO.getPassword())) {
             throw new ApiException(ApiError.PASSWORD_ERROR);
         }
+        
+        // 登录用户
         StpUtil.login(user.getId());
+        
+        // 在登录时同时设置用户角色
+        String role = userRoleService.getUserRole(user.getId());
+        if (role != null) {
+            StpUtil.getTokenSession().set("role", role);
+            StpUtil.getRoleList().add(role);
+        }
+        
         return getLoginVO(user);
     }
 

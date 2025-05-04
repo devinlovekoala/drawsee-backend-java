@@ -43,6 +43,7 @@ public enum ApiError {
     KNOWLEDGE_HAD_EXISTED(409, "同名称知识点已存在"),
     KNOWLEDGE_NOT_EXISTED(404, "知识点不存在"),
     KNOWLEDGE_PARENT_NOT_EXISTED(404, "父知识点不存在"),
+    KNOWLEDGE_NOT_IN_BASE(403, "该知识点不属于指定的知识库"),
 
     // 参数
     PARAM_ERROR(400, "参数错误"),

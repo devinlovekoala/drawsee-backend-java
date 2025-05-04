@@ -42,48 +42,45 @@ public abstract class AbstractKnowledgeBaseService {
      */
     protected void validateUserAccess(KnowledgeBase knowledgeBase) {
         Long userId = StpUtil.getLoginIdAsLong();
-        if (!knowledgeBase.getMembers().contains(userId)) {
+        // 如果是公开的知识库或用户是知识库的成员，允许访问
+        if (knowledgeBase.getIsPublished() || knowledgeBase.getMembers().contains(userId)) {
+            return;
+        }
+        throw new ApiException(ApiError.PERMISSION_DENIED);
+    }
+    
+    /**
+     * 验证用户是否有编辑权限（仅创建者有权编辑）
+     * @param knowledgeBase 知识库对象
+     */
+    protected void validateUserEditPermission(KnowledgeBase knowledgeBase) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        if (!knowledgeBase.getCreatorId().equals(userId)) {
             throw new ApiException(ApiError.PERMISSION_DENIED);
         }
     }
     
     /**
-     * 验证用户是否有编辑权限（创建者或管理员）
-     * @param knowledgeBase 知识库对象
-     */
-    protected void validateUserEditPermission(KnowledgeBase knowledgeBase) {
-        Long userId = StpUtil.getLoginIdAsLong();
-        
-        // 如果是创建者，允许编辑
-        if (knowledgeBase.getCreatorId().equals(userId)) {
-            return;
-        }
-        
-        // 如果是管理员，允许编辑
-        // TODO: 添加管理员权限验证
-        
-        throw new ApiException(ApiError.PERMISSION_DENIED);
-    }
-    
-    /**
-     * 验证知识点是否存在于该知识库中
-     * @param knowledgeBase 知识库对象
+     * 验证知识点是否存在
      * @param knowledgeId 知识点ID
      * @return 知识点对象
      */
-    protected Knowledge validateKnowledgeInKnowledgeBase(KnowledgeBase knowledgeBase, String knowledgeId) {
-        // 验证知识点ID是否在知识库的知识点列表中
-        if (knowledgeBase.getKnowledgeIds() == null 
-                || !knowledgeBase.getKnowledgeIds().contains(knowledgeId)) {
-            throw new ApiException(ApiError.KNOWLEDGE_NOT_IN_KNOWLEDGE_BASE);
-        }
-        
-        // 验证知识点是否存在
+    protected Knowledge validateKnowledge(String knowledgeId) {
         Knowledge knowledge = knowledgeRepository.findById(knowledgeId).orElse(null);
         if (knowledge == null) {
             throw new ApiException(ApiError.KNOWLEDGE_NOT_EXISTED);
         }
-        
         return knowledge;
+    }
+    
+    /**
+     * 验证知识点是否属于知识库
+     * @param knowledgeBase 知识库对象
+     * @param knowledgeId 知识点ID
+     */
+    protected void validateKnowledgeBelongsToBase(KnowledgeBase knowledgeBase, String knowledgeId) {
+        if (knowledgeBase.getKnowledgeIds() == null || !knowledgeBase.getKnowledgeIds().contains(knowledgeId)) {
+            throw new ApiException(ApiError.KNOWLEDGE_NOT_IN_BASE);
+        }
     }
 } 

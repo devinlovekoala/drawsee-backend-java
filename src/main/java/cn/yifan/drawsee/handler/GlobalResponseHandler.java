@@ -1,6 +1,7 @@
 package cn.yifan.drawsee.handler;
 
 import cn.yifan.drawsee.pojo.Result;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -8,6 +9,8 @@ import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
+
+import java.io.IOException;
 
 /**
  * @FileName GlobalResponseHandler
@@ -18,6 +21,8 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
 @RestControllerAdvice
 public class GlobalResponseHandler implements ResponseBodyAdvice<Object> {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /*
     Controller返回后，以及ExceptionHandler返回后都会来这里
@@ -31,6 +36,18 @@ public class GlobalResponseHandler implements ResponseBodyAdvice<Object> {
         if (body instanceof Result) {
             return body;
         }
+        
+        // 处理String类型的返回值，避免类型转换异常
+        if (body instanceof String) {
+            try {
+                // 手动将Result对象转为json字符串返回
+                response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                return objectMapper.writeValueAsString(Result.success(body));
+            } catch (IOException e) {
+                throw new RuntimeException("处理响应数据失败", e);
+            }
+        }
+        
         return Result.success(body);
     }
 
