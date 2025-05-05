@@ -59,9 +59,6 @@ public class DocumentProcessService {
     private KnowledgeBaseService knowledgeBaseService;
     
     @Autowired
-    private KnowledgeBaseServiceExtension knowledgeBaseServiceExtension;
-    
-    @Autowired
     private KnowledgeBaseRepository knowledgeBaseRepository;
     
     @Autowired
@@ -505,7 +502,7 @@ public class DocumentProcessService {
         addKnowledgeDTO.setContent(contentBuilder.toString());
         
         // 添加到知识库
-        String knowledgeId = knowledgeBaseServiceExtension.addKnowledgeBaseKnowledgePoint(knowledgeBaseId, addKnowledgeDTO);
+        String knowledgeId = knowledgeBaseService.addKnowledgeBaseKnowledgePoint(knowledgeBaseId, addKnowledgeDTO);
         
         int count = 1; // 当前节点
         

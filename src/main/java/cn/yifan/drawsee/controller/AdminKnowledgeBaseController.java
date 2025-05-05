@@ -10,7 +10,6 @@ import cn.yifan.drawsee.pojo.mongo.Knowledge;
 import cn.yifan.drawsee.pojo.vo.KnowledgeBaseVO;
 import cn.yifan.drawsee.pojo.vo.ResourceCountVO;
 import cn.yifan.drawsee.service.business.KnowledgeBaseService;
-import cn.yifan.drawsee.service.business.KnowledgeBaseServiceExtension;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,9 +36,6 @@ public class AdminKnowledgeBaseController {
 
     @Autowired
     private KnowledgeBaseService knowledgeBaseService;
-    
-    @Autowired
-    private KnowledgeBaseServiceExtension knowledgeBaseServiceExtension;
 
     /**
      * 管理员创建知识库
@@ -112,7 +108,7 @@ public class AdminKnowledgeBaseController {
     public String addKnowledgePoint(
             @PathVariable("id") String knowledgeBaseId,
             @RequestBody @Valid AddKnowledgeDTO addKnowledgeDTO) {
-        return knowledgeBaseServiceExtension.addKnowledgeBaseKnowledgePoint(knowledgeBaseId, addKnowledgeDTO);
+        return knowledgeBaseService.addKnowledgeBaseKnowledgePoint(knowledgeBaseId, addKnowledgeDTO);
     }
     
     /**
@@ -126,7 +122,7 @@ public class AdminKnowledgeBaseController {
             @PathVariable("knowledgeBaseId") String knowledgeBaseId,
             @PathVariable("knowledgeId") String knowledgeId,
             @RequestBody @Valid UpdateKnowledgeDTO updateKnowledgeDTO) {
-        knowledgeBaseServiceExtension.updateKnowledgeBaseKnowledgePoint(knowledgeBaseId, knowledgeId, updateKnowledgeDTO);
+        knowledgeBaseService.updateKnowledgeBaseKnowledgePoint(knowledgeBaseId, knowledgeId, updateKnowledgeDTO);
     }
     
     /**
@@ -138,7 +134,7 @@ public class AdminKnowledgeBaseController {
     public void deleteKnowledgePoint(
             @PathVariable("knowledgeBaseId") String knowledgeBaseId,
             @PathVariable("knowledgeId") String knowledgeId) {
-        knowledgeBaseServiceExtension.deleteKnowledgeBaseKnowledgePoint(knowledgeBaseId, knowledgeId);
+        knowledgeBaseService.deleteKnowledgeBaseKnowledgePoint(knowledgeBaseId, knowledgeId);
     }
     
     /**
