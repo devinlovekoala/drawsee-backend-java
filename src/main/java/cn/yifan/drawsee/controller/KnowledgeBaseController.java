@@ -1,7 +1,6 @@
 package cn.yifan.drawsee.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
-import cn.dev33.satoken.stp.StpUtil;
 import cn.yifan.drawsee.constant.UserRole;
 import cn.yifan.drawsee.pojo.Result;
 import cn.yifan.drawsee.pojo.dto.CreateKnowledgeBaseDTO;
@@ -18,13 +17,13 @@ import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.validation.annotation.Validated;
 
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 /**
  * @FileName KnowledgeBaseController
@@ -187,16 +186,65 @@ public class KnowledgeBaseController {
     }
 
     /**
-     * 上传并处理文档，提取知识点结构
+     * 上传并处理教材目录页，提取知识点结构
+     * 特别说明：仅支持PDF格式的教材目录页文件，优化用于分析各学科各年级的教材目录
      * 
-     * @param file 上传的文档文件
-     * @param processDTO 处理参数
-     * @return 处理结果
+     * @param file 上传的目录页PDF文件
+     * @param processDTO 处理参数 (@see DocumentProcessDTO)
+     * @param knowledgeId 可选参数，知识库ID (兼容旧前端，与knowledgeBaseId二选一即可)
+     * @param startPage 可选参数，目录开始页码（默认为1）
+     * @param endPage 可选参数，目录结束页码（默认为5）
+     * @return 处理结果，包含提取的知识点层级结构
      */
-    @PostMapping("/document/process")
+    @PostMapping({"/document/process", "/knowledge-base/document/process", "/api/document/process"})
     public Result<DocumentProcessResultVO> processDocument(
             @RequestParam("file") MultipartFile file,
-            @Validated DocumentProcessDTO processDTO) {
+            @Validated DocumentProcessDTO processDTO,
+            @RequestParam(value = "knowledgeId", required = false) String knowledgeId,
+            @RequestParam(value = "startPage", required = false) Integer startPage,
+            @RequestParam(value = "endPage", required = false) Integer endPage) {
+        // 验证文件类型必须是PDF
+        String fileName = file.getOriginalFilename();
+        if (fileName == null || file.isEmpty() || !fileName.toLowerCase().endsWith(".pdf")) {
+            throw new cn.yifan.drawsee.exception.ApiException(cn.yifan.drawsee.exception.ApiError.FILE_TYPE_NOT_SUPPORTED);
+        }
+        
+        // 如果前端传入了knowledgeId但没有设置knowledgeBaseId，则使用knowledgeId作为knowledgeBaseId
+        if (knowledgeId != null && !knowledgeId.isEmpty() && 
+            (processDTO.getKnowledgeBaseId() == null || processDTO.getKnowledgeBaseId().isEmpty())) {
+            processDTO.setKnowledgeBaseId(knowledgeId);
+        }
+        
+        // 确保知识库ID不为空
+        if (processDTO.getKnowledgeBaseId() == null || processDTO.getKnowledgeBaseId().isEmpty()) {
+            throw new cn.yifan.drawsee.exception.ApiException(
+                cn.yifan.drawsee.exception.ApiError.PARAM_ERROR);
+        }
+        
+        // 设置页面范围参数
+        if (startPage != null || endPage != null) {
+            // 初始化页面范围对象（如果尚未设置）
+            if (processDTO.getPageRange() == null) {
+                processDTO.setPageRange(new DocumentProcessDTO.PageRange());
+            }
+            
+            // 设置开始页码（如果提供了）
+            if (startPage != null && startPage > 0) {
+                processDTO.getPageRange().setStart(startPage);
+            }
+            
+            // 设置结束页码（如果提供了）
+            if (endPage != null && endPage >= processDTO.getPageRange().getStart()) {
+                processDTO.getPageRange().setEnd(endPage);
+            }
+        }
+        
+        logger.info("接收到教材目录页处理请求，文件名: {}, 知识库ID: {}, 教材类型: {}, 年级: {}, 学期: {}, 页面范围: {}-{}", 
+                fileName, processDTO.getKnowledgeBaseId(), processDTO.getTextbookType(), 
+                processDTO.getGrade(), processDTO.getSemester(),
+                processDTO.getPageRange() != null ? processDTO.getPageRange().getStart() : 1,
+                processDTO.getPageRange() != null ? processDTO.getPageRange().getEnd() : 5);
+        
         DocumentProcessResultVO resultVO = documentProcessService.processDocument(file, processDTO);
         return Result.success(resultVO);
     }
@@ -223,5 +271,41 @@ public class KnowledgeBaseController {
     public Result<Void> cancelProcess(@RequestParam String taskId) {
         documentProcessService.cancelProcess(taskId);
         return Result.success(null);
+    }
+
+    /**
+     * 检测PDF文件的页数
+     * 这个API用于支持前端页面范围选择功能
+     * 
+     * @param file 上传的PDF文件
+     * @return 页数信息，包含pageCount字段
+     */
+    @PostMapping("/document/detect-pages")
+    public Result<Map<String, Integer>> detectPdfPages(@RequestParam("file") MultipartFile file) {
+        // 验证文件类型必须是PDF
+        String fileName = file.getOriginalFilename();
+        if (fileName == null || file.isEmpty() || !fileName.toLowerCase().endsWith(".pdf")) {
+            throw new cn.yifan.drawsee.exception.ApiException(cn.yifan.drawsee.exception.ApiError.FILE_TYPE_NOT_SUPPORTED);
+        }
+        
+        logger.info("检测PDF页数: {}", fileName);
+        
+        try {
+            // 使用PDFBox加载文档并获取页数
+            try (org.apache.pdfbox.pdmodel.PDDocument document = 
+                     org.apache.pdfbox.pdmodel.PDDocument.load(file.getInputStream())) {
+                
+                int pageCount = document.getNumberOfPages();
+                
+                // 返回页数信息
+                Map<String, Integer> result = new HashMap<>();
+                result.put("pageCount", pageCount);
+                
+                return Result.success(result);
+            }
+        } catch (Exception e) {
+            logger.error("检测PDF页数失败", e);
+            throw new cn.yifan.drawsee.exception.ApiException(cn.yifan.drawsee.exception.ApiError.SYSTEM_ERROR);
+        }
     }
 } 

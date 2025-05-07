@@ -10,7 +10,6 @@ import cn.yifan.drawsee.pojo.mongo.KnowledgeBase;
 import cn.yifan.drawsee.pojo.vo.DocumentProcessResultVO;
 import cn.yifan.drawsee.pojo.vo.DocumentProcessResultVO.KnowledgeNodeVO;
 import cn.yifan.drawsee.repository.KnowledgeBaseRepository;
-import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
 import cn.yifan.drawsee.service.base.PromptService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,8 +20,6 @@ import dev.langchain4j.model.output.Response;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.redisson.api.RMap;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +28,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,16 +39,17 @@ import cn.yifan.drawsee.config.MinioConfig;
 
 /**
  * @FileName DocumentProcessService
- * @Description 文档处理服务
+ * @Description 文档处理服务（简化版）- 专注处理教材目录页PDF文件
  * @Author devin
  * @date 2025-08-20 10:45
+ * @update 2025-09-01 13:00 简化为仅处理教材目录页PDF
  **/
 @Service
 @Slf4j
 public class DocumentProcessService {
 
     private static final String DOCUMENT_PROCESS_CACHE_PREFIX = "document_process:";
-    private static final ExecutorService executorService = Executors.newFixedThreadPool(5);
+    private static final ExecutorService executorService = Executors.newFixedThreadPool(3);
     private static final Map<String, CompletableFuture<Void>> processingTasks = new ConcurrentHashMap<>();
     
     @Autowired
@@ -75,21 +72,11 @@ public class DocumentProcessService {
     private ChatLanguageModel deepseekV3ChatLanguageModel;
     
     @Autowired
-    @Qualifier("doubaoVisionChatLanguageModel")
-    private ChatLanguageModel doubaoVisionChatLanguageModel;
-    
-    @Autowired
-    private AiService aiService;
-    
-    @Autowired
     private ObjectMapper objectMapper;
     
-    @Autowired
-    private MinioConfig minioConfig;
-    
     /**
-     * 处理文档并提取知识点结构
-     * @param file 上传的文档文件
+     * 处理教材目录页PDF文档并提取知识点结构
+     * @param file 上传的目录页PDF文件
      * @param processDTO 处理参数
      * @return 处理结果
      */
@@ -97,6 +84,12 @@ public class DocumentProcessService {
         // 参数验证
         if (file == null || file.isEmpty()) {
             throw new ApiException(ApiError.PARAM_ERROR);
+        }
+        
+        // 验证文件类型必须是PDF
+        String fileName = file.getOriginalFilename();
+        if (fileName == null || !fileName.toLowerCase().endsWith(".pdf")) {
+            throw new ApiException(ApiError.FILE_TYPE_NOT_SUPPORTED);
         }
         
         if (processDTO.getKnowledgeBaseId() == null || processDTO.getKnowledgeBaseId().isEmpty()) {
@@ -132,38 +125,36 @@ public class DocumentProcessService {
                 // 更新状态为处理中
                 updateTaskStatus(taskId, status -> {
                     status.setStatus("PROCESSING");
-                    status.setProgress(5);
+                    status.setProgress(10);
                     return status;
                 });
                 
                 // 1. 保存文件到临时存储
-                String fileExt = getFileExtension(file.getOriginalFilename());
-                String tempFilePath = getDocumentPath(taskId, fileExt);
-                String objectName = tempFilePath;
+                String tempFilePath = MinioObjectPath.KNOWLEDGE_PDF_PATH + taskId + ".pdf";
                 
                 try {
                     // 使用MinioService上传文件
-                    minioService.uploadFile(file, objectName);
+                    minioService.uploadFile(file, tempFilePath);
                 } catch (Exception e) {
                     log.error("文件上传失败", e);
                     throw new RuntimeException("文件上传失败", e);
                 }
                 
-                // 2. 根据文件类型提取文本内容
-                String textContent = extractTextFromFile(file);
+                // 2. 提取PDF目录页文本内容
+                String textContent = extractPdfCatalogContent(file, processDTO);
                 
                 // 更新进度
                 updateTaskStatus(taskId, status -> {
-                    status.setProgress(20);
+                    status.setProgress(30);
                     return status;
                 });
                 
-                // 3. 使用AI分析文本内容，提取知识点结构
-                List<KnowledgeNodeVO> knowledgeStructure = extractKnowledgeStructure(textContent, processDTO);
+                // 3. 使用AI分析目录文本内容，提取知识点结构
+                List<KnowledgeNodeVO> knowledgeStructure = extractKnowledgeStructureFromCatalog(textContent, processDTO);
                 
                 // 更新进度
                 updateTaskStatus(taskId, status -> {
-                    status.setProgress(60);
+                    status.setProgress(70);
                     status.setExtractedCount(countTotalNodes(knowledgeStructure));
                     status.setKnowledgeStructure(knowledgeStructure);
                     return status;
@@ -189,7 +180,7 @@ public class DocumentProcessService {
                 });
                 
             } catch (Exception e) {
-                log.error("文档处理失败", e);
+                log.error("目录页处理失败", e);
                 // 更新任务状态为失败
                 updateTaskStatus(taskId, status -> {
                     status.setStatus("FAILED");
@@ -206,19 +197,6 @@ public class DocumentProcessService {
         processingTasks.put(taskId, future);
         
         return resultVO;
-    }
-    
-    /**
-     * 获取文档在Minio中的存储路径
-     */
-    private String getDocumentPath(String taskId, String fileExt) {
-        if (fileExt.equalsIgnoreCase("pdf")) {
-            return MinioObjectPath.KNOWLEDGE_PDF_PATH + taskId + ".pdf";
-        } else if (fileExt.equalsIgnoreCase("docx") || fileExt.equalsIgnoreCase("doc")) {
-            return MinioObjectPath.KNOWLEDGE_WORD_PATH + taskId + "." + fileExt;
-        } else {
-            return "temp/documents/" + taskId + "." + fileExt;
-        }
     }
     
     /**
@@ -287,54 +265,69 @@ public class DocumentProcessService {
     }
     
     /**
-     * 提取文件扩展名
+     * 从PDF目录页文件中提取文本内容
+     * 专门优化用于处理教材目录页
+     * 支持根据pageRange参数提取特定页面范围的内容
      */
-    private String getFileExtension(String filename) {
-        if (filename == null) return "";
-        int dotPos = filename.lastIndexOf(".");
-        return (dotPos == -1) ? "" : filename.substring(dotPos + 1);
+    private String extractPdfCatalogContent(MultipartFile file, DocumentProcessDTO processDTO) throws IOException {
+        try (PDDocument document = PDDocument.load(file.getInputStream())) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            
+            // 目录页通常在前几页，我们可以限制提取范围
+            // 默认提取前5页
+            int startPage = 1;
+            int endPage = Math.min(document.getNumberOfPages(), 5);
+            
+            // 根据请求中的pageRange参数设置页面范围
+            if (processDTO != null && processDTO.getPageRange() != null) {
+                int requestedStartPage = processDTO.getPageRange().getStart();
+                int requestedEndPage = processDTO.getPageRange().getEnd();
+                
+                // 验证页面范围的有效性
+                if (requestedStartPage > 0 && requestedEndPage >= requestedStartPage 
+                    && requestedEndPage <= document.getNumberOfPages()) {
+                    startPage = requestedStartPage;
+                    endPage = requestedEndPage;
+                    log.info("使用指定的页面范围: {} - {}，文档总页数: {}", 
+                             startPage, endPage, document.getNumberOfPages());
+                } else {
+                    log.warn("请求的页面范围无效: {} - {}，文档总页数: {}，将使用默认范围: 1-5", 
+                             requestedStartPage, requestedEndPage, document.getNumberOfPages());
+                }
+            } else {
+                log.info("未指定页面范围，使用默认范围: 1-5");
+            }
+            
+            stripper.setStartPage(startPage);
+            stripper.setEndPage(endPage);
+            
+            String text = stripper.getText(document);
+            log.info("提取的文本长度: {} 字符，来自页面 {}-{}", text.length(), startPage, endPage);
+            
+            return text;
+        }
     }
     
     /**
-     * 从文件中提取文本内容
+     * 使用AI从目录文本提取知识点结构
+     * 这个方法针对目录页进行优化
      */
-    private String extractTextFromFile(MultipartFile file) throws IOException {
-        String fileName = file.getOriginalFilename();
-        if (fileName == null) {
-            throw new ApiException(ApiError.PARAM_ERROR);
-        }
-        
-        // 根据文件扩展名选择不同的解析方法
-        if (fileName.toLowerCase().endsWith(".pdf")) {
-            try (PDDocument document = PDDocument.load(file.getInputStream())) {
-                PDFTextStripper stripper = new PDFTextStripper();
-                return stripper.getText(document);
-            }
-        } else if (fileName.toLowerCase().endsWith(".docx")) {
-            try (XWPFDocument document = new XWPFDocument(file.getInputStream())) {
-                XWPFWordExtractor extractor = new XWPFWordExtractor(document);
-                return extractor.getText();
-            }
-        } else if (fileName.toLowerCase().endsWith(".txt")) {
-            return new String(file.getBytes());
-        } else {
-            throw new ApiException(ApiError.FILE_TYPE_NOT_SUPPORTED);
-        }
-    }
-    
-    /**
-     * 使用AI提取知识点结构
-     */
-    private List<KnowledgeNodeVO> extractKnowledgeStructure(String textContent, DocumentProcessDTO processDTO) {
+    private List<KnowledgeNodeVO> extractKnowledgeStructureFromCatalog(String catalogText, DocumentProcessDTO processDTO) {
         try {
-            // 限制文本长度，防止超出模型的token限制
-            String truncatedText = truncateText(textContent, 10000); // 限制最多约10000字符
+            // 构建目录页分析提示词，注入教材类型、年级等信息以提高分析准确性
+            StringBuilder promptBuilder = new StringBuilder();
+            promptBuilder.append("教材类型：").append(processDTO.getTextbookType() != null ? processDTO.getTextbookType() : "未知");
+            promptBuilder.append("\n年级：").append(processDTO.getGrade() != null ? processDTO.getGrade() : "未知");
+            promptBuilder.append("\n学期：").append(processDTO.getSemester() != null ? processDTO.getSemester() : "未知");
+            promptBuilder.append("\n\n目录内容：\n").append(catalogText);
             
-            // 构建提示词
-            String prompt = promptService.buildDocumentAnalysisPrompt(truncatedText, processDTO.getAnalysisDepth());
-            log.info("正在使用DeepSeek提取知识点结构，文本长度: {}", truncatedText.length());
+            String prompt = promptService.buildDocumentAnalysisPrompt(promptBuilder.toString(), processDTO.getAnalysisDepth());
+            log.info("正在分析教材目录页，教材类型：{}，年级：{}，文本长度: {}", 
+                    processDTO.getTextbookType(), 
+                    processDTO.getGrade(), 
+                    catalogText.length());
             
-            // 使用DeepSeek模型分析文本内容
+            // 使用DeepSeek模型分析目录内容
             Response<AiMessage> response = deepseekV3ChatLanguageModel.generate(UserMessage.from(prompt));
             String jsonResult = response.content().text();
             
@@ -346,103 +339,14 @@ public class DocumentProcessService {
                 );
                 return knowledgeNodes;
             } catch (Exception e) {
-                log.error("解析AI返回的知识点结构失败，将使用示例数据", e);
-                // 如果解析失败，返回示例数据
-                return createSampleKnowledgeStructure();
+                log.error("解析AI返回的知识点结构失败", e);
+                // 如果解析失败，返回空数据
+                return new ArrayList<>();
             }
         } catch (Exception e) {
             log.error("AI提取知识点结构失败", e);
             throw new ApiException(ApiError.SYSTEM_ERROR);
         }
-    }
-    
-    /**
-     * 限制文本长度，保留开头和结尾的内容
-     */
-    private String truncateText(String text, int maxLength) {
-        if (text.length() <= maxLength) {
-            return text;
-        }
-        
-        int halfLength = maxLength / 2;
-        return text.substring(0, halfLength) + 
-               "\n...[内容已省略]...\n" + 
-               text.substring(text.length() - halfLength);
-    }
-    
-    /**
-     * 创建示例知识点结构（当AI分析失败时使用）
-     */
-    private List<KnowledgeNodeVO> createSampleKnowledgeStructure() {
-        List<KnowledgeNodeVO> result = new ArrayList<>();
-        
-        // 创建一级知识点
-        KnowledgeNodeVO chapter1 = new KnowledgeNodeVO();
-        chapter1.setId(UUID.randomUUID().toString());
-        chapter1.setTitle("第一章 基础知识");
-        chapter1.setDescription("本章介绍了该学科的基础概念和理论框架");
-        chapter1.setLevel(1);
-        chapter1.setParentId(null);
-        chapter1.setKeywords(Arrays.asList("基础", "概念", "框架"));
-        chapter1.setSummary("这是第一章的内容摘要，介绍了学科基础...");
-        
-        // 创建二级知识点
-        List<KnowledgeNodeVO> chapter1Children = new ArrayList<>();
-        
-        KnowledgeNodeVO section1 = new KnowledgeNodeVO();
-        section1.setId(UUID.randomUUID().toString());
-        section1.setTitle("1.1 学科发展历史");
-        section1.setDescription("介绍学科的起源和发展历程");
-        section1.setLevel(2);
-        section1.setParentId(chapter1.getId());
-        section1.setKeywords(Arrays.asList("历史", "起源", "发展"));
-        section1.setSummary("这是1.1节的内容摘要，描述了学科的发展历程...");
-        
-        KnowledgeNodeVO section2 = new KnowledgeNodeVO();
-        section2.setId(UUID.randomUUID().toString());
-        section2.setTitle("1.2 基本概念");
-        section2.setDescription("讲解学科中的核心概念和术语");
-        section2.setLevel(2);
-        section2.setParentId(chapter1.getId());
-        section2.setKeywords(Arrays.asList("概念", "术语", "定义"));
-        section2.setSummary("这是1.2节的内容摘要，解释了核心概念...");
-        
-        // 为第二节添加三级知识点
-        List<KnowledgeNodeVO> section2Children = new ArrayList<>();
-        
-        KnowledgeNodeVO subsection1 = new KnowledgeNodeVO();
-        subsection1.setId(UUID.randomUUID().toString());
-        subsection1.setTitle("1.2.1 基本术语");
-        subsection1.setDescription("学科中常用术语的定义和解释");
-        subsection1.setLevel(3);
-        subsection1.setParentId(section2.getId());
-        subsection1.setKeywords(Arrays.asList("术语", "定义", "解释"));
-        subsection1.setSummary("这是1.2.1节的内容摘要，列举了基本术语...");
-        
-        section2Children.add(subsection1);
-        section2.setChildren(section2Children);
-        
-        // 将二级知识点添加到一级知识点
-        chapter1Children.add(section1);
-        chapter1Children.add(section2);
-        chapter1.setChildren(chapter1Children);
-        
-        // 创建第二章
-        KnowledgeNodeVO chapter2 = new KnowledgeNodeVO();
-        chapter2.setId(UUID.randomUUID().toString());
-        chapter2.setTitle("第二章 进阶理论");
-        chapter2.setDescription("本章介绍了该学科的进阶理论和应用方法");
-        chapter2.setLevel(1);
-        chapter2.setParentId(null);
-        chapter2.setKeywords(Arrays.asList("进阶", "理论", "应用"));
-        chapter2.setSummary("这是第二章的内容摘要，深入探讨了学科理论...");
-        chapter2.setChildren(new ArrayList<>());
-        
-        // 将所有章节添加到结果中
-        result.add(chapter1);
-        result.add(chapter2);
-        
-        return result;
     }
     
     /**
@@ -469,7 +373,7 @@ public class DocumentProcessService {
         // 使用title作为知识点名称
         addKnowledgeDTO.setName(node.getTitle());
         // 设置标准学科分类
-        addKnowledgeDTO.setSubject("自动导入");
+        addKnowledgeDTO.setSubject("教材目录");
         // 设置层级
         addKnowledgeDTO.setLevel(node.getLevel());
         // 设置父节点ID
@@ -489,13 +393,10 @@ public class DocumentProcessService {
         if (node.getDescription() != null && !node.getDescription().isEmpty()) {
             contentBuilder.append(node.getDescription());
         } 
-        // 如果有摘要，且与描述不同，则添加摘要作为补充
-        if (node.getSummary() != null && !node.getSummary().isEmpty() 
-                && (node.getDescription() == null || !node.getSummary().equals(node.getDescription()))) {
-            if (contentBuilder.length() > 0) {
-                contentBuilder.append("\n\n概要：\n");
-            }
-            contentBuilder.append(node.getSummary());
+        
+        // 如果内容为空，则使用标题作为内容
+        if (contentBuilder.length() == 0) {
+            contentBuilder.append("来自教材目录: ").append(node.getTitle());
         }
         
         // 设置最终内容
