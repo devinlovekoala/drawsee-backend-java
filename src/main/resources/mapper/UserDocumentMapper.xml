@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.yifan.drawsee.mapper.UserDocumentMapper">
+    
+    <!-- 基础列 -->
+    <sql id="Base_Column_List">
+        id, uuid, user_id, document_type, title, description, file_url, object_path, 
+        file_size, tags, created_at, updated_at, is_deleted
+    </sql>
+    
+    <!-- 插入用户文档 -->
+    <insert id="insert" parameterType="cn.yifan.drawsee.pojo.entity.UserDocument" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_document (
+            uuid, user_id, document_type, title, description, file_url, 
+            object_path, file_size, tags, created_at, updated_at, is_deleted
+        ) VALUES (
+            #{uuid}, #{userId}, #{documentType}, #{title}, #{description}, #{fileUrl}, 
+            #{objectPath}, #{fileSize}, #{tags}, #{createdAt}, #{updatedAt}, #{isDeleted}
+        )
+    </insert>
+    
+    <!-- 根据ID查询用户文档 -->
+    <select id="getById" resultType="cn.yifan.drawsee.pojo.entity.UserDocument">
+        SELECT <include refid="Base_Column_List"/> 
+        FROM user_document 
+        WHERE id = #{id} AND is_deleted = 0
+    </select>
+    
+    <!-- 根据UUID查询用户文档 -->
+    <select id="getByUuid" resultType="cn.yifan.drawsee.pojo.entity.UserDocument">
+        SELECT <include refid="Base_Column_List"/> 
+        FROM user_document 
+        WHERE uuid = #{uuid} AND is_deleted = 0
+    </select>
+    
+    <!-- 更新用户文档 -->
+    <update id="update" parameterType="cn.yifan.drawsee.pojo.entity.UserDocument">
+        UPDATE user_document
+        <set>
+            <if test="title != null">title = #{title},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="fileUrl != null">file_url = #{fileUrl},</if>
+            <if test="objectPath != null">object_path = #{objectPath},</if>
+            <if test="fileSize != null">file_size = #{fileSize},</if>
+            <if test="tags != null">tags = #{tags},</if>
+            updated_at = NOW()
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <!-- 逻辑删除用户文档 -->
+    <update id="delete">
+        UPDATE user_document 
+        SET is_deleted = 1, updated_at = NOW() 
+        WHERE id = #{id}
+    </update>
+    
+    <!-- 获取用户的所有文档 -->
+    <select id="getByUserId" resultType="cn.yifan.drawsee.pojo.entity.UserDocument">
+        SELECT <include refid="Base_Column_List"/> 
+        FROM user_document 
+        WHERE user_id = #{userId} AND is_deleted = 0
+        ORDER BY created_at DESC
+    </select>
+    
+    <!-- 根据文档类型获取用户文档 -->
+    <select id="getByUserIdAndType" resultType="cn.yifan.drawsee.pojo.entity.UserDocument">
+        SELECT <include refid="Base_Column_List"/> 
+        FROM user_document 
+        WHERE user_id = #{userId} AND document_type = #{documentType} AND is_deleted = 0
+        ORDER BY created_at DESC
+    </select>
+    
+</mapper> 

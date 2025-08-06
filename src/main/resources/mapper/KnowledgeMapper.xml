@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.yifan.drawsee.mapper.KnowledgeMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="cn.yifan.drawsee.pojo.entity.Knowledge">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="subject" property="subject"/>
+        <result column="aliases" property="aliases" typeHandler="cn.yifan.drawsee.typehandler.JsonTypeHandler"/>
+        <result column="level" property="level"/>
+        <result column="parent_id" property="parentId"/>
+        <result column="children_ids" property="childrenIds" typeHandler="cn.yifan.drawsee.typehandler.JsonTypeHandler"/>
+        <result column="knowledge_base_id" property="knowledgeBaseId"/>
+        <result column="creator_id" property="creatorId"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="is_deleted" property="isDeleted"/>
+    </resultMap>
+
+    <!-- 所有列 -->
+    <sql id="Base_Column_List">
+        id, name, subject, aliases, level, parent_id, children_ids, 
+        knowledge_base_id, creator_id, created_at, updated_at, is_deleted
+    </sql>
+
+    <!-- 插入知识点 -->
+    <insert id="insert" parameterType="cn.yifan.drawsee.pojo.entity.Knowledge">
+        INSERT INTO knowledge (
+            id, name, subject, aliases, level, parent_id, children_ids,
+            knowledge_base_id, creator_id, created_at, updated_at, is_deleted
+        ) VALUES (
+            #{id}, #{name}, #{subject}, 
+            #{aliases, typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},
+            #{level}, #{parentId}, 
+            #{childrenIds, typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},
+            #{knowledgeBaseId}, #{creatorId}, #{createdAt}, #{updatedAt}, #{isDeleted}
+        )
+    </insert>
+
+    <!-- 根据ID查询 -->
+    <select id="getById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM knowledge
+        WHERE id = #{id}
+    </select>
+
+    <!-- 根据ID删除（物理删除） -->
+    <delete id="deleteById">
+        DELETE FROM knowledge WHERE id = #{id}
+    </delete>
+
+    <!-- 更新知识点 -->
+    <update id="update" parameterType="cn.yifan.drawsee.pojo.entity.Knowledge">
+        UPDATE knowledge
+        SET name = #{name},
+            subject = #{subject},
+            aliases = #{aliases, typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},
+            level = #{level},
+            parent_id = #{parentId},
+            children_ids = #{childrenIds, typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},
+            knowledge_base_id = #{knowledgeBaseId},
+            creator_id = #{creatorId},
+            updated_at = #{updatedAt},
+            is_deleted = #{isDeleted}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 根据名称查询 -->
+    <select id="getByName" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM knowledge
+        WHERE name = #{name} AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <!-- 根据学科查询所有知识点 -->
+    <select id="getBySubject" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM knowledge
+        WHERE subject = #{subject} AND is_deleted = #{isDeleted}
+    </select>
+
+    <!-- 根据学科和名称查询 -->
+    <select id="getBySubjectAndName" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM knowledge
+        WHERE subject = #{subject} AND name = #{name} AND is_deleted = #{isDeleted}
+        LIMIT 1
+    </select>
+
+    <!-- 根据知识库ID查询知识点列表 -->
+    <select id="getByKnowledgeBaseId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM knowledge
+        WHERE knowledge_base_id = #{knowledgeBaseId} AND is_deleted = #{isDeleted}
+    </select>
+
+    <!-- 根据创建者ID查询知识点列表 -->
+    <select id="getByCreatorId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM knowledge
+        WHERE creator_id = #{creatorId} AND is_deleted = #{isDeleted}
+    </select>
+
+    <!-- 查询所有知识点 -->
+    <select id="getAll" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM knowledge
+        WHERE is_deleted = #{isDeleted}
+    </select>
+
+    <!-- 根据父知识点ID查询子知识点列表 -->
+    <select id="getByParentId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM knowledge
+        WHERE parent_id = #{parentId} AND is_deleted = #{isDeleted}
+    </select>
+
+    <!-- 逻辑删除知识点 -->
+    <update id="logicDelete">
+        UPDATE knowledge
+        SET is_deleted = 1, updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+</mapper>

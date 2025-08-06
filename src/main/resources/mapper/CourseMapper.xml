@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.yifan.drawsee.mapper.CourseMapper">
+
+    <resultMap id="CourseMap" type="cn.yifan.drawsee.pojo.entity.Course">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="code" property="code"/>
+        <result column="class_code" property="classCode"/>
+        <result column="description" property="description"/>
+        <result column="subject" property="subject"/>
+        <result column="topics" property="topics" typeHandler="cn.yifan.drawsee.typehandler.JsonTypeHandler"/>
+        <result column="creator_id" property="creatorId"/>
+        <result column="creator_role" property="creatorRole"/>
+        <result column="student_ids" property="studentIds" typeHandler="cn.yifan.drawsee.typehandler.JsonTypeHandler"/>
+        <result column="knowledge_base_ids" property="knowledgeBaseIds" typeHandler="cn.yifan.drawsee.typehandler.JsonTypeHandler"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="is_deleted" property="isDeleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, name, code, class_code, description, subject, topics, creator_id, creator_role,
+        student_ids, knowledge_base_ids, created_at, updated_at, is_deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.yifan.drawsee.pojo.entity.Course">
+        INSERT INTO course (
+            id, name, code, class_code, description, subject, topics, creator_id, creator_role,
+            student_ids, knowledge_base_ids, created_at, updated_at, is_deleted
+        ) VALUES (
+            #{id}, #{name}, #{code}, #{classCode}, #{description}, #{subject}, 
+            #{topics, typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler}, 
+            #{creatorId}, #{creatorRole}, 
+            #{studentIds, typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler}, 
+            #{knowledgeBaseIds, typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler}, 
+            #{createdAt}, #{updatedAt}, #{isDeleted}
+        )
+    </insert>
+
+    <update id="update" parameterType="cn.yifan.drawsee.pojo.entity.Course">
+        UPDATE course
+        SET name = #{name},
+            code = #{code},
+            class_code = #{classCode},
+            description = #{description},
+            subject = #{subject},
+            topics = #{topics, typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},
+            creator_id = #{creatorId},
+            creator_role = #{creatorRole},
+            student_ids = #{studentIds, typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},
+            knowledge_base_ids = #{knowledgeBaseIds, typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},
+            updated_at = #{updatedAt},
+            is_deleted = #{isDeleted}
+        WHERE id = #{id}
+    </update>
+
+    <select id="getById" resultMap="CourseMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM course
+        WHERE id = #{id}
+    </select>
+
+    <select id="getByName" resultMap="CourseMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM course
+        WHERE name = #{name} AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="getByClassCode" resultMap="CourseMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM course
+        WHERE class_code = #{classCode} AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="getByCode" resultMap="CourseMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM course
+        WHERE code = #{code} AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="getByCreatorId" resultMap="CourseMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM course
+        WHERE creator_id = #{creatorId} AND is_deleted = #{isDeleted}
+    </select>
+
+    <select id="getByStudentId" resultMap="CourseMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM course
+        WHERE JSON_CONTAINS(student_ids, CAST(#{studentId} AS JSON)) AND is_deleted = #{isDeleted}
+    </select>
+
+    <select id="getAll" resultMap="CourseMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM course
+        WHERE is_deleted = #{isDeleted}
+    </select>
+
+    <select id="getBySubject" resultMap="CourseMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM course
+        WHERE subject = #{subject} AND is_deleted = #{isDeleted}
+    </select>
+
+    <select id="getByCreatorRole" resultMap="CourseMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM course
+        WHERE creator_role = #{creatorRole} AND is_deleted = #{isDeleted}
+    </select>
+
+    <select id="getBySubjectAndCreatorRole" resultMap="CourseMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM course
+        WHERE subject = #{subject} AND creator_role = #{creatorRole} AND is_deleted = #{isDeleted}
+    </select>
+
+    <select id="getPage" resultMap="CourseMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM course
+        WHERE is_deleted = #{isDeleted}
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="count" resultType="int">
+        SELECT COUNT(*)
+        FROM course
+        WHERE is_deleted = #{isDeleted}
+    </select>
+
+    <select id="countBySubject" resultType="int">
+        SELECT COUNT(*)
+        FROM course
+        WHERE subject = #{subject} AND is_deleted = #{isDeleted}
+    </select>
+
+    <select id="countByCreatorRole" resultType="int">
+        SELECT COUNT(*)
+        FROM course
+        WHERE creator_role = #{creatorRole} AND is_deleted = #{isDeleted}
+    </select>
+
+    <select id="countBySubjectAndCreatorRole" resultType="int">
+        SELECT COUNT(*)
+        FROM course
+        WHERE subject = #{subject} AND creator_role = #{creatorRole} AND is_deleted = #{isDeleted}
+    </select>
+
+    <update id="addStudent">
+        UPDATE course
+        SET student_ids = JSON_ARRAY_APPEND(
+            CASE WHEN student_ids IS NULL THEN JSON_ARRAY() ELSE student_ids END,
+            '$', #{studentId}
+        ),
+        updated_at = NOW()
+        WHERE id = #{courseId} AND NOT JSON_CONTAINS(student_ids, CAST(#{studentId} AS JSON))
+    </update>
+
+    <update id="removeStudent">
+        UPDATE course
+        SET student_ids = JSON_REMOVE(
+            student_ids,
+            JSON_UNQUOTE(JSON_SEARCH(student_ids, 'one', #{studentId}))
+        ),
+        updated_at = NOW()
+        WHERE id = #{courseId} AND JSON_CONTAINS(student_ids, CAST(#{studentId} AS JSON))
+    </update>
+
+    <update id="addKnowledgeBase">
+        UPDATE course
+        SET knowledge_base_ids = JSON_ARRAY_APPEND(
+            CASE WHEN knowledge_base_ids IS NULL THEN JSON_ARRAY() ELSE knowledge_base_ids END,
+            '$', #{knowledgeBaseId}
+        ),
+        updated_at = NOW()
+        WHERE id = #{courseId} AND NOT JSON_CONTAINS(knowledge_base_ids, JSON_QUOTE(#{knowledgeBaseId}))
+    </update>
+
+    <update id="removeKnowledgeBase">
+        UPDATE course
+        SET knowledge_base_ids = JSON_REMOVE(
+            knowledge_base_ids,
+            JSON_UNQUOTE(JSON_SEARCH(knowledge_base_ids, 'one', #{knowledgeBaseId}))
+        ),
+        updated_at = NOW()
+        WHERE id = #{courseId} AND JSON_CONTAINS(knowledge_base_ids, JSON_QUOTE(#{knowledgeBaseId}))
+    </update>
+</mapper> 
