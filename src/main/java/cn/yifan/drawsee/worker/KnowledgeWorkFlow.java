@@ -77,13 +77,17 @@ public class KnowledgeWorkFlow extends WorkFlow {
      * 刷新全局知识点列表
      */
     private void refreshGlobalKnowledgePoints() {
-        List<Knowledge> knowledgeList = knowledgeMapper.getAll(false);
-        List<String> knowledgePoints = knowledgeList.stream().map(Knowledge::getName).toList();
-        RList<String> rList = redissonClient.getList(RedisKey.CACHE_PREFIX + "knowledge-points");
-        rList.clear();
-        rList.addAll(knowledgePoints);
-        // 清除过期时间，设置为永不过期
-        rList.clearExpire();
+        try {
+            List<Knowledge> knowledgeList = knowledgeMapper.getAll(false);
+            List<String> knowledgePoints = knowledgeList.stream().map(Knowledge::getName).toList();
+            RList<String> rList = redissonClient.getList(RedisKey.CACHE_PREFIX + "knowledge-points");
+            rList.clear();
+            rList.addAll(knowledgePoints);
+            // 清除过期时间，设置为永不过期
+            rList.clearExpire();
+        } catch (Exception e) {
+            log.warn("刷新全局知识点列表失败，可能是数据库表不存在: error={}", e.getMessage());
+        }
     }
 
     @Override
@@ -112,8 +116,13 @@ public class KnowledgeWorkFlow extends WorkFlow {
         // 如果用户没有加入任何课程或知识库，则使用全局知识点列表
         if (knowledgePoints.isEmpty()) {
             log.info("无法获取到任何关联知识点，使用全局知识点列表");
-            RList<String> rList = redissonClient.getList(RedisKey.CACHE_PREFIX + "knowledge-points");
-            knowledgePoints = rList.stream().toList();
+            try {
+                RList<String> rList = redissonClient.getList(RedisKey.CACHE_PREFIX + "knowledge-points");
+                knowledgePoints = rList.stream().toList();
+            } catch (Exception e) {
+                log.warn("获取全局知识点列表失败: error={}", e.getMessage());
+                knowledgePoints = new ArrayList<>();
+            }
         }
         
         List<String> relatedKnowledgePoints = aiService.getRelatedKnowledgePoints(knowledgePoints, aiTaskMessage.getPrompt(), workContext.getTokens());
@@ -148,43 +157,55 @@ public class KnowledgeWorkFlow extends WorkFlow {
         Set<String> knowledgePoints = new HashSet<>();
         
         // 从用户加入的课程中获取知识库
-        List<Course> userCourses = courseMapper.getByStudentId(userId, false);
-        for (Course course : userCourses) {
-            List<String> knowledgeBaseIds = course.getKnowledgeBaseIds();
-            if (knowledgeBaseIds != null && !knowledgeBaseIds.isEmpty()) {
-                for (String knowledgeBaseId : knowledgeBaseIds) {
-                    KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
-                    if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
-                        // 只使用已发布的知识库，或者用户是知识库创建者的知识库
-                        if (knowledgeBase.getIsPublished() || knowledgeBase.getCreatorId().equals(userId)) {
-                            addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
-                        } else {
-                            log.info("用户{}跳过未发布的知识库: {}", userId, knowledgeBase.getName());
+        try {
+            List<Course> userCourses = courseMapper.getByStudentId(userId, false);
+            for (Course course : userCourses) {
+                List<String> knowledgeBaseIds = course.getKnowledgeBaseIds();
+                if (knowledgeBaseIds != null && !knowledgeBaseIds.isEmpty()) {
+                    for (String knowledgeBaseId : knowledgeBaseIds) {
+                        KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
+                        if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
+                            // 只使用已发布的知识库，或者用户是知识库创建者的知识库
+                            if (knowledgeBase.getIsPublished() || knowledgeBase.getCreatorId().equals(userId)) {
+                                addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
+                            } else {
+                                log.info("用户{}跳过未发布的知识库: {}", userId, knowledgeBase.getName());
+                            }
                         }
                     }
                 }
             }
+        } catch (Exception e) {
+            log.warn("查询用户课程失败，可能是数据库表不存在: userId={}, error={}", userId, e.getMessage());
         }
         
         // 从用户直接加入的知识库中获取知识点
-        List<KnowledgeBase> userKnowledgeBases = knowledgeBaseMapper.getByMemberId(userId, false);
-        for (KnowledgeBase knowledgeBase : userKnowledgeBases) {
-            if (!knowledgeBase.getIsDeleted()) {
-                // 只使用已发布的知识库，或者用户是知识库创建者的知识库
-                if (knowledgeBase.getIsPublished() || knowledgeBase.getCreatorId().equals(userId)) {
-                    addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
-                } else {
-                    log.info("用户{}跳过未发布的知识库: {}", userId, knowledgeBase.getName());
+        try {
+            List<KnowledgeBase> userKnowledgeBases = knowledgeBaseMapper.getByMemberId(userId, false);
+            for (KnowledgeBase knowledgeBase : userKnowledgeBases) {
+                if (!knowledgeBase.getIsDeleted()) {
+                    // 只使用已发布的知识库，或者用户是知识库创建者的知识库
+                    if (knowledgeBase.getIsPublished() || knowledgeBase.getCreatorId().equals(userId)) {
+                        addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
+                    } else {
+                        log.info("用户{}跳过未发布的知识库: {}", userId, knowledgeBase.getName());
+                    }
                 }
             }
+        } catch (Exception e) {
+            log.warn("查询用户知识库失败，可能是数据库表不存在: userId={}, error={}", userId, e.getMessage());
         }
         
         // 添加所有公开发布的知识库中的知识点
-        List<KnowledgeBase> publishedBases = knowledgeBaseMapper.getByIsPublishedTrue();
-        for (KnowledgeBase knowledgeBase : publishedBases) {
-            if (!knowledgeBase.getIsDeleted()) {
-                addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
+        try {
+            List<KnowledgeBase> publishedBases = knowledgeBaseMapper.getByIsPublishedTrue();
+            for (KnowledgeBase knowledgeBase : publishedBases) {
+                if (!knowledgeBase.getIsDeleted()) {
+                    addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
+                }
             }
+        } catch (Exception e) {
+            log.warn("查询已发布知识库失败，可能是数据库表不存在: error={}", e.getMessage());
         }
         
         return new ArrayList<>(knowledgePoints);
@@ -196,10 +217,14 @@ public class KnowledgeWorkFlow extends WorkFlow {
      * @param knowledgePoints 知识点集合
      */
     private void addKnowledgePointsFromBase(KnowledgeBase knowledgeBase, Set<String> knowledgePoints) {
-        // 从知识库中获取所有知识点
-        List<Knowledge> knowledgeList = knowledgeMapper.getByKnowledgeBaseId(knowledgeBase.getId(), false);
-        for (Knowledge knowledge : knowledgeList) {
-            knowledgePoints.add(knowledge.getName());
+        try {
+            // 从知识库中获取所有知识点
+            List<Knowledge> knowledgeList = knowledgeMapper.getByKnowledgeBaseId(knowledgeBase.getId(), false);
+            for (Knowledge knowledge : knowledgeList) {
+                knowledgePoints.add(knowledge.getName());
+            }
+        } catch (Exception e) {
+            log.warn("从知识库获取知识点失败: knowledgeBaseId={}, error={}", knowledgeBase.getId(), e.getMessage());
         }
     }
     
@@ -211,39 +236,43 @@ public class KnowledgeWorkFlow extends WorkFlow {
     private List<String> getClassRelatedKnowledgePoints(String classId) {
         Set<String> knowledgePoints = new HashSet<>();
         
-        // 通过班级ID获取班级信息
-        cn.yifan.drawsee.pojo.entity.Class clazz = classMapper.getById(Long.parseLong(classId));
-        if (clazz == null || clazz.getIsDeleted()) {
-            log.warn("班级不存在或已删除: classId={}", classId);
-            return new ArrayList<>();
-        }
-        
-        // 获取该班级对应的课程
-        Course course = courseMapper.getByClassCode(clazz.getClassCode());
-        if (course == null) {
-            log.warn("没有找到班级对应的课程: classCode={}", clazz.getClassCode());
-            return new ArrayList<>();
-        }
-        
-        // 获取课程关联的知识库
-        List<String> knowledgeBaseIds = course.getKnowledgeBaseIds();
-        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
-            log.info("课程没有关联知识库: courseId={}, classCode={}", course.getId(), course.getClassCode());
-            return new ArrayList<>();
-        }
-        
-        // 从课程关联的知识库中获取知识点
-        for (String knowledgeBaseId : knowledgeBaseIds) {
-            KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
-            if (knowledgeBase != null && !knowledgeBase.getIsDeleted() && knowledgeBase.getIsPublished()) {
-                addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
+        try {
+            // 通过班级ID获取班级信息
+            cn.yifan.drawsee.pojo.entity.Class clazz = classMapper.getById(Long.parseLong(classId));
+            if (clazz == null || clazz.getIsDeleted()) {
+                log.warn("班级不存在或已删除: classId={}", classId);
+                return new ArrayList<>();
             }
-        }
-        
-        if (knowledgePoints.isEmpty()) {
-            log.info("班级相关知识库中未找到知识点: classId={}", classId);
-        } else {
-            log.info("从班级相关知识库中找到{}个知识点: classId={}", knowledgePoints.size(), classId);
+            
+            // 获取该班级对应的课程
+            Course course = courseMapper.getByClassCode(clazz.getClassCode());
+            if (course == null) {
+                log.warn("没有找到班级对应的课程: classCode={}", clazz.getClassCode());
+                return new ArrayList<>();
+            }
+            
+            // 获取课程关联的知识库
+            List<String> knowledgeBaseIds = course.getKnowledgeBaseIds();
+            if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+                log.info("课程没有关联知识库: courseId={}, classCode={}", course.getId(), course.getClassCode());
+                return new ArrayList<>();
+            }
+            
+            // 从课程关联的知识库中获取知识点
+            for (String knowledgeBaseId : knowledgeBaseIds) {
+                KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
+                if (knowledgeBase != null && !knowledgeBase.getIsDeleted() && knowledgeBase.getIsPublished()) {
+                    addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
+                }
+            }
+            
+            if (knowledgePoints.isEmpty()) {
+                log.info("班级相关知识库中未找到知识点: classId={}", classId);
+            } else {
+                log.info("从班级相关知识库中找到{}个知识点: classId={}", knowledgePoints.size(), classId);
+            }
+        } catch (Exception e) {
+            log.warn("获取班级相关知识点失败: classId={}, error={}", classId, e.getMessage());
         }
         
         return new ArrayList<>(knowledgePoints);
