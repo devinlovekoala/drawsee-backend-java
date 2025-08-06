@@ -1,6 +1,5 @@
 package cn.yifan.drawsee.service.business;
 
-import cn.dev33.satoken.stp.StpUtil;
 import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
 import cn.yifan.drawsee.mapper.AdminMapper;
@@ -58,11 +57,11 @@ public class AdminService {
     public void register(AdminRegisterDTO adminRegisterDTO) {
         User user = userMapper.getById(adminRegisterDTO.getUserId());
         if (user == null) {
-            throw new ApiException(ApiError.USER_NOT_EXIST);
+            throw new ApiException(ApiError.USER_NOT_EXIST, "文件不能为空");
         }
         Admin admin = adminMapper.getByUserId(user.getId());
         if (admin != null) {
-            throw new ApiException(ApiError.ADMIN_HAD_EXISTED);
+            throw new ApiException(ApiError.ADMIN_HAD_EXISTED, "文件不能为空");
         }
         admin = new Admin(adminRegisterDTO.getUserId());
         adminMapper.insert(admin);
@@ -125,10 +124,10 @@ public class AdminService {
     public void sendInvitationCode(Long id, SendInvitationCodeDTO sendInvitationCodeDTO) {
         InvitationCode invitationCode = invitationCodeMapper.getById(id);
         if (invitationCode == null) {
-            throw new ApiException(ApiError.INVITATION_CODE_NOT_EXISTED);
+            throw new ApiException(ApiError.INVITATION_CODE_NOT_EXISTED, "文件不能为空");
         }
         if (!invitationCode.getIsActive()) {
-            throw new ApiException(ApiError.INVITATION_CODE_ALREADY_USED);
+            throw new ApiException(ApiError.INVITATION_CODE_ALREADY_USED, "文件不能为空");
         }
         // 发送邮件
         try {
@@ -142,7 +141,7 @@ public class AdminService {
             invitationCode.setLastSentAt(new Timestamp(System.currentTimeMillis()));
             invitationCodeMapper.update(invitationCode);
         } catch (MessagingException e) {
-            throw new ApiException(ApiError.INVITATION_CODE_SEND_FAILED);
+            throw new ApiException(ApiError.INVITATION_CODE_SEND_FAILED, "文件不能为空");
         }
     }
 }

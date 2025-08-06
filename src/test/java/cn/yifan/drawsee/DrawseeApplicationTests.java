@@ -1,7 +1,6 @@
 package cn.yifan.drawsee;
 
 import cn.yifan.drawsee.pojo.rabbit.AnimationTaskMessage;
-import cn.yifan.drawsee.repository.KnowledgeRepository;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.ApiService;
 import cn.yifan.drawsee.service.base.PromptService;
@@ -16,9 +15,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
 class DrawseeApplicationTests {
-
-    @Autowired
-    private KnowledgeRepository knowledgeRepository;
     @Autowired
     private AiService aiService;
     @Autowired

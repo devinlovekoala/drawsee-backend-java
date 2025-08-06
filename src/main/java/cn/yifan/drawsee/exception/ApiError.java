@@ -50,6 +50,7 @@ public enum ApiError {
 
     // 系统
     SYSTEM_ERROR(500, "系统错误"),
+    COMMON_ERROR(500, "操作失败"),
 
     // 权限
     NOT_LOGIN(401, "未登录"),
@@ -78,6 +79,8 @@ public enum ApiError {
     UPLOAD_FAILED(405701, "上传失败"),
     INVALID_BILIBILI_URL(405702, "无效的B站链接"),
     RESOURCE_ADD_FAILED(405703, "资源添加失败"),
+    RESOURCE_NOT_EXISTED(405704, "资源不存在"),
+    RESOURCE_NOT_IN_KNOWLEDGE_BASE(405705, "资源不属于该知识库"),
     
     // 课程相关错误
     COURSE_NOT_EXISTED(405801, "课程不存在"),
@@ -92,7 +95,20 @@ public enum ApiError {
     // Course related errors
     COURSE_NOT_FOUND(4001, "课程不存在"),
     NO_PERMISSION(4002, "没有权限"),
-    ALREADY_JOINED_COURSE(4003, "已经加入该课程");
+    ALREADY_JOINED_COURSE(4003, "已经加入该课程"),
+    
+    // RAG相关错误
+    RAG_NOT_ENABLED(5001, "RAG功能未启用"),
+    RAG_CONVERSION_FAILED(5002, "转换RAG知识库失败"),
+    RAG_KNOWLEDGE_CREATE_FAILED(5003, "创建RAG知识库失败"),
+
+    // RAGFlow相关错误
+    RAG_SERVICE_DISABLED(5101, "RAGFlow服务未启用"),
+    RAG_SERVICE_ERROR(5102, "RAGFlow服务错误"),
+    RAG_KNOWLEDGE_NOT_FOUND(5103, "RAGFlow知识库不存在"),
+    RAG_DOCUMENT_NOT_FOUND(5104, "RAGFlow文档不存在"),
+    RAG_UPLOAD_FAILED(5105, "RAGFlow文档上传失败"),
+    RAG_FILE_TYPE_NOT_SUPPORTED(5106, "RAGFlow不支持的文件类型");
 
     // 枚举项的参数
     private final Integer code;

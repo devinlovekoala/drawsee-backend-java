@@ -1,23 +1,22 @@
 package cn.yifan.drawsee.worker;
 
-import cn.dev33.satoken.stp.StpUtil;
 import cn.yifan.drawsee.constant.NodeTitle;
 import cn.yifan.drawsee.constant.NodeType;
 import cn.yifan.drawsee.constant.RedisKey;
 import cn.yifan.drawsee.mapper.AiTaskMapper;
 import cn.yifan.drawsee.mapper.ClassMapper;
 import cn.yifan.drawsee.mapper.ConversationMapper;
+import cn.yifan.drawsee.mapper.CourseMapper;
+import cn.yifan.drawsee.mapper.KnowledgeBaseMapper;
+import cn.yifan.drawsee.mapper.KnowledgeMapper;
 import cn.yifan.drawsee.mapper.NodeMapper;
 import cn.yifan.drawsee.mapper.UserMapper;
 import cn.yifan.drawsee.pojo.XYPosition;
+import cn.yifan.drawsee.pojo.entity.Course;
+import cn.yifan.drawsee.pojo.entity.Knowledge;
+import cn.yifan.drawsee.pojo.entity.KnowledgeBase;
 import cn.yifan.drawsee.pojo.entity.Node;
-import cn.yifan.drawsee.pojo.mongo.Course;
-import cn.yifan.drawsee.pojo.mongo.Knowledge;
-import cn.yifan.drawsee.pojo.mongo.KnowledgeBase;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
-import cn.yifan.drawsee.repository.CourseRepository;
-import cn.yifan.drawsee.repository.KnowledgeBaseRepository;
-import cn.yifan.drawsee.repository.KnowledgeRepository;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.StreamAiService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -36,17 +35,18 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @FileName KnowledgeWorkFlow
- * @Description
- * @Author yifan
- * @date 2025-03-09 13:35
+ * @Description 知识点分点AI工作流 - MySQL版本
+ * @Author devin
+ * @date 2025-04-15 15:40
  **/
 
 @Slf4j
 @Service
 public class KnowledgeWorkFlow extends WorkFlow {
 
-    private final CourseRepository courseRepository;
-    private final KnowledgeBaseRepository knowledgeBaseRepository;
+    private final CourseMapper courseMapper;
+    private final KnowledgeBaseMapper knowledgeBaseMapper;
+    private final KnowledgeMapper knowledgeMapper;
     private final ClassMapper classMapper;
 
     public KnowledgeWorkFlow(
@@ -54,18 +54,19 @@ public class KnowledgeWorkFlow extends WorkFlow {
         AiService aiService,
         StreamAiService streamAiService,
         RedissonClient redissonClient,
-        KnowledgeRepository knowledgeRepository,
         NodeMapper nodeMapper,
         ConversationMapper conversationMapper,
         AiTaskMapper aiTaskMapper,
         ObjectMapper objectMapper,
-        CourseRepository courseRepository,
-        KnowledgeBaseRepository knowledgeBaseRepository,
+        CourseMapper courseMapper,
+        KnowledgeBaseMapper knowledgeBaseMapper,
+        KnowledgeMapper knowledgeMapper,
         ClassMapper classMapper
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, knowledgeRepository, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
-        this.courseRepository = courseRepository;
-        this.knowledgeBaseRepository = knowledgeBaseRepository;
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        this.courseMapper = courseMapper;
+        this.knowledgeBaseMapper = knowledgeBaseMapper;
+        this.knowledgeMapper = knowledgeMapper;
         this.classMapper = classMapper;
         
         // 全局默认知识点列表 - 这里将保留用于通用模式
@@ -76,7 +77,7 @@ public class KnowledgeWorkFlow extends WorkFlow {
      * 刷新全局知识点列表
      */
     private void refreshGlobalKnowledgePoints() {
-        List<Knowledge> knowledgeList = knowledgeRepository.findAll();
+        List<Knowledge> knowledgeList = knowledgeMapper.getAll(false);
         List<String> knowledgePoints = knowledgeList.stream().map(Knowledge::getName).toList();
         RList<String> rList = redissonClient.getList(RedisKey.CACHE_PREFIX + "knowledge-points");
         rList.clear();
@@ -147,12 +148,12 @@ public class KnowledgeWorkFlow extends WorkFlow {
         Set<String> knowledgePoints = new HashSet<>();
         
         // 从用户加入的课程中获取知识库
-        List<Course> userCourses = courseRepository.findByStudentIdsContainingAndIsDeletedFalse(userId);
+        List<Course> userCourses = courseMapper.getByStudentId(userId, false);
         for (Course course : userCourses) {
             List<String> knowledgeBaseIds = course.getKnowledgeBaseIds();
             if (knowledgeBaseIds != null && !knowledgeBaseIds.isEmpty()) {
                 for (String knowledgeBaseId : knowledgeBaseIds) {
-                    KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+                    KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
                     if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
                         // 只使用已发布的知识库，或者用户是知识库创建者的知识库
                         if (knowledgeBase.getIsPublished() || knowledgeBase.getCreatorId().equals(userId)) {
@@ -166,7 +167,7 @@ public class KnowledgeWorkFlow extends WorkFlow {
         }
         
         // 从用户直接加入的知识库中获取知识点
-        List<KnowledgeBase> userKnowledgeBases = knowledgeBaseRepository.findByMembersContaining(userId);
+        List<KnowledgeBase> userKnowledgeBases = knowledgeBaseMapper.getByMemberId(userId, false);
         for (KnowledgeBase knowledgeBase : userKnowledgeBases) {
             if (!knowledgeBase.getIsDeleted()) {
                 // 只使用已发布的知识库，或者用户是知识库创建者的知识库
@@ -179,7 +180,7 @@ public class KnowledgeWorkFlow extends WorkFlow {
         }
         
         // 添加所有公开发布的知识库中的知识点
-        List<KnowledgeBase> publishedBases = knowledgeBaseRepository.findByIsPublishedTrue();
+        List<KnowledgeBase> publishedBases = knowledgeBaseMapper.getByIsPublishedTrue();
         for (KnowledgeBase knowledgeBase : publishedBases) {
             if (!knowledgeBase.getIsDeleted()) {
                 addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
@@ -195,14 +196,10 @@ public class KnowledgeWorkFlow extends WorkFlow {
      * @param knowledgePoints 知识点集合
      */
     private void addKnowledgePointsFromBase(KnowledgeBase knowledgeBase, Set<String> knowledgePoints) {
-        List<String> knowledgeIds = knowledgeBase.getKnowledgeIds();
-        if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
-            for (String knowledgeId : knowledgeIds) {
-                Knowledge knowledge = knowledgeRepository.findById(knowledgeId).orElse(null);
-                if (knowledge != null) {
-                    knowledgePoints.add(knowledge.getName());
-                }
-            }
+        // 从知识库中获取所有知识点
+        List<Knowledge> knowledgeList = knowledgeMapper.getByKnowledgeBaseId(knowledgeBase.getId(), false);
+        for (Knowledge knowledge : knowledgeList) {
+            knowledgePoints.add(knowledge.getName());
         }
     }
     
@@ -222,7 +219,7 @@ public class KnowledgeWorkFlow extends WorkFlow {
         }
         
         // 获取该班级对应的课程
-        Course course = courseRepository.findByClassCodeAndIsDeletedFalse(clazz.getClassCode());
+        Course course = courseMapper.getByClassCode(clazz.getClassCode());
         if (course == null) {
             log.warn("没有找到班级对应的课程: classCode={}", clazz.getClassCode());
             return new ArrayList<>();
@@ -237,7 +234,7 @@ public class KnowledgeWorkFlow extends WorkFlow {
         
         // 从课程关联的知识库中获取知识点
         for (String knowledgeBaseId : knowledgeBaseIds) {
-            KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+            KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
             if (knowledgeBase != null && !knowledgeBase.getIsDeleted() && knowledgeBase.getIsPublished()) {
                 addKnowledgePointsFromBase(knowledgeBase, knowledgePoints);
             }
@@ -246,7 +243,7 @@ public class KnowledgeWorkFlow extends WorkFlow {
         if (knowledgePoints.isEmpty()) {
             log.info("班级相关知识库中未找到知识点: classId={}", classId);
         } else {
-            log.info("从班级相关知识库中找到{}\u4e2a知识点: classId={}", knowledgePoints.size(), classId);
+            log.info("从班级相关知识库中找到{}个知识点: classId={}", knowledgePoints.size(), classId);
         }
         
         return new ArrayList<>(knowledgePoints);

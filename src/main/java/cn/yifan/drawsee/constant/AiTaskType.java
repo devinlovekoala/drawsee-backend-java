@@ -73,6 +73,16 @@ public class AiTaskType {
      * 电路分析点详情
      */
     public static final String CIRCUIT_DETAIL = "CIRCUIT_DETAIL";
+    
+    /**
+     * PDF电路实验任务分析
+     */
+    public static final String PDF_CIRCUIT_ANALYSIS = "PDF_CIRCUIT_ANALYSIS";
+    
+    /**
+     * PDF电路实验任务自动设计生成
+     */
+    public static final String PDF_CIRCUIT_DESIGN = "PDF_CIRCUIT_DESIGN";
 
     private AiTaskType() {
         // 私有构造函数，防止实例化

@@ -4,12 +4,10 @@ import cn.yifan.drawsee.constant.AiTaskMessageType;
 import cn.yifan.drawsee.constant.NodeType;
 import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
-import cn.yifan.drawsee.parser.NodeContent;
 import cn.yifan.drawsee.parser.ResponseParser;
 import cn.yifan.drawsee.pojo.XYPosition;
 import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
-import cn.yifan.drawsee.pojo.vo.NodeVO;
 import cn.yifan.drawsee.worker.WorkContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,9 +18,6 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -70,7 +65,7 @@ public class StreamingNodeCreator {
             
             if (streamNode == null || streamNode.getId() == null) {
                 log.error("流节点为空或ID为空, taskId: {}, token: {}", taskId, token);
-                throw new ApiException(ApiError.SYSTEM_ERROR);
+                throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
             }
             
             // 初始化任务的buffer和nodes

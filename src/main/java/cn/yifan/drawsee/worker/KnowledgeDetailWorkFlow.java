@@ -6,19 +6,20 @@ import cn.yifan.drawsee.mapper.AiTaskMapper;
 import cn.yifan.drawsee.mapper.ClassMapper;
 import cn.yifan.drawsee.mapper.ClassMemberMapper;
 import cn.yifan.drawsee.mapper.ConversationMapper;
+import cn.yifan.drawsee.mapper.CourseMapper;
+import cn.yifan.drawsee.mapper.KnowledgeBaseMapper;
+import cn.yifan.drawsee.mapper.KnowledgeMapper;
+import cn.yifan.drawsee.mapper.KnowledgeResourceMapper;
 import cn.yifan.drawsee.mapper.NodeMapper;
 import cn.yifan.drawsee.mapper.UserMapper;
 import cn.yifan.drawsee.pojo.XYPosition;
 import cn.yifan.drawsee.pojo.entity.ClassMember;
+import cn.yifan.drawsee.pojo.entity.Course;
+import cn.yifan.drawsee.pojo.entity.Knowledge;
+import cn.yifan.drawsee.pojo.entity.KnowledgeBase;
+import cn.yifan.drawsee.pojo.entity.KnowledgeResource;
 import cn.yifan.drawsee.pojo.entity.Node;
-import cn.yifan.drawsee.pojo.mongo.Course;
-import cn.yifan.drawsee.pojo.mongo.Knowledge;
-import cn.yifan.drawsee.pojo.mongo.KnowledgeBase;
-import cn.yifan.drawsee.pojo.mongo.KnowledgeResource;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
-import cn.yifan.drawsee.repository.CourseRepository;
-import cn.yifan.drawsee.repository.KnowledgeBaseRepository;
-import cn.yifan.drawsee.repository.KnowledgeRepository;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.StreamAiService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -39,18 +40,20 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @FileName KnowledgeDetailWorkFlow
- * @Description
- * @Author yifan
- * @date 2025-03-09 13:49
+ * @Description 知识点详情AI工作流 - MySQL版本
+ * @Author devin
+ * @date 2025-04-15 15:45
  **/
 
 @Slf4j
 @Service
 public class KnowledgeDetailWorkFlow extends WorkFlow {
 
-    private final KnowledgeBaseRepository knowledgeBaseRepository;
+    private final KnowledgeBaseMapper knowledgeBaseMapper;
+    private final KnowledgeMapper knowledgeMapper;
+    private final KnowledgeResourceMapper knowledgeResourceMapper;
     private final ClassMemberMapper classMemberMapper;
-    private final CourseRepository courseRepository;
+    private final CourseMapper courseMapper;
     private final ClassMapper classMapper;
 
     public KnowledgeDetailWorkFlow(
@@ -58,20 +61,23 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
             AiService aiService,
             StreamAiService streamAiService,
             RedissonClient redissonClient,
-            KnowledgeRepository knowledgeRepository,
             NodeMapper nodeMapper,
             ConversationMapper conversationMapper,
             AiTaskMapper aiTaskMapper,
             ObjectMapper objectMapper,
-            KnowledgeBaseRepository knowledgeBaseRepository,
+            KnowledgeBaseMapper knowledgeBaseMapper,
+            KnowledgeMapper knowledgeMapper,
+            KnowledgeResourceMapper knowledgeResourceMapper,
             ClassMemberMapper classMemberMapper,
-            CourseRepository courseRepository,
+            CourseMapper courseMapper,
             ClassMapper classMapper
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, knowledgeRepository, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
-        this.knowledgeBaseRepository = knowledgeBaseRepository;
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        this.knowledgeBaseMapper = knowledgeBaseMapper;
+        this.knowledgeMapper = knowledgeMapper;
+        this.knowledgeResourceMapper = knowledgeResourceMapper;
         this.classMemberMapper = classMemberMapper;
-        this.courseRepository = courseRepository;
+        this.courseMapper = courseMapper;
         this.classMapper = classMapper;
     }
 
@@ -159,7 +165,9 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
         }
         
         log.info("成功找到知识点: knowledgePoint={}, knowledgeId={}", knowledgePoint, knowledge.getId());
-        List<KnowledgeResource> resources = knowledge.getResources();
+        
+        // 从知识点关联的资源中获取资源列表
+        List<KnowledgeResource> resources = knowledgeResourceMapper.getByKnowledgeId(knowledge.getId(), false);
         if (resources == null || resources.isEmpty()) {
             log.info("知识点没有关联资源: knowledgePoint={}", knowledgePoint);
             return;
@@ -167,20 +175,20 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
 
         // 过滤获取各类型资源
         List<String> animationObjectNames = resources.stream()
-                .filter(knowledgeResource -> knowledgeResource.getType().equals(KnowledgeResourceType.ANIMATION))
-                .map(KnowledgeResource::getValue).toList();
+                .filter(knowledgeResource -> "animation".equals(knowledgeResource.getResourceType()))
+                .map(KnowledgeResource::getUrl).toList();
 
         List<String> bilibiliUrls = resources.stream()
-                .filter(knowledgeResource -> knowledgeResource.getType().equals(KnowledgeResourceType.BILIBILI))
-                .map(KnowledgeResource::getValue).toList();
+                .filter(knowledgeResource -> "bilibili".equals(knowledgeResource.getResourceType()))
+                .map(KnowledgeResource::getUrl).toList();
                 
         List<String> wordDocUrls = resources.stream()
-                .filter(knowledgeResource -> knowledgeResource.getType().equals(KnowledgeResourceType.WORD))
-                .map(KnowledgeResource::getValue).toList();
+                .filter(knowledgeResource -> "document".equals(knowledgeResource.getResourceType()))
+                .map(KnowledgeResource::getUrl).toList();
                 
         List<String> pdfDocUrls = resources.stream()
-                .filter(knowledgeResource -> knowledgeResource.getType().equals(KnowledgeResourceType.PDF))
-                .map(KnowledgeResource::getValue).toList();
+                .filter(knowledgeResource -> "pdf".equals(knowledgeResource.getResourceType()))
+                .map(KnowledgeResource::getUrl).toList();
 
         // 创建各类型resource节点
         if (!animationObjectNames.isEmpty()) {
@@ -295,7 +303,7 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
             cn.yifan.drawsee.pojo.entity.Class clazz = classMapper.getById(classMember.getClassId());
             if (clazz == null || clazz.getIsDeleted()) continue;
             
-            Course course = courseRepository.findByClassCodeAndIsDeletedFalse(clazz.getClassCode());
+            Course course = courseMapper.getByClassCode(clazz.getClassCode());
             if (course == null || course.getIsDeleted()) continue;
             
             // 2.2 获取课程关联的知识库列表
@@ -307,7 +315,7 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
             
             // 2.3 在每个知识库中查找指定的知识点，优先查找已发布的知识库
             for (String knowledgeBaseId : knowledgeBaseIds) {
-                KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+                KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
                 if (knowledgeBase == null || knowledgeBase.getIsDeleted()) continue;
                 
                 // 只查找已发布的知识库，或者当前用户是该知识库的创建者的知识库
@@ -317,18 +325,16 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
                     continue;
                 }
                 
-                List<String> knowledgeIds = knowledgeBase.getKnowledgeIds();
-                if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
-                    for (String knowledgeId : knowledgeIds) {
-                        Knowledge foundKnowledge = knowledgeRepository.findById(knowledgeId).orElse(null);
-                        if (foundKnowledge != null && foundKnowledge.getName().equals(knowledgePointName)) {
-                            log.info("在知识库中找到知识点: knowledgeBase={}, knowledgePoint={}", 
-                                    knowledgeBase.getName(), knowledgePointName);
-                            knowledge = foundKnowledge;
-                            // 如果知识库已发布，则优先返回
-                            if (knowledgeBase.getIsPublished()) {
-                                return knowledge;
-                            }
+                // 在知识库中查找指定的知识点
+                List<Knowledge> knowledgeList = knowledgeMapper.getByKnowledgeBaseId(knowledgeBaseId, false);
+                for (Knowledge foundKnowledge : knowledgeList) {
+                    if (foundKnowledge.getName().equals(knowledgePointName)) {
+                        log.info("在知识库中找到知识点: knowledgeBase={}, knowledgePoint={}", 
+                                knowledgeBase.getName(), knowledgePointName);
+                        knowledge = foundKnowledge;
+                        // 如果知识库已发布，则优先返回
+                        if (knowledgeBase.getIsPublished()) {
+                            return knowledge;
                         }
                     }
                 }
@@ -341,7 +347,7 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
         }
         
         // 3. 如果在班级的知识库中没找到，尝试查找用户直接加入的知识库
-        List<KnowledgeBase> userKnowledgeBases = knowledgeBaseRepository.findByMembersContaining(userId);
+        List<KnowledgeBase> userKnowledgeBases = knowledgeBaseMapper.getByMemberId(userId, false);
         for (KnowledgeBase knowledgeBase : userKnowledgeBases) {
             if (knowledgeBase.getIsDeleted()) continue;
             
@@ -350,15 +356,12 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
                 continue;
             }
             
-            List<String> knowledgeIds = knowledgeBase.getKnowledgeIds();
-            if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
-                for (String knowledgeId : knowledgeIds) {
-                    Knowledge foundKnowledge = knowledgeRepository.findById(knowledgeId).orElse(null);
-                    if (foundKnowledge != null && foundKnowledge.getName().equals(knowledgePointName)) {
-                        log.info("在用户直接加入的知识库中找到知识点: knowledgeBase={}, knowledgePoint={}", 
-                                knowledgeBase.getName(), knowledgePointName);
-                        return foundKnowledge;
-                    }
+            List<Knowledge> knowledgeList = knowledgeMapper.getByKnowledgeBaseId(knowledgeBase.getId(), false);
+            for (Knowledge foundKnowledge : knowledgeList) {
+                if (foundKnowledge.getName().equals(knowledgePointName)) {
+                    log.info("在用户直接加入的知识库中找到知识点: knowledgeBase={}, knowledgePoint={}", 
+                            knowledgeBase.getName(), knowledgePointName);
+                    return foundKnowledge;
                 }
             }
         }
@@ -382,7 +385,7 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
         }
         
         // 2. 获取班级对应的课程
-        Course course = courseRepository.findByClassCodeAndIsDeletedFalse(clazz.getClassCode());
+        Course course = courseMapper.getByClassCode(clazz.getClassCode());
         if (course == null || course.getIsDeleted()) {
             log.warn("课程不存在或已删除: classCode={}", clazz.getClassCode());
             return null;
@@ -397,20 +400,17 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
         
         // 4. 在知识库中查找知识点
         for (String knowledgeBaseId : knowledgeBaseIds) {
-            KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+            KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
             if (knowledgeBase == null || knowledgeBase.getIsDeleted() || !knowledgeBase.getIsPublished()) {
                 continue;
             }
             
-            List<String> knowledgeIds = knowledgeBase.getKnowledgeIds();
-            if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
-                for (String knowledgeId : knowledgeIds) {
-                    Knowledge knowledge = knowledgeRepository.findById(knowledgeId).orElse(null);
-                    if (knowledge != null && knowledge.getName().equals(knowledgePointName)) {
-                        log.info("在班级相关知识库中找到知识点: classId={}, knowledgeBase={}, knowledgePoint={}", 
-                                classId, knowledgeBase.getName(), knowledgePointName);
-                        return knowledge;
-                    }
+            List<Knowledge> knowledgeList = knowledgeMapper.getByKnowledgeBaseId(knowledgeBaseId, false);
+            for (Knowledge knowledge : knowledgeList) {
+                if (knowledge.getName().equals(knowledgePointName)) {
+                    log.info("在班级相关知识库中找到知识点: classId={}, knowledgeBase={}, knowledgePoint={}", 
+                            classId, knowledgeBase.getName(), knowledgePointName);
+                    return knowledge;
                 }
             }
         }
@@ -421,26 +421,22 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
     
     private Knowledge findKnowledgeInPublishedBases(String knowledgePointName) {
         // 查找所有已发布的知识库
-        List<KnowledgeBase> publishedBases = knowledgeBaseRepository.findByIsPublishedTrue();
+        List<KnowledgeBase> publishedBases = knowledgeBaseMapper.getByIsPublishedTrue();
         
         for (KnowledgeBase knowledgeBase : publishedBases) {
             if (knowledgeBase.getIsDeleted()) continue;
             
-            List<String> knowledgeIds = knowledgeBase.getKnowledgeIds();
-            if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
-                for (String knowledgeId : knowledgeIds) {
-                    Knowledge knowledge = knowledgeRepository.findById(knowledgeId).orElse(null);
-                    if (knowledge != null && knowledge.getName().equals(knowledgePointName)) {
-                        log.info("在公开知识库中找到知识点: knowledgeBase={}, knowledgePoint={}", 
-                                knowledgeBase.getName(), knowledgePointName);
-                        return knowledge;
-                    }
+            List<Knowledge> knowledgeList = knowledgeMapper.getByKnowledgeBaseId(knowledgeBase.getId(), false);
+            for (Knowledge knowledge : knowledgeList) {
+                if (knowledge.getName().equals(knowledgePointName)) {
+                    log.info("在公开知识库中找到知识点: knowledgeBase={}, knowledgePoint={}", 
+                            knowledgeBase.getName(), knowledgePointName);
+                    return knowledge;
                 }
             }
         }
         
-        // 如果实在找不到，尝试匹配线性代数知识库（向后兼容，可以在未来版本移除）
-        log.info("在所有已发布知识库中未找到知识点，尝试匹配线性代数知识库: knowledgePoint={}", knowledgePointName);
-        return knowledgeRepository.findBySubjectAndName(KnowledgeSubject.LINEAR_ALGEBRA, knowledgePointName);
+        log.info("在所有已发布知识库中未找到知识点: knowledgePoint={}", knowledgePointName);
+        return null;
     }
 }

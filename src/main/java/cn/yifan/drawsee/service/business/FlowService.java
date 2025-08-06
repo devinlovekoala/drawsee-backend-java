@@ -99,7 +99,7 @@ public class FlowService {
         Long userId = StpUtil.getLoginIdAsLong();
         Conversation conversation = conversationMapper.getById(convId);
         if (conversation == null || !userId.equals(conversation.getUserId())) {
-            throw new ApiException(ApiError.CONVERSATION_NOT_EXISTED);
+            throw new ApiException(ApiError.CONVERSATION_NOT_EXISTED, "文件不能为空");
         }
         List<Node> nodes = nodeMapper.getByConvId(convId);
         for (Node node : nodes) {
@@ -111,13 +111,13 @@ public class FlowService {
             try {
                 data = objectMapper.readValue(node.getData(), dataTypeReference);
             } catch (JsonProcessingException e) {
-                throw new ApiException(ApiError.SYSTEM_ERROR);
+                throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
             }
             XYPosition position = null;
             try {
                 position = objectMapper.readValue(node.getPosition(), XYPosition.class);
             } catch (JsonProcessingException e) {
-                throw new ApiException(ApiError.SYSTEM_ERROR);
+                throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
             }
             nodeVO.setData(data);
             nodeVO.setHeight(null);
@@ -139,17 +139,17 @@ public class FlowService {
         List<Node> nodes = new ArrayList<>();
         for (UpdateNodesDTO.NodeToUpdate nodeToUpdate : updateNodesDTO.getNodes()) {
             if (nodeToUpdate.getHeight() == null || nodeToUpdate.getPosition() == null) {
-                throw new ApiException(ApiError.PARAM_ERROR);
+                throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
             }
             Node node = nodeMapper.getById(nodeToUpdate.getId());
             if (node == null || !userId.equals(node.getUserId())) {
-                throw new ApiException(ApiError.PARAM_ERROR);
+                throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
             }
             String position = null;
             try {
                 position = objectMapper.writeValueAsString(nodeToUpdate.getPosition());
             } catch (JsonProcessingException e) {
-                throw new ApiException(ApiError.PARAM_ERROR);
+                throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
             }
             node.setPosition(position);
             node.setHeight(nodeToUpdate.getHeight());
@@ -191,7 +191,7 @@ public class FlowService {
         RAtomicLong counter = RedisUtils.getUseAiCounter(redissonClient, userId);
         // 检查是否超过限制
         if (counter.get() >= AiTaskLimit.NORMAL_USER_DAY_LIMIT) {
-            throw new ApiException(ApiError.AI_TASK_EXCEED_LIMIT);
+            throw new ApiException(ApiError.AI_TASK_EXCEED_LIMIT, "文件不能为空");
         }
         // 加1
         counter.incrementAndGet();
@@ -203,13 +203,13 @@ public class FlowService {
 
         // 参数校验
         if (createAiTaskDTO.getConvId() != null && createAiTaskDTO.getParentId() == null) {
-            throw new ApiException(ApiError.PARAM_ERROR);
+            throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
         }
         if (
                 createAiTaskDTO.getType().equals(AiTaskType.SOLVER_FIRST) &&
                         createAiTaskDTO.getPromptParams().get("method") == null
         ) {
-            throw new ApiException(ApiError.PARAM_ERROR);
+            throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
         }
 
         validateUseAiCount(userId);
@@ -233,14 +233,14 @@ public class FlowService {
             try {
                 position = objectMapper.writeValueAsString(XYPosition.origin());
             } catch (JsonProcessingException e) {
-                throw new ApiException(ApiError.SYSTEM_ERROR);
+                throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
             }
             Map<String, Object> dataMap = new ConcurrentHashMap<>();
             String data = null;
             try {
                 data = objectMapper.writeValueAsString(dataMap);
             } catch (JsonProcessingException e) {
-                throw new ApiException(ApiError.SYSTEM_ERROR);
+                throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
             }
             Node node = new Node(
                     NodeType.ROOT, data, position, null, userId, conversation.getId(), false
@@ -262,7 +262,7 @@ public class FlowService {
         try {
             data = objectMapper.writeValueAsString(dataMap);
         } catch (JsonProcessingException e) {
-            throw new ApiException(ApiError.PARAM_ERROR);
+            throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
         }
         AiTask aiTask = new AiTask(
                 createAiTaskDTO.getType(), data,
@@ -379,7 +379,7 @@ public class FlowService {
         try {
             return minioService.getResource(objectName);
         } catch (MinioException | IOException | NoSuchAlgorithmException | InvalidKeyException e) {
-            throw new ApiException(ApiError.SYSTEM_ERROR);
+            throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
         }
     }
 
@@ -387,20 +387,20 @@ public class FlowService {
         try {
             return minioService.downloadResource(objectName);
         } catch (MinioException | IOException | NoSuchAlgorithmException | InvalidKeyException e) {
-            throw new ApiException(ApiError.SYSTEM_ERROR);
+            throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
         }
     }
 
     public void updateNode(Long nodeId, UpdateNodeDTO updateNodeDTO) {
         Node node = nodeMapper.getById(nodeId);
         if (node == null) {
-            throw new ApiException(ApiError.PARAM_ERROR);
+            throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
         }
         String data = null;
         try {
             data = objectMapper.writeValueAsString(updateNodeDTO.getData());
         } catch (JsonProcessingException e) {
-            throw new ApiException(ApiError.PARAM_ERROR);
+            throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
         }
         node.setData(data);
         nodeMapper.update(node);
@@ -410,7 +410,7 @@ public class FlowService {
     public void deleteNode(Long nodeId) {
         Node node = nodeMapper.getById(nodeId);
         if (node == null) {
-            throw new ApiException(ApiError.NODE_NOT_EXISTED);
+            throw new ApiException(ApiError.NODE_NOT_EXISTED, "文件不能为空");
         }
         // 删除节点及其所有子节点
         Long convId = node.getConvId();
@@ -441,7 +441,7 @@ public class FlowService {
     public void deleteConversation(Long convId) {
         Conversation conversation = conversationMapper.getById(convId);
         if (conversation == null) {
-            throw new ApiException(ApiError.CONVERSATION_NOT_EXISTED);
+            throw new ApiException(ApiError.CONVERSATION_NOT_EXISTED, "文件不能为空");
         }
         // 删除会话
         conversation.setIsDeleted(true);

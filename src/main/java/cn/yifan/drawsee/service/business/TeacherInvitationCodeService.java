@@ -1,7 +1,6 @@
 package cn.yifan.drawsee.service.business;
 
 import cn.dev33.satoken.stp.StpUtil;
-import cn.yifan.drawsee.constant.UserRole;
 import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
 import cn.yifan.drawsee.mapper.TeacherInvitationCodeMapper;
@@ -124,24 +123,24 @@ public class TeacherInvitationCodeService {
         // 检查邀请码是否存在
         TeacherInvitationCode teacherInvitationCode = teacherInvitationCodeMapper.getByCode(code);
         if (teacherInvitationCode == null) {
-            throw new ApiException(ApiError.INVITATION_CODE_NOT_EXISTED);
+            throw new ApiException(ApiError.INVITATION_CODE_NOT_EXISTED, "文件不能为空");
         }
         
         // 检查邀请码是否有效
         if (!teacherInvitationCode.getIsActive()) {
-            throw new ApiException(ApiError.INVITATION_CODE_ALREADY_USED);
+            throw new ApiException(ApiError.INVITATION_CODE_ALREADY_USED, "文件不能为空");
         }
         
         Long userId = StpUtil.getLoginIdAsLong();
         User user = userMapper.getById(userId);
         if (user == null) {
-            throw new ApiException(ApiError.USER_NOT_EXIST);
+            throw new ApiException(ApiError.USER_NOT_EXIST, "文件不能为空");
         }
         
         // 检查用户是否已经是教师
         Teacher existTeacher = teacherMapper.getByUserId(userId);
         if (existTeacher != null) {
-            throw new ApiException(ApiError.TEACHER_HAD_EXISTED);
+            throw new ApiException(ApiError.TEACHER_HAD_EXISTED, "文件不能为空");
         }
         
         // 将用户注册为教师

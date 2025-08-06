@@ -13,7 +13,6 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.pojo.rabbit.AnimationTaskMessage;
 import cn.yifan.drawsee.pojo.rabbit.LinkedQueue;
-import cn.yifan.drawsee.repository.KnowledgeRepository;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.PromptService;
 import cn.yifan.drawsee.service.base.StreamAiService;
@@ -65,7 +64,6 @@ public class AnimationWorkFlow extends WorkFlow {
         AiService aiService,
         StreamAiService streamAiService,
         RedissonClient redissonClient,
-        KnowledgeRepository knowledgeRepository,
         NodeMapper nodeMapper,
         ConversationMapper conversationMapper,
         AiTaskMapper aiTaskMapper,
@@ -75,7 +73,7 @@ public class AnimationWorkFlow extends WorkFlow {
         List<LinkedQueue> animationTaskQueues,
         RabbitTemplate rabbitTemplate
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, knowledgeRepository, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.deepseekV3ChatLanguageModel = deepseekV3ChatLanguageModel;
         this.animationTaskQueues = animationTaskQueues;

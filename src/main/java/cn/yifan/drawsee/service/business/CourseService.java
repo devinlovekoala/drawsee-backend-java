@@ -2,25 +2,24 @@ package cn.yifan.drawsee.service.business;
 
 import cn.dev33.satoken.stp.StpUtil;
 import cn.yifan.drawsee.constant.UserRole;
+import cn.yifan.drawsee.pojo.entity.KnowledgeBase;
 import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
 import cn.yifan.drawsee.pojo.dto.CreateCourseDTO;
 import cn.yifan.drawsee.pojo.dto.JoinCourseDTO;
 import cn.yifan.drawsee.pojo.dto.PaginationParams;
 import cn.yifan.drawsee.pojo.dto.UpdateCourseDTO;
-import cn.yifan.drawsee.pojo.mongo.Course;
-import cn.yifan.drawsee.pojo.mongo.KnowledgeBase;
+import cn.yifan.drawsee.pojo.dto.CreateKnowledgeBaseDTO;
+import cn.yifan.drawsee.pojo.entity.Course;
 import cn.yifan.drawsee.pojo.vo.*;
-import cn.yifan.drawsee.repository.CourseRepository;
-import cn.yifan.drawsee.repository.KnowledgeBaseRepository;
-import cn.yifan.drawsee.service.business.TeacherInvitationCodeService;
-import cn.yifan.drawsee.service.business.KnowledgeBaseService;
+import cn.yifan.drawsee.mapper.CourseMapper;
+import cn.yifan.drawsee.mapper.KnowledgeBaseMapper;
+import cn.yifan.drawsee.util.UUIDUtils;
+
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.extern.slf4j.Slf4j;
 
 import java.security.SecureRandom;
@@ -30,6 +29,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * @FileName CourseService
@@ -42,7 +42,7 @@ import java.util.Set;
 public class CourseService {
 
     @Autowired
-    private CourseRepository courseRepository;
+    private CourseMapper courseMapper;
     
     @Autowired
     private TeacherService teacherService;
@@ -54,7 +54,7 @@ public class CourseService {
     private TeacherInvitationCodeService teacherInvitationCodeService;
     
     @Autowired
-    private KnowledgeBaseRepository knowledgeBaseRepository;
+    private KnowledgeBaseMapper knowledgeBaseMapper;
     
     @Autowired
     private KnowledgeBaseService knowledgeBaseService;
@@ -64,6 +64,7 @@ public class CourseService {
      * @param createCourseDTO 创建课程DTO
      * @return 课程ID
      */
+    @Transactional(rollbackFor = Exception.class)
     public String createCourse(CreateCourseDTO createCourseDTO) {
         Long userId = StpUtil.getLoginIdAsLong();
         String userRole = userRoleService.getCurrentUserRole();
@@ -72,14 +73,14 @@ public class CourseService {
         // 验证用户是否为教师或管理员
         if (!UserRole.ADMIN.equals(userRole) && !UserRole.TEACHER.equals(userRole)) {
             log.warn("用户权限不足: userId={}, userRole={}", userId, userRole);
-            throw new ApiException(ApiError.PERMISSION_DENIED);
+            throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
         }
         
         // 检查课程名称是否已存在
-        Course existCourse = courseRepository.findByNameAndIsDeletedFalse(createCourseDTO.getName());
+        Course existCourse = courseMapper.getByName(createCourseDTO.getName());
         if (existCourse != null) {
             log.warn("课程名称已存在: name={}, existCourseId={}", createCourseDTO.getName(), existCourse.getId());
-            throw new ApiException(ApiError.COURSE_HAD_EXISTED);
+            throw new ApiException(ApiError.COURSE_HAD_EXISTED, "文件不能为空");
         }
         
         // 生成班级码
@@ -87,33 +88,32 @@ public class CourseService {
         log.info("生成班级码: classCode={}", classCode);
         
         // 创建课程
-        Course course = new Course(
-            null, // MongoDB会自动生成ID
-            createCourseDTO.getName(),
-            createCourseDTO.getCode(),
-            classCode,
-            createCourseDTO.getDescription(),
-            createCourseDTO.getSubject(),
-            new ArrayList<>(), // topics
-            userId,
-            userRole,
-            new ArrayList<>(), // studentIds
-            new ArrayList<>(), // knowledgeBaseIds
-            new Date(), // createdAt
-            new Date(), // updatedAt
-            false // isDeleted
-        );
+        Course course = new Course();
+        course.setId(UUIDUtils.generateUUID());
+        course.setName(createCourseDTO.getName());
+        course.setCode(createCourseDTO.getCode());
+        course.setClassCode(classCode);
+        course.setDescription(createCourseDTO.getDescription());
+        course.setSubject(createCourseDTO.getSubject());
+        course.setTopics(new ArrayList<>());
+        course.setCreatorId(userId);
+        course.setCreatorRole(userRole);
+        course.setStudentIds(new ArrayList<>());
+        course.setKnowledgeBaseIds(new ArrayList<>());
+        course.setCreatedAt(new Date());
+        course.setUpdatedAt(new Date());
+        course.setIsDeleted(false);
         
-        Course savedCourse = courseRepository.save(course);
-        log.info("课程创建成功: courseId={}, name={}, classCode={}", savedCourse.getId(), savedCourse.getName(), savedCourse.getClassCode());
+        courseMapper.insert(course);
+        log.info("课程创建成功: courseId={}, name={}, classCode={}", course.getId(), course.getName(), course.getClassCode());
         
         // 如果创建者是教师，为其生成班级邀请码
         if (UserRole.TEACHER.equals(userRole)) {
-            teacherInvitationCodeService.generateCodeForCourse(savedCourse.getId(), userId);
-            log.info("已为教师生成班级邀请码: courseId={}, teacherId={}", savedCourse.getId(), userId);
+            teacherInvitationCodeService.generateCodeForCourse(course.getId(), userId);
+            log.info("已为教师生成班级邀请码: courseId={}, teacherId={}", course.getId(), userId);
         }
         
-        return savedCourse.getId();
+        return course.getId();
     }
     
     /**
@@ -121,29 +121,27 @@ public class CourseService {
      * @param joinCourseDTO 加入课程DTO
      * @return 课程ID
      */
+    @Transactional(rollbackFor = Exception.class)
     public String joinCourse(JoinCourseDTO joinCourseDTO) {
         Long userId = StpUtil.getLoginIdAsLong();
         log.info("开始加入课程: userId={}, classCode={}", userId, joinCourseDTO.getClassCode());
         
         // 检查班级码是否存在
-        Course course = courseRepository.findByClassCodeAndIsDeletedFalse(joinCourseDTO.getClassCode());
+        Course course = courseMapper.getByClassCode(joinCourseDTO.getClassCode());
         if (course == null) {
             log.warn("班级码无效: classCode={}", joinCourseDTO.getClassCode());
-            throw new ApiException(ApiError.INVALID_CLASS_CODE);
+            throw new ApiException(ApiError.INVALID_CLASS_CODE, "文件不能为空");
         }
         
         // 检查用户是否已加入该课程
         if (course.getStudentIds().contains(userId)) {
             log.warn("用户已加入该课程: userId={}, courseId={}", userId, course.getId());
-            throw new ApiException(ApiError.ALREADY_JOINED);
+            throw new ApiException(ApiError.ALREADY_JOINED, "文件不能为空");
         }
         
         // 加入课程
-        course.getStudentIds().add(userId);
-        course.setUpdatedAt(new Date());
-        Course updatedCourse = courseRepository.save(course);
-        log.info("用户成功加入课程: userId={}, courseId={}, studentCount={}", 
-            userId, updatedCourse.getId(), updatedCourse.getStudentIds().size());
+        courseMapper.addStudent(course.getId(), userId);
+        log.info("用户成功加入课程: userId={}, courseId={}", userId, course.getId());
         
         return course.getId();
     }
@@ -155,7 +153,7 @@ public class CourseService {
     public List<CourseVO> getMyCreatedCourses() {
         Long userId = StpUtil.getLoginIdAsLong();
         log.info("获取用户创建的课程: userId={}", userId);
-        List<Course> courses = courseRepository.findByCreatorIdAndIsDeletedFalse(userId);
+        List<Course> courses = courseMapper.getByCreatorId(userId, false);
         log.info("查询结果: courses={}", courses);
         return convertToVOList(courses);
     }
@@ -167,7 +165,7 @@ public class CourseService {
     public List<CourseVO> getMyJoinedCourses() {
         Long userId = StpUtil.getLoginIdAsLong();
         log.info("获取用户加入的课程: userId={}", userId);
-        List<Course> courses = courseRepository.findByStudentIdsContainingAndIsDeletedFalse(userId);
+        List<Course> courses = courseMapper.getByStudentId(userId, false);
         log.info("查询结果: courses={}", courses);
         return convertToVOList(courses);
     }
@@ -178,27 +176,12 @@ public class CourseService {
      * @return 课程详情
      */
     public CourseVO getCourseDetail(String id) {
-        Course course = courseRepository.findById(id).orElse(null);
-        if (course == null) {
-            throw new ApiException(ApiError.COURSE_NOT_EXISTED);
+        Course course = courseMapper.getById(id);
+        if (course == null || course.getIsDeleted()) {
+            throw new ApiException(ApiError.COURSE_NOT_EXISTED, "文件不能为空");
         }
         
-        return new CourseVO(
-            course.getId(),
-            course.getName(),
-            course.getDescription(),
-            course.getClassCode(),
-            course.getCode(),
-            course.getSubject(),
-            course.getCreatorId(),
-            course.getCreatorRole(),
-            course.getCreatedAt(),
-            course.getUpdatedAt(),
-            course.getStudentIds().size(),
-            course.getKnowledgeBaseIds(),
-            new ArrayList<>(),  // 暂时不需要知识库详情
-            false              // 暂时不需要发布状态
-        );
+        return convertToVO(course);
     }
     
     /**
@@ -206,21 +189,22 @@ public class CourseService {
      * @return 班级码
      */
     private String generateClassCode() {
-        String characters = "0123456789"; // 纯数字班级码
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         Random random = new SecureRandom();
         StringBuilder sb = new StringBuilder(6);
-
         for (int i = 0; i < 6; i++) {
-            sb.append(characters.charAt(random.nextInt(characters.length())));
+            sb.append(chars.charAt(random.nextInt(chars.length())));
         }
-
-        String code = sb.toString();
-        // 检查是否已存在（极小概率冲突时可重试）
-        Course existCourse = courseRepository.findByClassCodeAndIsDeletedFalse(code);
+        
+        // 检查班级码是否已存在
+        String classCode = sb.toString();
+        Course existCourse = courseMapper.getByClassCode(classCode);
         if (existCourse != null) {
+            // 如果已存在，重新生成
             return generateClassCode();
         }
-        return code;
+        
+        return classCode;
     }
     
     /**
@@ -229,89 +213,89 @@ public class CourseService {
      * @return VO列表
      */
     private List<CourseVO> convertToVOList(List<Course> courses) {
-        List<CourseVO> result = new ArrayList<>();
-        for (Course course : courses) {
-            if (course.getIsDeleted()) {
-                continue;
-            }
-            
+        if (courses == null) {
+            return new ArrayList<>();
+        }
+        
+        return courses.stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+    }
+    
+    /**
+     * 将课程对象转换为VO对象
+     * @param course 课程对象
+     * @return VO对象
+     */
+    private CourseVO convertToVO(Course course) {
+        if (course == null) {
+            return null;
+        }
+        
+        CourseVO vo = new CourseVO();
+        BeanUtils.copyProperties(course, vo);
+        
+        // 设置学生数量
+        if (course.getStudentIds() != null) {
+            vo.setStudentCount(course.getStudentIds().size());
+        } else {
+            vo.setStudentCount(0);
+        }
+        
+        // 获取知识库列表
             List<KnowledgeBaseVO> knowledgeBases = new ArrayList<>();
-            boolean hasPublishedBase = false;
-            
             if (course.getKnowledgeBaseIds() != null && !course.getKnowledgeBaseIds().isEmpty()) {
                 for (String knowledgeBaseId : course.getKnowledgeBaseIds()) {
-                    KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+                KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
                     if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
-                        KnowledgeBaseVO knowledgeBaseVO = knowledgeBaseService.convertToVO(knowledgeBase);
-                        knowledgeBases.add(knowledgeBaseVO);
-                        if (knowledgeBase.getIsPublished()) {
-                            hasPublishedBase = true;
-                        }
-                    }
+                    knowledgeBases.add(knowledgeBaseService.convertToVO(knowledgeBase));
                 }
             }
-            
-            CourseVO vo = new CourseVO(
-                course.getId(),
-                course.getName(),
-                course.getDescription(),
-                course.getClassCode(),
-                course.getCode(),
-                course.getSubject(),
-                course.getCreatorId(),
-                course.getCreatorRole(),
-                course.getCreatedAt(),
-                course.getUpdatedAt(),
-                course.getStudentIds().size(),
-                course.getKnowledgeBaseIds(),
-                knowledgeBases,
-                hasPublishedBase
-            );
-            
-            result.add(vo);
         }
-        return result;
+        vo.setKnowledgeBases(knowledgeBases);
+        
+        return vo;
     }
+    
     /**
-     * 更新课程信息
+     * 更新课程
      * @param id 课程ID
      * @param updateCourseDTO 更新课程DTO
-     * @return 是否更新成功
+     * @return 是否成功
      */
+    @Transactional(rollbackFor = Exception.class)
     public boolean updateCourse(String id, UpdateCourseDTO updateCourseDTO) {
-        Long userId = StpUtil.getLoginIdAsLong();
-        String userRole = userRoleService.getCurrentUserRole();
-        log.info("开始更新课程: courseId={}, userId={}, userRole={}, updateDTO={}", id, userId, userRole, updateCourseDTO);
-
-        // 查找课程
-        Course course = courseRepository.findById(id).orElse(null);
+        Course course = courseMapper.getById(id);
         if (course == null || course.getIsDeleted()) {
-            log.warn("课程不存在或已删除: courseId={}", id);
-            throw new ApiException(ApiError.COURSE_NOT_EXISTED);
+            log.warn("课程不存在: id={}", id);
+            throw new ApiException(ApiError.COURSE_NOT_EXISTED, "文件不能为空");
         }
 
-        // 验证权限
-        if (!UserRole.ADMIN.equals(userRole) && !course.getCreatorId().equals(userId)) {
+        // 检查是否有权限更新
+        Long userId = StpUtil.getLoginIdAsLong();
+        if (!course.getCreatorId().equals(userId)) {
             log.warn("用户无权更新课程: userId={}, courseId={}, creatorId={}", userId, id, course.getCreatorId());
-            throw new ApiException(ApiError.PERMISSION_DENIED);
+            throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
         }
 
-        // 检查课程名称
+        // 检查课程名称是否已存在
         if (!course.getName().equals(updateCourseDTO.getName())) {
-            Course existCourse = courseRepository.findByNameAndIsDeletedFalse(updateCourseDTO.getName());
+            Course existCourse = courseMapper.getByName(updateCourseDTO.getName());
             if (existCourse != null && !existCourse.getId().equals(id)) {
-                log.warn("课程名称已存在: name={}, existingCourseId={}", updateCourseDTO.getName(), existCourse.getId());
-                throw new ApiException(ApiError.COURSE_HAD_EXISTED);
+                log.warn("课程名称已存在: name={}, existCourseId={}", updateCourseDTO.getName(), existCourse.getId());
+                throw new ApiException(ApiError.COURSE_HAD_EXISTED, "文件不能为空");
             }
         }
 
         // 更新课程信息
         course.setName(updateCourseDTO.getName());
         course.setDescription(updateCourseDTO.getDescription());
+        course.setSubject(updateCourseDTO.getSubject());
+        course.setCode(updateCourseDTO.getCode());
         course.setUpdatedAt(new Date());
 
-        Course updatedCourse = courseRepository.save(course);
-        log.info("课程更新成功: courseId={}, name={}", updatedCourse.getId(), updatedCourse.getName());
+        courseMapper.update(course);
+        log.info("课程更新成功: courseId={}, name={}", course.getId(), course.getName());
         
         return true;
     }
@@ -319,32 +303,30 @@ public class CourseService {
     /**
      * 删除课程
      * @param id 课程ID
-     * @return 是否删除成功
+     * @return 是否成功
      */
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteCourse(String id) {
+        Course course = courseMapper.getById(id);
+        if (course == null || course.getIsDeleted()) {
+            log.warn("课程不存在: id={}", id);
+            throw new ApiException(ApiError.COURSE_NOT_EXISTED, "文件不能为空");
+        }
+
+        // 检查是否有权限删除
         Long userId = StpUtil.getLoginIdAsLong();
         String userRole = userRoleService.getCurrentUserRole();
-        log.info("开始删除课程: courseId={}, userId={}, userRole={}", id, userId, userRole);
-
-        // 查找课程
-        Course course = courseRepository.findById(id).orElse(null);
-        if (course == null || course.getIsDeleted()) {
-            log.warn("课程不存在或已删除: courseId={}", id);
-            throw new ApiException(ApiError.COURSE_NOT_EXISTED);
+        if (!course.getCreatorId().equals(userId) && !UserRole.ADMIN.equals(userRole)) {
+            log.warn("用户无权删除课程: userId={}, userRole={}, courseId={}, creatorId={}", userId, userRole, id, course.getCreatorId());
+            throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
         }
 
-        // 验证权限
-        if (!UserRole.ADMIN.equals(userRole) && !course.getCreatorId().equals(userId)) {
-            log.warn("用户无权删除课程: userId={}, courseId={}, creatorId={}", userId, id, course.getCreatorId());
-            throw new ApiException(ApiError.PERMISSION_DENIED);
-        }
-
-        // 逻辑删除课程
+        // 逻辑删除
         course.setIsDeleted(true);
         course.setUpdatedAt(new Date());
 
-        Course deletedCourse = courseRepository.save(course);
-        log.info("课程删除成功: courseId={}, name={}", deletedCourse.getId(), deletedCourse.getName());
+        courseMapper.update(course);
+        log.info("课程删除成功: courseId={}, name={}", course.getId(), course.getName());
         
         return true;
     }
@@ -360,100 +342,137 @@ public class CourseService {
         
         // 如果是管理员，返回所有课程
         if (UserRole.ADMIN.equals(userRole)) {
-            List<Course> allCourses = courseRepository.findByIsDeletedFalse(Pageable.unpaged()).getContent();
+            List<Course> allCourses = courseMapper.getAll(false);
             log.info("管理员查询所有课程结果: courses={}", allCourses);
             return convertToVOList(allCourses);
         }
         
         // 获取我创建的课程
-        List<Course> createdCourses = courseRepository.findByCreatorIdAndIsDeletedFalse(userId);
+        List<Course> createdCourses = courseMapper.getByCreatorId(userId, false);
         log.info("用户创建的课程: courses={}", createdCourses);
         
         // 获取我加入的课程
-        List<Course> joinedCourses = courseRepository.findByStudentIdsContainingAndIsDeletedFalse(userId);
+        List<Course> joinedCourses = courseMapper.getByStudentId(userId, false);
         log.info("用户加入的课程: courses={}", joinedCourses);
         
-        // 合并两个列表并去重
-        Set<Course> uniqueCourses = new HashSet<>();
-        uniqueCourses.addAll(createdCourses);
-        uniqueCourses.addAll(joinedCourses);
+        // 合并去重
+        Set<String> courseIds = new HashSet<>();
+        List<Course> allCourses = new ArrayList<>();
         
-        return convertToVOList(new ArrayList<>(uniqueCourses));
+        for (Course course : createdCourses) {
+            if (!courseIds.contains(course.getId())) {
+                courseIds.add(course.getId());
+                allCourses.add(course);
+            }
+        }
+        
+        for (Course course : joinedCourses) {
+            if (!courseIds.contains(course.getId())) {
+                courseIds.add(course.getId());
+                allCourses.add(course);
+            }
+        }
+        
+        log.info("用户可访问的课程总数: total={}", allCourses.size());
+        return convertToVOList(allCourses);
     }
 
     /**
-     * 获取系统课程列表（可访问的课程）
+     * 获取系统课程列表
+     * @param params 分页参数
+     * @param subject 科目
+     * @return 分页课程列表
      */
     public PaginatedResponse<CourseVO> getSystemCourses(PaginationParams params, String subject) {
-        Long userId = StpUtil.getLoginIdAsLong();
         String userRole = userRoleService.getCurrentUserRole();
-        log.info("开始获取系统课程列表: userId={}, userRole={}, page={}, size={}, subject={}", 
-            userId, userRole, params.getPage(), params.getSize(), subject);
+        Long userId = StpUtil.getLoginIdAsLong();
+        log.info("获取系统课程: userRole={}, userId={}, params={}, subject={}", userRole, userId, params, subject);
         
-        Pageable pageable = PageRequest.of(params.getPage() - 1, params.getSize());
-        Page<Course> coursePage;
+        int offset = (params.getPage() - 1) * params.getSize();
+        int limit = params.getSize();
+        List<Course> courseList;
+        int total = 0;
 
         // 根据用户角色获取不同的课程列表
         if (UserRole.ADMIN.equals(userRole)) {
-            // 管理员可以看到所有未删除的课程
+            // 管理员可以看到所有课程
             if (subject != null && !subject.isEmpty()) {
                 log.debug("管理员按科目查询课程: subject={}", subject);
-                coursePage = courseRepository.findBySubjectAndIsDeletedFalse(subject, pageable);
+                courseList = courseMapper.getBySubject(subject, false);
+                total = courseMapper.countBySubject(subject, false);
             } else {
                 log.debug("管理员查询所有课程");
-                coursePage = courseRepository.findByIsDeletedFalse(pageable);
+                courseList = courseMapper.getAll(false);
+                total = courseMapper.count(false);
             }
         } else if (UserRole.TEACHER.equals(userRole)) {
             // 教师可以看到自己创建的课程和管理员创建的课程
             if (subject != null && !subject.isEmpty()) {
                 log.debug("教师按科目查询课程: subject={}", subject);
-                coursePage = courseRepository.findBySubjectAndIsDeletedFalseAndCreatorRoleIn(
-                    subject, 
-                    List.of(UserRole.ADMIN, userRole),
-                    pageable
-                );
+                // 这里需要自定义查询，暂时简单处理
+                List<Course> adminCourses = courseMapper.getBySubjectAndCreatorRole(subject, UserRole.ADMIN, false);
+                List<Course> teacherCourses = courseMapper.getBySubjectAndCreatorRole(subject, UserRole.TEACHER, false);
+                courseList = new ArrayList<>();
+                courseList.addAll(adminCourses);
+                courseList.addAll(teacherCourses);
+                total = adminCourses.size() + teacherCourses.size();
             } else {
                 log.debug("教师查询可见课程");
-                coursePage = courseRepository.findByIsDeletedFalseAndCreatorRoleIn(
-                    List.of(UserRole.ADMIN, userRole),
-                    pageable
-                );
+                // 这里需要自定义查询，暂时简单处理
+                List<Course> adminCourses = courseMapper.getByCreatorRole(UserRole.ADMIN, false);
+                List<Course> teacherCourses = courseMapper.getByCreatorRole(UserRole.TEACHER, false);
+                courseList = new ArrayList<>();
+                courseList.addAll(adminCourses);
+                courseList.addAll(teacherCourses);
+                total = adminCourses.size() + teacherCourses.size();
             }
         } else {
             // 学生可以看到管理员创建的课程和自己已加入的课程
             if (subject != null && !subject.isEmpty()) {
                 log.debug("学生按科目查询课程: subject={}", subject);
-                coursePage = courseRepository.findBySubjectAndIsDeletedFalseAndCreatorRoleOrStudentIdsContaining(
-                    subject,
-                    UserRole.ADMIN,
-                    userId,
-                    pageable
-                );
+                // 这里需要自定义查询，暂时简单处理
+                List<Course> adminCourses = courseMapper.getBySubjectAndCreatorRole(subject, UserRole.ADMIN, false);
+                List<Course> joinedCourses = courseMapper.getByStudentId(userId, false);
+                // 过滤出符合科目的已加入课程
+                joinedCourses = joinedCourses.stream()
+                        .filter(c -> subject.equals(c.getSubject()))
+                        .collect(Collectors.toList());
+                
+                courseList = new ArrayList<>();
+                courseList.addAll(adminCourses);
+                courseList.addAll(joinedCourses);
+                total = adminCourses.size() + joinedCourses.size();
             } else {
                 log.debug("学生查询可见课程");
-                coursePage = courseRepository.findByIsDeletedFalseAndCreatorRoleOrStudentIdsContaining(
-                    UserRole.ADMIN,
-                    userId,
-                    pageable
-                );
+                // 这里需要自定义查询，暂时简单处理
+                List<Course> adminCourses = courseMapper.getByCreatorRole(UserRole.ADMIN, false);
+                List<Course> joinedCourses = courseMapper.getByStudentId(userId, false);
+                
+                courseList = new ArrayList<>();
+                courseList.addAll(adminCourses);
+                courseList.addAll(joinedCourses);
+                total = adminCourses.size() + joinedCourses.size();
             }
         }
         
-        log.info("查询到课程总数: total={}", coursePage.getTotalElements());
+        // 手动分页
+        int fromIndex = Math.min(offset, courseList.size());
+        int toIndex = Math.min(fromIndex + limit, courseList.size());
+        List<Course> pagedCourses = courseList.subList(fromIndex, toIndex);
         
-        List<CourseVO> courseVOs = coursePage.getContent().stream()
+        log.info("查询到课程总数: total={}", total);
+        
+        List<CourseVO> courseVOs = pagedCourses.stream()
             .map(course -> {
                 List<KnowledgeBaseVO> knowledgeBases = new ArrayList<>();
                 boolean hasPublishedBase = false;
                 
-                // 获取知识库信息
                 if (course.getKnowledgeBaseIds() != null && !course.getKnowledgeBaseIds().isEmpty()) {
-                    log.debug("获取课程知识库信息: courseId={}, knowledgeBaseCount={}", 
-                        course.getId(), course.getKnowledgeBaseIds().size());
                     
                     for (String knowledgeBaseId : course.getKnowledgeBaseIds()) {
-                        KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
+                        KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
                         if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
+                            // 转换为VO对象
                             KnowledgeBaseVO knowledgeBaseVO = knowledgeBaseService.convertToVO(knowledgeBase);
                             knowledgeBases.add(knowledgeBaseVO);
                             if (knowledgeBase.getIsPublished()) {
@@ -474,33 +493,41 @@ public class CourseService {
                     course.getCreatorRole(),
                     course.getCreatedAt(),
                     course.getUpdatedAt(),
-                    course.getStudentIds().size(),
+                    course.getStudentIds() != null ? course.getStudentIds().size() : 0,
                     course.getKnowledgeBaseIds(),
                     knowledgeBases,
                     hasPublishedBase
                 );
             })
-            .toList();
-        
-        log.info("成功转换课程列表: courseCount={}", courseVOs.size());
+            .collect(Collectors.toList());
         
         return PaginatedResponse.of(
             courseVOs,
-            (int) coursePage.getTotalElements(),
+            total,
             params.getPage(),
             params.getSize()
         );
     }
 
     /**
-     * 获取用户已加入的课程列表
+     * 获取我加入的课程列表（分页）
+     * @param params 分页参数
+     * @return 分页课程列表
      */
     public PaginatedResponse<CourseVO> getUserCourses(PaginationParams params) {
         Long userId = StpUtil.getLoginIdAsLong();
-        Pageable pageable = PageRequest.of(params.getPage() - 1, params.getSize());
-        Page<Course> coursePage = courseRepository.findByStudentIdsContainingAndIsDeletedFalse(userId, pageable);
+        List<Course> courseList = courseMapper.getByStudentId(userId, false);
         
-        List<CourseVO> courseVOs = coursePage.getContent().stream()
+        // 手动分页
+        int offset = (params.getPage() - 1) * params.getSize();
+        int limit = params.getSize();
+        int total = courseList.size();
+        
+        int fromIndex = Math.min(offset, courseList.size());
+        int toIndex = Math.min(fromIndex + limit, courseList.size());
+        List<Course> pagedCourses = courseList.subList(fromIndex, toIndex);
+        
+        List<CourseVO> courseVOs = pagedCourses.stream()
             .map(course -> new CourseVO(
                 course.getId(),
                 course.getName(),
@@ -512,30 +539,40 @@ public class CourseService {
                 course.getCreatorRole(),
                 course.getCreatedAt(),
                 course.getUpdatedAt(),
-                course.getStudentIds().size(),
+                course.getStudentIds() != null ? course.getStudentIds().size() : 0,
                 course.getKnowledgeBaseIds(),
-                new ArrayList<>(),  // 分页列表暂时不需要知识库详情
-                false              // 分页列表暂时不需要发布状态
+                new ArrayList<>(),
+                false
             ))
-            .toList();
+            .collect(Collectors.toList());
         
         return PaginatedResponse.of(
             courseVOs,
-            (int) coursePage.getTotalElements(),
+            total,
             params.getPage(),
             params.getSize()
         );
     }
 
     /**
-     * 获取用户创建的课程列表
+     * 获取我创建的课程列表（分页）
+     * @param params 分页参数
+     * @return 分页课程列表
      */
     public PaginatedResponse<CourseVO> getCreatedCourses(PaginationParams params) {
         Long userId = StpUtil.getLoginIdAsLong();
-        Pageable pageable = PageRequest.of(params.getPage() - 1, params.getSize());
-        Page<Course> coursePage = courseRepository.findByCreatorIdAndIsDeletedFalse(userId, pageable);
+        List<Course> courseList = courseMapper.getByCreatorId(userId, false);
         
-        List<CourseVO> courseVOs = coursePage.getContent().stream()
+        // 手动分页
+        int offset = (params.getPage() - 1) * params.getSize();
+        int limit = params.getSize();
+        int total = courseList.size();
+        
+        int fromIndex = Math.min(offset, courseList.size());
+        int toIndex = Math.min(fromIndex + limit, courseList.size());
+        List<Course> pagedCourses = courseList.subList(fromIndex, toIndex);
+        
+        List<CourseVO> courseVOs = pagedCourses.stream()
             .map(course -> new CourseVO(
                 course.getId(),
                 course.getName(),
@@ -547,16 +584,16 @@ public class CourseService {
                 course.getCreatorRole(),
                 course.getCreatedAt(),
                 course.getUpdatedAt(),
-                course.getStudentIds().size(),
+                course.getStudentIds() != null ? course.getStudentIds().size() : 0,
                 course.getKnowledgeBaseIds(),
-                new ArrayList<>(),  // 分页列表暂时不需要知识库详情
-                false              // 分页列表暂时不需要发布状态
+                new ArrayList<>(),
+                false
             ))
-            .toList();
+            .collect(Collectors.toList());
         
         return PaginatedResponse.of(
             courseVOs,
-            (int) coursePage.getTotalElements(),
+            total,
             params.getPage(),
             params.getSize()
         );
@@ -566,26 +603,16 @@ public class CourseService {
      * 获取课程统计信息
      */
     public CourseStatsVO getCourseStats(String id) {
-        Course course = courseRepository.findById(id)
-            .orElseThrow(() -> new ApiException(ApiError.COURSE_NOT_EXISTED));
+        Course course = courseMapper.getById(id);
+        if (course == null) {
+            throw new ApiException(ApiError.COURSE_NOT_EXISTED, "文件不能为空");
+        }
             
         // 获取学生数量
         int studentCount = course.getStudentIds() != null ? course.getStudentIds().size() : 0;
         
         // 获取知识库数量
         int knowledgeBaseCount = course.getKnowledgeBaseIds() != null ? course.getKnowledgeBaseIds().size() : 0;
-        
-        // 获取知识点总数
-        int totalKnowledgePoints = 0;
-        if (course.getKnowledgeBaseIds() != null) {
-            for (String knowledgeBaseId : course.getKnowledgeBaseIds()) {
-                KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
-                if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
-                    totalKnowledgePoints += knowledgeBase.getKnowledgeIds() != null ? 
-                        knowledgeBase.getKnowledgeIds().size() : 0;
-                }
-            }
-        }
         
         // 获取活跃学生数（最近7天有登录记录的学生）
         int activeStudents = 0;
@@ -599,7 +626,7 @@ public class CourseService {
         
         return new CourseStatsVO(
             studentCount,          // 学生总数
-            totalKnowledgePoints,  // 知识点总数
+            0,                     // 知识点总数，已移除
             activeStudents,        // 活跃学生数
             knowledgeBaseCount     // 知识库数量
         );
@@ -610,32 +637,9 @@ public class CourseService {
      */
     public CourseProgressVO getCourseProgress(String id) {
         Long userId = StpUtil.getLoginIdAsLong();
-        Course course = courseRepository.findById(id)
-            .orElseThrow(() -> new ApiException(ApiError.COURSE_NOT_EXISTED));
-            
-        if (!course.getStudentIds().contains(userId)) {
-            throw new ApiException(ApiError.NO_PERMISSION);
-        }
-        
-        // 获取课程的所有知识点
-        int totalKnowledgePoints = 0;
-        int completedKnowledgePoints = 0;
-        
-        if (course.getKnowledgeBaseIds() != null) {
-            for (String knowledgeBaseId : course.getKnowledgeBaseIds()) {
-                KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
-                if (knowledgeBase != null && !knowledgeBase.getIsDeleted()) {
-                    if (knowledgeBase.getKnowledgeIds() != null) {
-                        totalKnowledgePoints += knowledgeBase.getKnowledgeIds().size();
-                        
-                        // TODO: 实现学习进度统计，可以通过用户学习记录统计已完成的知识点
-                        for (String knowledgeId : knowledgeBase.getKnowledgeIds()) {
-                            // 这里需要根据实际业务逻辑判断知识点是否已完成
-                            completedKnowledgePoints++;
-                        }
-                    }
-                }
-            }
+        Course course = courseMapper.getById(id);
+        if (course == null || !course.getStudentIds().contains(userId)) {
+            throw new ApiException(ApiError.NO_PERMISSION, "文件不能为空");
         }
         
         // 获取最后访问时间
@@ -645,10 +649,46 @@ public class CourseService {
         long totalLearningTime = 0; // TODO: 从用户学习记录中获取总学习时长
         
         return new CourseProgressVO(
-            completedKnowledgePoints,  // 已完成知识点数
-            totalKnowledgePoints,      // 总知识点数
-            lastAccessTime,            // 最后访问时间
-            totalLearningTime          // 学习时长（分钟）
+            0,                     // 已完成知识点数，已移除
+            0,                     // 总知识点数，已移除
+            lastAccessTime,        // 最后访问时间
+            totalLearningTime      // 学习时长（分钟）
         );
+    }
+
+    /**
+     * 为课程创建知识库
+     * @param courseId 课程ID
+     * @param createKnowledgeBaseDTO 创建知识库DTO
+     * @return 知识库ID
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public String createKnowledgeBaseForCourse(String courseId, CreateKnowledgeBaseDTO createKnowledgeBaseDTO) {
+        // 先创建知识库
+        String knowledgeBaseId = knowledgeBaseService.createKnowledgeBase(createKnowledgeBaseDTO);
+        
+        // 将知识库关联到课程
+        Course course = courseMapper.getById(courseId);
+        if (course == null || course.getIsDeleted()) {
+            throw new ApiException(ApiError.COURSE_NOT_EXISTED, "文件不能为空");
+        }
+        
+        // 检查当前用户是否有权限编辑课程
+        Long userId = StpUtil.getLoginIdAsLong();
+        if (!course.getCreatorId().equals(userId)) {
+            throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
+        }
+        
+        // 将知识库ID添加到课程的知识库列表中
+        if (course.getKnowledgeBaseIds() == null) {
+            course.setKnowledgeBaseIds(new ArrayList<>());
+        }
+        course.getKnowledgeBaseIds().add(knowledgeBaseId);
+        course.setUpdatedAt(new Date());
+        
+        // 更新课程
+        courseMapper.update(course);
+        
+        return knowledgeBaseId;
     }
 } 

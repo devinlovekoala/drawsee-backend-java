@@ -37,12 +37,12 @@ public class TeacherService {
         Long userId = createTeacherDTO.getUserId();
         User user = userMapper.getById(userId);
         if (user == null) {
-            throw new ApiException(ApiError.USER_NOT_EXIST);
+            throw new ApiException(ApiError.USER_NOT_EXIST, "文件不能为空");
         }
         
         Teacher teacher = teacherMapper.getByUserId(userId);
         if (teacher != null) {
-            throw new ApiException(ApiError.TEACHER_HAD_EXISTED);
+            throw new ApiException(ApiError.TEACHER_HAD_EXISTED, "文件不能为空");
         }
         
         teacher = new Teacher();
@@ -69,7 +69,7 @@ public class TeacherService {
     public void validateTeacher() {
         Long userId = StpUtil.getLoginIdAsLong();
         if (!isTeacher(userId)) {
-            throw new ApiException(ApiError.NOT_TEACHER);
+            throw new ApiException(ApiError.NOT_TEACHER, "文件不能为空");
         }
     }
     

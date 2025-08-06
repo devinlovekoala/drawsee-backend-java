@@ -40,8 +40,6 @@ public class KnowledgeBaseVO implements Serializable {
     
     private Date updatedAt;
     
-    private List<String> knowledgeIds;
-    
     private List<Long> members;
     
     private Boolean isPublished;
@@ -51,4 +49,19 @@ public class KnowledgeBaseVO implements Serializable {
     private Integer knowledgeCount;
     
     private Integer memberCount;
+    
+    /**
+     * 是否启用RAG功能
+     */
+    private boolean ragEnabled;
+    
+    /**
+     * RAGFlow知识库ID
+     */
+    private String ragKnowledgeId;
+    
+    /**
+     * RAG知识库中的文档数量
+     */
+    private Integer ragDocumentCount;
 } 

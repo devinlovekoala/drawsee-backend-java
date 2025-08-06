@@ -11,14 +11,13 @@ import cn.yifan.drawsee.pojo.dto.UserLoginDTO;
 import cn.yifan.drawsee.pojo.dto.UserSignUpDTO;
 import cn.yifan.drawsee.pojo.entity.User;
 import cn.yifan.drawsee.pojo.vo.LoginVO;
+import cn.yifan.drawsee.util.PasswordUtil;
 import cn.yifan.drawsee.util.RedisUtils;
 import org.redisson.api.RAtomicLong;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 /**
  * @FileName UserService
@@ -65,10 +64,11 @@ public class UserService {
     public LoginVO login(UserLoginDTO userLoginDTO) {
         User user = userMapper.getByUsername(userLoginDTO.getUsername());
         if (user == null) {
-            throw new ApiException(ApiError.USER_NOT_EXIST);
+            throw new ApiException(ApiError.USER_NOT_EXIST, "文件不能为空");
         }
-        if (!user.getPassword().equals(userLoginDTO.getPassword())) {
-            throw new ApiException(ApiError.PASSWORD_ERROR);
+        // 使用PasswordUtil验证密码
+        if (!PasswordUtil.matches(userLoginDTO.getPassword(), user.getPassword())) {
+            throw new ApiException(ApiError.PASSWORD_ERROR, "文件不能为空");
         }
         
         // 登录用户
@@ -92,11 +92,13 @@ public class UserService {
     public LoginVO signup(UserSignUpDTO userSignUpDTO) {
         User user = userMapper.getByUsername(userSignUpDTO.getUsername());
         if (user != null) {
-            throw new ApiException(ApiError.USER_HAD_EXISTED);
+            throw new ApiException(ApiError.USER_HAD_EXISTED, "文件不能为空");
         }
+        
+        // 创建用户对象，使用PasswordUtil加密密码
         user = new User(
             userSignUpDTO.getUsername(),
-            userSignUpDTO.getPassword()
+            PasswordUtil.encode(userSignUpDTO.getPassword())
         );
         userMapper.insert(user);
         StpUtil.login(user.getId());
@@ -107,8 +109,35 @@ public class UserService {
         Long userId = StpUtil.getLoginIdAsLong();
         User user = userMapper.getById(userId);
         if (user == null) {
-            throw new ApiException(ApiError.USER_NOT_EXIST);
+            throw new ApiException(ApiError.USER_NOT_EXIST, "文件不能为空");
         }
         return getLoginVO(user);
+    }
+    
+    /**
+     * 通过用户ID获取用户
+     * @param userId 用户ID
+     * @return 用户对象，如果不存在则返回null
+     */
+    public User getUserById(Long userId) {
+        return userMapper.getById(userId);
+    }
+
+    /**
+     * 获取用户角色
+     * @param userId 用户ID
+     * @return 用户角色
+     */
+    public String getUserRole(Long userId) {
+        return userRoleService.getUserRole(userId);
+    }
+    
+    /**
+     * 获取当前用户角色
+     * @return 用户角色
+     */
+    public String getUserRole() {
+        Long userId = StpUtil.getLoginIdAsLong();
+        return getUserRole(userId);
     }
 }

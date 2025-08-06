@@ -46,7 +46,7 @@ public class ApiService {
             log.info("渲染请求发送成功, 任务ID: {}, 节点ID: {}", taskId, nodeId);
         } catch (RestClientException e) {
             log.error("Python渲染服务请求失败, 任务ID: {}, 节点ID: {}, 错误: {}", taskId, nodeId, e.getMessage(), e);
-            throw new ApiException(ApiError.SYSTEM_ERROR);
+            throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
         }
     }
 

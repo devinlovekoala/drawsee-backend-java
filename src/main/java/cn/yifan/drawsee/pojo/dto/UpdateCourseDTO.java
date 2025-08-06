@@ -27,4 +27,8 @@ public class UpdateCourseDTO implements Serializable {
     private String name;
 
     private String description;
+    
+    private String subject;
+    
+    private String code;
 }

@@ -10,8 +10,6 @@ management: # 开启监控
 logging:
   level:
     cn.yifan.drawsee.mapper : debug
-    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
-    org.springframework.data.mongodb.repository.Query: DEBUG 
 
 sa-token:
   # token 名称（同时也是 cookie 名称）
@@ -34,28 +32,28 @@ sa-token:
 drawsee:
   mysql:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    host: 42.193.107.127
-    port: 3246
+    host: rm-2ze68xa54uq7agma27o.mysql.rds.aliyuncs.com
+    port: 3306
     username: root
-    password: cyf829CMT917
+    password: Funstack@3205
   minio:
-    endpoint: http://42.193.107.127:9046
-    accessKey: XOKQYoPekwnGasqY9cB3
-    secretKey: Z65Sy7T2pegQFj5A7ZnRzCFeJdTBV2O4qj5GQkH3
+    endpoint: http://117.72.9.87:9046
+    accessKey: 1r6Dfs4muAO6JfKFnkqH
+    secretKey: ax1EHy6YBLFTDCTsRVcyxsz8JZoDaYZW29OozYTI
     bucketName: drawsee
   models:
     doubao:
-      baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      apiKey: a923c210-64ac-43db-b0b9-5122b11a6aa7
-      modelName: doubao-1.5-pro-32k-250115
+      baseUrl: https://api.siliconflow.cn/v1
+      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
+      modelName: moonshotai/Kimi-K2-Instruct
     deepseekV3:
       baseUrl: https://api.siliconflow.cn/v1
       apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
       modelName: deepseek-ai/DeepSeek-V3
     doubaoVision:
-      baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      apiKey: a923c210-64ac-43db-b0b9-5122b11a6aa7
-      modelName: doubao-1.5-pro-32k-250115
+      baseUrl: https://api.siliconflow.cn/v1
+      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
+      modelName: Qwen/Qwen2.5-VL-72B-Instruct
   rabbitmq:
     aiConfig:
       exchangeName: direct_ai_task_exchange
@@ -101,7 +99,7 @@ spring:
       location: ${java.io.tmpdir}
       resolve-lazily: false
   rabbitmq:
-    host: 42.193.107.127
+    host: 117.72.9.87
     port: 5678
   datasource:
     druid:
@@ -111,7 +109,7 @@ spring:
       password: ${drawsee.mysql.password}
   data:
     redis:
-      host: 42.193.107.127
+      host: 117.72.9.87
       port: 6278
       # 连接超时时间
       timeout: 10s
@@ -125,10 +123,6 @@ spring:
           max-idle: 10
           # 连接池中的最小空闲连接
           min-idle: 0
-    mongodb:
-      host: 42.193.107.127
-      port: 26084
-      database: drawsee
 
 mybatis:
   #mapper配置文件

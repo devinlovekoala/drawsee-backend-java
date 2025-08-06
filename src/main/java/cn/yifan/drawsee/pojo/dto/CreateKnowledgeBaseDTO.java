@@ -1,33 +1,35 @@
 package cn.yifan.drawsee.pojo.dto;
 
-import jakarta.validation.constraints.NotBlank;
-import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
-
-import java.io.Serial;
-import java.io.Serializable;
+import jakarta.validation.constraints.NotBlank;
 
 /**
- * @FileName CreateKnowledgeBaseDTO
- * @Description 创建知识库的DTO类
- * @Author devin
- * @date 2025-03-28 10:45
- **/
-
+ * 创建知识库数据传输对象
+ * 
+ * @author devin
+ * @date 2025-03-28 17:20
+ */
 @Data
-@AllArgsConstructor
-@NoArgsConstructor
-public class CreateKnowledgeBaseDTO implements Serializable {
-
-    @Serial
-    private static final long serialVersionUID = 1L;
-
+public class CreateKnowledgeBaseDTO {
+    
+    /**
+     * 知识库ID，用于更新操作
+     */
+    private String id;
+    
+    /**
+     * 知识库名称
+     */
     @NotBlank(message = "知识库名称不能为空")
     private String name;
-
+    
+    /**
+     * 知识库描述
+     */
     private String description;
-
-    @NotBlank(message = "学科不能为空")
+    
+    /**
+     * 知识库主题/学科
+     */
     private String subject;
 } 

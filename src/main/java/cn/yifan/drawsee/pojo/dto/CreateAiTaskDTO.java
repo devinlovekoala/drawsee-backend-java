@@ -1,9 +1,7 @@
 package cn.yifan.drawsee.pojo.dto;
 
 import cn.yifan.drawsee.annotation.ValueSet;
-import cn.yifan.drawsee.constant.AiModel;
 import cn.yifan.drawsee.constant.AiTaskType;
-import cn.yifan.drawsee.constant.KnowledgeSubject;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -35,7 +33,8 @@ public class CreateAiTaskDTO implements Serializable {
         AiTaskType.SOLVER_FIRST, AiTaskType.SOLVER_CONTINUE, AiTaskType.SOLVER_SUMMARY,
         AiTaskType.PLANNER,
         AiTaskType.HTML_MAKER,
-        AiTaskType.CIRCUIT_ANALYSIS, AiTaskType.CIRCUIT_DETAIL
+        AiTaskType.CIRCUIT_ANALYSIS, AiTaskType.CIRCUIT_DETAIL,
+        AiTaskType.PDF_CIRCUIT_ANALYSIS, AiTaskType.PDF_CIRCUIT_DESIGN
     })
     private String type;
 

@@ -13,7 +13,6 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.entity.User;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.pojo.vo.NodeVO;
-import cn.yifan.drawsee.repository.KnowledgeRepository;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.StreamAiService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -53,7 +52,6 @@ public class WorkFlow {
     protected final ConversationMapper conversationMapper;
     protected final NodeMapper nodeMapper;
     protected final AiTaskMapper aiTaskMapper;
-    protected final KnowledgeRepository knowledgeRepository;
     protected final AiService aiService;
     protected final StreamAiService streamAiService;
     protected final RedissonClient redissonClient;
@@ -64,7 +62,6 @@ public class WorkFlow {
         AiService aiService,
         StreamAiService streamAiService,
         RedissonClient redissonClient,
-        KnowledgeRepository knowledgeRepository,
         NodeMapper nodeMapper,
         ConversationMapper conversationMapper,
         AiTaskMapper aiTaskMapper,
@@ -74,7 +71,6 @@ public class WorkFlow {
         this.aiService = aiService;
         this.streamAiService = streamAiService;
         this.redissonClient = redissonClient;
-        this.knowledgeRepository = knowledgeRepository;
         this.nodeMapper = nodeMapper;
         this.conversationMapper = conversationMapper;
         this.aiTaskMapper = aiTaskMapper;

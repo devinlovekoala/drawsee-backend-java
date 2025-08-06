@@ -97,7 +97,7 @@ public class ToolService {
             !Objects.equals(file.getContentType(), "image/jpeg") &&
             !Objects.equals(file.getContentType(), "image/jpg")
         ) {
-            throw new ApiException(ApiError.FILE_TYPE_NOT_SUPPORTED);
+            throw new ApiException(ApiError.FILE_TYPE_NOT_SUPPORTED, "文件不能为空");
         }
         // 生成UUID，并去掉-
         String uuid = UUID.randomUUID().toString().replace("-", "");
@@ -108,14 +108,14 @@ public class ToolService {
             minioService.uploadImage(file, objectName);
         } catch (Exception e) {
             log.error("图片上传失败", e);
-            throw new ApiException(ApiError.FILE_UPLOAD_FAILED);
+            throw new ApiException(ApiError.FILE_UPLOAD_FAILED, "文件不能为空");
         }
         try {
             String imageUrl = minioService.getObjectUrl(objectName);
             return new RecognizeTextVO(aiService.recognizeTextFromImage(imageUrl));
         } catch (Exception e) {
             log.error("图片识别失败", e);
-            throw new ApiException(ApiError.IMAGE_RECOGNIZE_FAILED);
+            throw new ApiException(ApiError.IMAGE_RECOGNIZE_FAILED, "文件不能为空");
         }
     }
 
@@ -124,7 +124,7 @@ public class ToolService {
         try {
             return aiService.getSolveWays(question);
         } catch (JsonProcessingException e) {
-            throw new ApiException(ApiError.SYSTEM_ERROR);
+            throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
         }
     }
 }

@@ -12,7 +12,6 @@ import cn.yifan.drawsee.pojo.XYPosition;
 import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
-import cn.yifan.drawsee.repository.KnowledgeRepository;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.PromptService;
 import cn.yifan.drawsee.service.base.StreamAiService;
@@ -50,7 +49,6 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         AiService aiService,
         StreamAiService streamAiService,
         RedissonClient redissonClient,
-        KnowledgeRepository knowledgeRepository,
         NodeMapper nodeMapper,
         ConversationMapper conversationMapper,
         AiTaskMapper aiTaskMapper,
@@ -58,7 +56,7 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         PromptService promptService,
         SpiceConverter spiceConverter
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, knowledgeRepository, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.spiceConverter = spiceConverter;
     }
