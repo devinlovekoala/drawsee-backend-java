@@ -108,7 +108,11 @@ public enum ApiError {
     RAG_KNOWLEDGE_NOT_FOUND(5103, "RAGFlow知识库不存在"),
     RAG_DOCUMENT_NOT_FOUND(5104, "RAGFlow文档不存在"),
     RAG_UPLOAD_FAILED(5105, "RAGFlow文档上传失败"),
-    RAG_FILE_TYPE_NOT_SUPPORTED(5106, "RAGFlow不支持的文件类型");
+    RAG_FILE_TYPE_NOT_SUPPORTED(5106, "RAGFlow不支持的文件类型"),
+    
+    // 用户文档相关错误
+    RESOURCE_NOT_FOUND(404, "资源不存在"),
+    ACCESS_DENIED(403, "访问被拒绝");
 
     // 枚举项的参数
     private final Integer code;

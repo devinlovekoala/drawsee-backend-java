@@ -83,6 +83,11 @@ public class AiTaskType {
      * PDF电路实验任务自动设计生成
      */
     public static final String PDF_CIRCUIT_DESIGN = "PDF_CIRCUIT_DESIGN";
+    
+    /**
+     * PDF电路实验任务分析详情
+     */
+    public static final String PDF_CIRCUIT_ANALYSIS_DETAIL = "PDF_CIRCUIT_ANALYSIS_DETAIL";
 
     private AiTaskType() {
         // 私有构造函数，防止实例化

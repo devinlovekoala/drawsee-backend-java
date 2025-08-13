@@ -53,12 +53,30 @@ public class WorkContext {
     private List<Node> nodesToUpdate;
 
     private Boolean isSendDone;
+    
+    // 额外数据存储
+    private Map<String, Object> extraData;
 
     public WorkContext(AiTaskMessage aiTaskMessage) {
         this.aiTaskMessage = aiTaskMessage;
         this.nodesToUpdate = new ArrayList<>();
         this.isSendDone = true;
         this.tokens = new AtomicLong(0);
+        this.extraData = new ConcurrentHashMap<>();
+    }
+    
+    /**
+     * 存储额外数据
+     */
+    public void putExtraData(String key, Object value) {
+        this.extraData.put(key, value);
+    }
+    
+    /**
+     * 获取额外数据
+     */
+    public Object getExtraData(String key) {
+        return this.extraData.get(key);
     }
 
 }

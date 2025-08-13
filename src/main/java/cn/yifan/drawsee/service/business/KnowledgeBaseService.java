@@ -29,6 +29,7 @@ import cn.yifan.drawsee.pojo.dto.rag.RagCreateKnowledgeDTO;
 import cn.yifan.drawsee.pojo.vo.rag.RagKnowledgeVO;
 import cn.yifan.drawsee.config.RagFlowConfig;
 import java.util.stream.Collectors;
+import java.util.Objects;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -305,6 +306,25 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         
         KnowledgeBaseVO vo = new KnowledgeBaseVO();
         BeanUtils.copyProperties(knowledgeBase, vo);
+        
+        // 手动处理members字段，确保类型转换正确
+        if (knowledgeBase.getMembers() != null) {
+            List<Long> longMembers = knowledgeBase.getMembers().stream()
+                .map(member -> {
+                    if (member == null) {
+                        return null;
+                    }
+                    // 如果member是Number类型的子类，转换为Long
+                    if (member instanceof Number) {
+                        return ((Number) member).longValue();
+                    }
+                    // 否则尝试将字符串转换为Long
+                    return Long.valueOf(member.toString());
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+            vo.setMembers(longMembers);
+        }
         
         return vo;
     }
