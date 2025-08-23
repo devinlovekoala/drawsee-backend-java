@@ -19,4 +19,6 @@ public class MinioObjectPath {
     
     // 动画资源路径
     public static final String ANIMATION_PATH = "ai-animation/";
+
+	public static final String DOCUMENT_PAGE_PATH = "document/page/";
 }

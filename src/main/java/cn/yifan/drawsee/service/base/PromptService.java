@@ -125,4 +125,7 @@ public interface PromptService {
         @PromptParam("text") String text,
         @PromptParam("maxDepth") Integer maxDepth
     );
+
+    @PromptResource(fromResource = "/prompt/document-analysis-vision.txt")
+    String getDocumentAnalysisVisionPrompt();
 }

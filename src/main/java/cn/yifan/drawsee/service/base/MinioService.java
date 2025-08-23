@@ -67,22 +67,26 @@ public class MinioService {
     }
 
     private String getContentType(String objectName) {
-        if (objectName.endsWith(".jpg") || objectName.endsWith(".jpeg")) {
+        String lower = objectName.toLowerCase();
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
             return "image/jpeg";
-        } else if (objectName.endsWith(".png")) {
+        } else if (lower.endsWith(".png")) {
             return "image/png";
-        } else if (objectName.endsWith(".gif")) {
+        } else if (lower.endsWith(".gif")) {
             return "image/gif";
-        } else if (objectName.endsWith(".mp4")) {
+        } else if (lower.endsWith(".mp4")) {
             return "video/mp4";
-        } else if (objectName.endsWith(".pdf")) {
+        } else if (lower.endsWith(".pdf")) {
             return "application/pdf";
-        } else if (objectName.endsWith(".doc")) {
+        } else if (lower.endsWith(".doc")) {
             return "application/msword";
-        } else if (objectName.endsWith(".docx")) {
+        } else if (lower.endsWith(".docx")) {
             return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        } else if (lower.endsWith(".ppt")) {
+            return "application/vnd.ms-powerpoint";
+        } else if (lower.endsWith(".pptx")) {
+            return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
         }
-        // 可以根据需要添加更多类型
         return "application/octet-stream";
     }
 
@@ -117,6 +121,22 @@ public class MinioService {
         );
         return objectName;
     }
+
+    public String uploadImage(java.awt.image.BufferedImage image, String objectName) throws MinioException, IOException, NoSuchAlgorithmException, InvalidKeyException {
+		java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+		javax.imageio.ImageIO.write(image, "png", baos);
+		byte[] bytes = baos.toByteArray();
+		java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(bytes);
+		minioClient.putObject(
+			PutObjectArgs.builder()
+				.bucket(minioConfig.getBucketName())
+				.object(objectName)
+				.stream(bais, bytes.length, -1)
+				.contentType("image/png")
+				.build()
+		);
+		return objectName;
+	}
 
     /**
      * 上传任意文件到MinIO
@@ -154,6 +174,40 @@ public class MinioService {
         // 返回完整URL
         return getObjectUrl(objectName);
     }
+
+    public String getObjectBase64(String objectName, int maxBytes) throws MinioException, IOException, NoSuchAlgorithmException, InvalidKeyException {
+		GetObjectResponse response = minioClient.getObject(
+			GetObjectArgs.builder()
+				.bucket(minioConfig.getBucketName())
+				.object(objectName)
+				.build()
+		);
+		try (java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream()) {
+			byte[] buffer = new byte[8192];
+			int total = 0;
+			int len;
+			while ((len = response.read(buffer)) != -1) {
+				if (maxBytes > 0 && total + len > maxBytes) {
+					baos.write(buffer, 0, Math.max(0, maxBytes - total));
+					break;
+				}
+				baos.write(buffer, 0, len);
+				total += len;
+			}
+			return java.util.Base64.getEncoder().encodeToString(baos.toByteArray());
+		} finally {
+			response.close();
+		}
+	}
+
+	public GetObjectResponse getObjectStream(String objectName) throws MinioException, IOException, NoSuchAlgorithmException, InvalidKeyException {
+		return minioClient.getObject(
+			GetObjectArgs.builder()
+				.bucket(minioConfig.getBucketName())
+				.object(objectName)
+				.build()
+		);
+	}
 
     /**
      * 获取资源信息

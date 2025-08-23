@@ -1,0 +1,14 @@
+logging:
+  level:
+    cn.yifan.drawsee: info
+    org.springframework.web: info
+    org.springframework.amqp: info
+    org.redisson: info
+    io.minio: info
+    org.mybatis: info
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*" 

@@ -126,22 +126,168 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         LinkedList<ChatMessage> history = workContext.getHistory();
         String model = aiTaskMessage.getModel();
-        
-        // 获取文档信息
+        RStream<String, Object> redisStream = workContext.getRedisStream();
         UserDocument document = (UserDocument) workContext.getExtraData("document");
-        
+        // 补充：获取流节点ID，所有进度类DATA事件都指向该节点，便于前端定位
+        Long streamNodeId = workContext.getStreamNode() != null ? workContext.getStreamNode().getId() : null;
+
         try {
-            // 构建包含文档的聊天消息
-            UserMessage userMessage = createUserMessageWithDocument(document);
-            
-            // 添加到历史记录
-            history.add(userMessage);
-            
-            // 调用AI进行PDF文档分析 - 使用通用的generalChat方法
-            streamAiService.generalChat(history, "请分析这个实验文档", model, handler);
-            
+            // 模型兜底：如果未选择视觉模型，则切换为默认视觉模型
+            if (model == null || !model.toLowerCase().contains("vision")) {
+                model = "doubaoVision";
+            }
+
+            // 推送开始事件，便于前端显示进度
+            {
+                java.util.Map<String, Object> start = new java.util.concurrent.ConcurrentHashMap<>();
+                start.put("stage", "init");
+                start.put("status", "START");
+                start.put("documentType", document.getDocumentType());
+                if (streamNodeId != null) start.put("nodeId", streamNodeId);
+                redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.DATA, "data", start));
+            }
+
+            if ("pdf".equalsIgnoreCase(document.getDocumentType())) {
+                // 下载PDF为字节数组
+                io.minio.GetObjectResponse response = minioService.getObjectStream(document.getObjectPath());
+                byte[] pdfBytes;
+                try (java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream()) {
+                    byte[] buf = new byte[8192];
+                    int len;
+                    while ((len = response.read(buf)) != -1) { baos.write(buf, 0, len); }
+                    pdfBytes = baos.toByteArray();
+                } finally { response.close(); }
+
+                // 1) 复杂度采样关键页（最多10页），再限制用于视觉的图片最多8张
+                java.util.List<Integer> topPages = cn.yifan.drawsee.util.PdfUtils.selectTopComplexPages(new java.io.ByteArrayInputStream(pdfBytes), 200, 10);
+                topPages.sort(java.util.Comparator.naturalOrder());
+                java.util.List<Integer> visionPages = topPages.size() > 8 ? topPages.subList(0, 8) : topPages;
+                workContext.putExtraData("visionPages", visionPages);
+
+                // 渲染选中页并上传到 Minio，收集 URL
+                java.util.List<java.awt.image.BufferedImage> images = cn.yifan.drawsee.util.PdfUtils.renderPages(
+                    new java.io.ByteArrayInputStream(pdfBytes), 220, idx -> visionPages.contains(idx)
+                );
+                java.util.List<String> imageUrls = new java.util.ArrayList<>();
+                int idxCounter = 0;
+                for (java.awt.image.BufferedImage img : images) {
+                    int pageIndex = visionPages.get(idxCounter);
+                    String obj = cn.yifan.drawsee.constant.MinioObjectPath.DOCUMENT_PAGE_PATH + document.getId() + "/p" + (pageIndex + 1) + ".png";
+                    minioService.uploadImage(img, obj);
+                    imageUrls.add(minioService.getObjectUrl(obj));
+                    idxCounter++;
+                }
+
+                // 发送开始进度
+                java.util.Map<String, Object> startData = new java.util.concurrent.ConcurrentHashMap<>();
+                startData.put("stage", "vision");
+                startData.put("status", "START");
+                startData.put("pages", visionPages);
+                startData.put("imageCount", imageUrls.size());
+                if (streamNodeId != null) startData.put("nodeId", streamNodeId);
+                redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.DATA, "data", startData));
+
+                // 分批进度
+                int batchSize = 4;
+                java.util.List<String> batchSummaries = new java.util.ArrayList<>();
+                int totalBatches = (imageUrls.size() + batchSize - 1) / batchSize;
+                for (int i = 0; i < imageUrls.size(); i += batchSize) {
+                    int end = Math.min(i + batchSize, imageUrls.size());
+                    java.util.List<String> sub = imageUrls.subList(i, end);
+                    int batchNo = (i / batchSize) + 1;
+                    java.util.Map<String, Object> batchBegin = new java.util.concurrent.ConcurrentHashMap<>();
+                    batchBegin.put("stage", "vision");
+                    batchBegin.put("status", "BATCH_START");
+                    batchBegin.put("batchNo", batchNo);
+                    batchBegin.put("totalBatches", totalBatches);
+                    if (streamNodeId != null) batchBegin.put("nodeId", streamNodeId);
+                    redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.DATA, "data", batchBegin));
+
+                    String instruction = "请从这些页面图像中提取电路/波形/表格等关键信息，输出要点（尽量结构化、简洁）。";
+
+                    final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+                    final java.util.concurrent.atomic.AtomicReference<String> batchTextRef = new java.util.concurrent.atomic.AtomicReference<>("");
+                    final java.util.concurrent.atomic.AtomicReference<String> batchErrRef = new java.util.concurrent.atomic.AtomicReference<>(null);
+
+                    streamAiService.visionChat(
+                        new LinkedList<>(history),
+                        sub,
+                        instruction,
+                        model,
+                        new StreamingResponseHandler<AiMessage>() {
+                            @Override public void onNext(String token) { /* 批次中间不写TEXT，避免混流 */ }
+                            @Override public void onError(Throwable error) {
+                                batchErrRef.set(error.getMessage());
+                                java.util.Map<String, Object> err = new java.util.concurrent.ConcurrentHashMap<>();
+                                err.put("stage", "vision"); err.put("status", "BATCH_ERROR"); err.put("batchNo", batchNo); err.put("message", error.getMessage());
+                                if (streamNodeId != null) err.put("nodeId", streamNodeId);
+                                redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.DATA, "data", err));
+                                latch.countDown();
+                            }
+                            @Override public void onComplete(dev.langchain4j.model.output.Response<AiMessage> response) {
+                                String text = response.content().text();
+                                batchTextRef.set(text);
+                                batchSummaries.add(text);
+                                java.util.Map<String, Object> done = new java.util.concurrent.ConcurrentHashMap<>();
+                                done.put("stage", "vision"); done.put("status", "BATCH_DONE"); done.put("batchNo", batchNo); done.put("keyPoints", text);
+                                if (streamNodeId != null) done.put("nodeId", streamNodeId);
+                                redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.DATA, "data", done));
+                                latch.countDown();
+                            }
+                        }
+                    );
+
+                    try {
+                        boolean ok = latch.await(120, java.util.concurrent.TimeUnit.SECONDS);
+                        if (!ok && batchErrRef.get() == null) {
+                            java.util.Map<String, Object> err = new java.util.concurrent.ConcurrentHashMap<>();
+                            err.put("stage", "vision"); err.put("status", "BATCH_ERROR"); err.put("batchNo", batchNo); err.put("message", "vision batch timeout");
+                            if (streamNodeId != null) err.put("nodeId", streamNodeId);
+                            redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.DATA, "data", err));
+                        }
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+
+                // 2) 文本抽取
+                java.util.List<cn.yifan.drawsee.util.PdfUtils.PageText> pageTexts = cn.yifan.drawsee.util.PdfUtils.extractPageTexts(new java.io.ByteArrayInputStream(pdfBytes));
+                StringBuffer textSb = new StringBuffer();
+                int maxChars = 4000;
+                for (cn.yifan.drawsee.util.PdfUtils.PageText pt : pageTexts) {
+                    String seg = "[P" + pt.pageNo + "]\n" + pt.text + "\n\n";
+                    if (textSb.length() + seg.length() > maxChars) break;
+                    textSb.append(seg);
+                }
+                String extractedText = textSb.toString();
+                workContext.putExtraData("extractedText", extractedText);
+                workContext.putExtraData("visionBatchSummaries", batchSummaries);
+
+                // 发送进入总结阶段的进度
+                java.util.Map<String, Object> summaryStage = new java.util.concurrent.ConcurrentHashMap<>();
+                summaryStage.put("stage", "summary");
+                summaryStage.put("status", "START");
+                if (streamNodeId != null) summaryStage.put("nodeId", streamNodeId);
+                redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.DATA, "data", summaryStage));
+
+                // 3) 一致性校验与二轮总结（流式）
+                String mergedContext = "视觉要点汇总：\n" + String.join("\n\n", batchSummaries) + "\n\n文本抽取片段（部分）：\n" + extractedText + "\n\n请基于两侧信息进行一致性校验，输出结构化结论（器件、连接、测量点、波形、结论、引用页码）。";
+                history.add(new UserMessage(mergedContext));
+                streamAiService.generalChat(history, "请执行一致性校验与最终总结", model, handler);
+            } else {
+                // 非PDF按原逻辑兜底
+                UserMessage userMessage = createUserMessageWithDocument(document);
+                history.add(userMessage);
+                streamAiService.generalChat(history, "请分析这个实验文档", model, handler);
+            }
         } catch (Exception e) {
             log.error("PDF文档分析失败: ", e);
+            // 推送错误事件，避免前端长时间等待
+            java.util.Map<String, Object> err = new java.util.concurrent.ConcurrentHashMap<>();
+            err.put("stage", "error"); err.put("status", "FAILED"); err.put("message", e.getMessage());
+            if (streamNodeId != null) err.put("nodeId", streamNodeId);
+            redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.DATA, "data", err));
+            redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.DONE, "data", ""));
             throw new RuntimeException("PDF文档分析失败: " + e.getMessage());
         }
     }
@@ -172,11 +318,13 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
     public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
         RStream<String, Object> redisStream = workContext.getRedisStream();
         Response<AiMessage> streamResponse = workContext.getStreamResponse();
+        Long streamNodeId = workContext.getStreamNode() != null ? workContext.getStreamNode().getId() : null;
         
         // 更新进度信息
         Map<String, Object> data = new ConcurrentHashMap<>();
         data.put("progress", "PDF电路分析完成");
         data.put("analysisResult", streamResponse.content().text());
+        if (streamNodeId != null) data.put("nodeId", streamNodeId);
         
         redisStream.add(StreamAddArgs.entries(
             "type", AiTaskMessageType.DATA,

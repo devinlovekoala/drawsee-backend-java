@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.LinkedList;
 import java.util.List;
+import dev.langchain4j.data.message.ImageContent;
 
 /**
  * @FileName StreamAiService
@@ -31,6 +32,8 @@ public class StreamAiService {
     private StreamingChatLanguageModel doubaoStreamingChatLanguageModel;
     @Autowired
     private StreamingChatLanguageModel deepseekV3StreamingChatLanguageModel;
+    @Autowired
+    private StreamingChatLanguageModel doubaoVisionStreamingChatLanguageModel;
 
     public void generalChat(List<ChatMessage> history, String question, String model, StreamingResponseHandler<AiMessage> handler) {
         LinkedList<ChatMessage> messages = new LinkedList<>(history);
@@ -203,4 +206,25 @@ public class StreamAiService {
             doubaoStreamingChatLanguageModel.generate(messages, handler);
         }
     }
+
+    public void visionChat(List<ChatMessage> history, List<String> imageUrls, String instruction, String model, StreamingResponseHandler<AiMessage> handler) {
+		LinkedList<ChatMessage> messages = new LinkedList<>(history);
+		String systemPrompt = promptService.getDocumentAnalysisVisionPrompt();
+		messages.addFirst(new SystemMessage(systemPrompt));
+
+		int maxImages = Math.min(8, imageUrls.size());
+		List<ImageContent> imageContents = new LinkedList<>();
+		for (int j = 0; j < maxImages; j++) {
+			imageContents.add(ImageContent.from(imageUrls.get(j)));
+		}
+		messages.addLast(UserMessage.from(instruction, imageContents.toArray(new ImageContent[0])));
+
+		if (AiModel.DOUBAOVISION.equals(model)) {
+			log.info("使用豆包Vision模型，图片数: {}", maxImages);
+			doubaoVisionStreamingChatLanguageModel.generate(messages, handler);
+		} else {
+			log.info("当前模型不支持多模态，退化为文本提示，模型: {}", model);
+			deepseekV3StreamingChatLanguageModel.generate(messages, handler);
+		}
+	}
 }

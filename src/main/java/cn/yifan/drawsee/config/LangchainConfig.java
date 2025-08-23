@@ -91,4 +91,15 @@ public class LangchainConfig {
               .build();
     }
 
+    @Bean("doubaoVisionStreamingChatLanguageModel")
+    public StreamingChatLanguageModel doubaoVisionStreamingChatLanguageModel() {
+        return OpenAiStreamingChatModel.builder()
+                .baseUrl(doubaoVision.getBaseUrl())
+                .apiKey(doubaoVision.getApiKey())
+                .modelName(doubaoVision.getModelName())
+                .logRequests(false)
+                .logResponses(false)
+                .build();
+    }
+
 }

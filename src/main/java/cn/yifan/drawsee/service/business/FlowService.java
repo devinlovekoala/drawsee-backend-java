@@ -363,10 +363,8 @@ public class FlowService {
         if (chatTask == null) {
             errorMessage = ApiError.AI_TASK_NOT_EXISTED.getMessage();
         }
-        else if (chatTask.getStatus().equals(AiTaskStatus.WAITING)) {
-            errorMessage = ApiError.AI_TASK_IS_WAITING.getMessage();
-        }
-        /*else if (chatTask.getStatus().equals(ChatTaskStatus.SUCCEEDED) || chatTask.getStatus().equals(ChatTaskStatus.FAILED)) {
+        /* 保留：如需在任务已结束或流不存在时返回错误，可在此处扩展判断。
+        else if (chatTask.getStatus().equals(ChatTaskStatus.SUCCEEDED) || chatTask.getStatus().equals(ChatTaskStatus.FAILED)) {
             errorMessage = ApiError.CHAT_TASK_IS_FINISHED.getMessage();
         }
         else if (!redisStream.isExists()) {

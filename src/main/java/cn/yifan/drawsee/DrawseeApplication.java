@@ -9,11 +9,13 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.servlet.config.annotation.PathMatchConfigurer;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 
 @SpringBootApplication
 @EnableAsync
 @EnableScheduling
 @EnableCaching
+@EnableRabbit
 @ServletComponentScan
 public class DrawseeApplication {
 

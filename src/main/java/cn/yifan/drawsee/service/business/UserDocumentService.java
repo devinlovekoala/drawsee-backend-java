@@ -70,7 +70,7 @@ public class UserDocumentService {
             document.setTitle(title != null ? title : fileName);
             document.setDescription(description);
             document.setDocumentType(getDocumentTypeFromContentType(contentType));
-            document.setFileUrl(minioUrl);
+            document.setFileUrl("");
             document.setObjectPath(objectName);
             document.setFileSize(file.getSize());
             document.setCreatedAt(new Date());

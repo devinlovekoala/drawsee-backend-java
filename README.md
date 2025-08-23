@@ -207,3 +207,22 @@ public final void execute(WorkContext workContext) {
 ## 注意事项
 - 项目依赖的中间件（如 Redis、RabbitMQ、Minio）需要提前配置好。
 - 配置文件中的敏感信息（如 API Key）需要妥善保管。
+
+## 安全扫描与观察日志使用指南（M1）
+
+- **只读/告警级安全扫描（可选）**
+  - 运行依赖漏洞扫描与静态分析（不影响默认构建，不阻断）：
+    - `mvn -Psecurity-scan -DskipTests verify`
+  - 查看依赖/插件可升级情况：
+    - `mvn versions:display-dependency-updates`
+    - `mvn versions:display-plugin-updates`
+  - 报告输出位置：
+    - 依赖漏洞：`target/dependency-check-report.html(.json)`
+    - SpotBugs：`target/spotbugsXml.html`
+
+- **观察日志 Profile（可选）**
+  - 仅在排查时启用：
+    - `--spring.profiles.active=prod,observe`
+  - 提升日志级别范围：`cn.yifan.drawsee`、`org.springframework.web`、`org.springframework.amqp`、`org.redisson`、`io.minio`、`org.mybatis`
+
+- 详见：`docs/M1-交付物与预案.md`
