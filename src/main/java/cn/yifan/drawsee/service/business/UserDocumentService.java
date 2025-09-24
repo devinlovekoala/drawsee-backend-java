@@ -70,7 +70,8 @@ public class UserDocumentService {
             document.setTitle(title != null ? title : fileName);
             document.setDescription(description);
             document.setDocumentType(getDocumentTypeFromContentType(contentType));
-            document.setFileUrl("");
+            // store the presigned URL returned by MinioService so frontend can preview/download
+            document.setFileUrl(minioUrl);
             document.setObjectPath(objectName);
             document.setFileSize(file.getSize());
             document.setCreatedAt(new Date());
