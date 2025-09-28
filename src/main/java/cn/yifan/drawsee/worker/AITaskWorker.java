@@ -43,8 +43,11 @@ public class AITaskWorker {
     private CircuitAnalysisDetailWorkFlow circuitAnalysisDetailWorkFlow;
     @Autowired
     private PdfCircuitAnalysisDetailWorkFlow pdfCircuitAnalysisDetailWorkFlow;
+    @Autowired
+    private PdfCircuitAnalysisWorkFlow pdfCircuitAnalysisWorkFlow;
 
     public void processTask(AiTaskMessage aiTaskMessage) {
+        log.info("开始处理任务: taskId={}, type={}, userId={}, convId={}", aiTaskMessage.getTaskId(), aiTaskMessage.getType(), aiTaskMessage.getUserId(), aiTaskMessage.getConvId());
         WorkContext workContext = new WorkContext(aiTaskMessage);
         switch (aiTaskMessage.getType()) {
             case AiTaskType.GENERAL -> generalWorkFlow.execute(workContext);
@@ -59,6 +62,15 @@ public class AITaskWorker {
             case AiTaskType.HTML_MAKER -> htmlMakerWorkFlow.execute(workContext);
             case AiTaskType.CIRCUIT_ANALYSIS -> circuitAnalysisWorkFlow.execute(workContext);
             case AiTaskType.CIRCUIT_DETAIL -> circuitAnalysisDetailWorkFlow.execute(workContext);
+            case AiTaskType.PDF_CIRCUIT_ANALYSIS -> {
+                log.info("开始执行PDF电路分析工作流，taskId: {}", aiTaskMessage.getTaskId());
+                try {
+                    pdfCircuitAnalysisWorkFlow.execute(workContext);
+                    log.info("PDF电路分析工作流执行完成，taskId: {}", aiTaskMessage.getTaskId());
+                } catch (Exception e) {
+                    log.error("PDF电路分析工作流执行失败，taskId: {}, 错误: {}", aiTaskMessage.getTaskId(), e.getMessage(), e);
+                }
+            }
             case AiTaskType.PDF_CIRCUIT_ANALYSIS_DETAIL -> pdfCircuitAnalysisDetailWorkFlow.execute(workContext);
             default -> log.error("未知任务类型: {}", aiTaskMessage.getType());
         }

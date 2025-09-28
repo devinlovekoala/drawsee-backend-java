@@ -112,20 +112,9 @@ public interface PromptService {
         @PromptParam("angle") String angle
     );
     
-    /**
-     * 获取文档分析提示词
-     * 用于分析文档内容并提取知识点结构
-     * 
-     * @param text 待分析的文档文本
-     * @param maxDepth 最大提取深度
-     * @return 构建的提示词
-     */
-    @PromptResource(fromResource = "/prompt/document-analysis.txt")
-    String buildDocumentAnalysisPrompt(
-        @PromptParam("text") String text,
-        @PromptParam("maxDepth") Integer maxDepth
-    );
-
+    @PromptResource(fromResource = "/prompt/circuit-pdf/circuit-pdf-analysis.txt")
+    // 注意：模板中使用的是 {{text}} 占位符，这里参数名需与之保持一致
+    String getPdfCircuitAnalysisPrompt(@PromptParam("text") String pdfContent);
     @PromptResource(fromResource = "/prompt/document-analysis-vision.txt")
     String getDocumentAnalysisVisionPrompt();
 }

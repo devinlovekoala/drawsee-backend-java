@@ -65,8 +65,20 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
 
     @Override
     public Boolean validateAndInit(WorkContext workContext) {
+        Boolean isValid = super.validateAndInit(workContext);
+        if (!isValid) return false;
+        
+        Node parentNode = workContext.getParentNode();
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        
+        // 校验父节点类型是否为PDF电路实验任务分析点节点
+        if (!parentNode.getType().equals(NodeType.PDF_CIRCUIT_POINT)) {
+            log.error("父节点不是PDF电路实验任务分析点节点, taskMessage: {}", aiTaskMessage);
+            return false;
+        }
+        
         workContext.setIsSendDone(false);
-        return super.validateAndInit(workContext);
+        return true;
     }
 
     @Override
@@ -106,7 +118,7 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
         streamNodeData.put("text", "");
         
         Node streamNode = new Node(
-            NodeType.ANSWER,
+            NodeType.PDF_CIRCUIT_DETAIL,
             objectMapper.writeValueAsString(streamNodeData),
             objectMapper.writeValueAsString(XYPosition.origin()),
             queryNode.getId(),

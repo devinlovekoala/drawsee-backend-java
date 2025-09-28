@@ -49,14 +49,18 @@ public class RabbitListenerConfig implements RabbitListenerConfigurer {
             endpoint.setQueueNames(queue.getName());
             endpoint.setConcurrency(queue.getConcurrency());
             log.info("注册AI任务监听: queue={}, routingKey={}, concurrency={}", queue.getName(), queue.getRoutingKey(), queue.getConcurrency());
-            //endpoint.setMessageConverter(jsonMessageConverter);
             endpoint.setMessageListener(message -> {
                 Object data = null;
+                String rawBody = null;
                 try {
                     data = jsonMessageConverter.fromMessage(message);
                 } catch (Exception e) {
                     log.warn("JSON转换失败，尝试按字符串解析, queue={}, error={}", queue.getName(), e.toString());
                 }
+                if (message.getBody() != null) {
+                    rawBody = new String(message.getBody(), StandardCharsets.UTF_8);
+                }
+                log.info("[监听器] 收到消息: queue={}, dataClass={}, data={}, rawBody={}", queue.getName(), data == null ? null : data.getClass(), data, rawBody);
 
                 AiTaskMessage aiTaskMessage = null;
                 try {
@@ -64,19 +68,18 @@ public class RabbitListenerConfig implements RabbitListenerConfigurer {
                         aiTaskMessage = m;
                     } else if (data instanceof Map<?, ?> map) {
                         aiTaskMessage = objectMapper.convertValue(map, AiTaskMessage.class);
-                    } else if (message.getBody() != null) {
-                        String body = new String(message.getBody(), StandardCharsets.UTF_8);
-                        aiTaskMessage = objectMapper.readValue(body, AiTaskMessage.class);
+                    } else if (rawBody != null) {
+                        aiTaskMessage = objectMapper.readValue(rawBody, AiTaskMessage.class);
                     }
                 } catch (Exception ex) {
-                    log.error("无法解析消息为AiTaskMessage, queue={}, rawClass={}, error= {}", queue.getName(), data == null ? null : data.getClass(), ex.toString());
+                    log.error("无法解析消息为AiTaskMessage, queue={}, rawClass={}, rawBody={}, error= {}", queue.getName(), data == null ? null : data.getClass(), rawBody, ex.toString());
                 }
 
                 if (aiTaskMessage != null) {
                     log.info("消费任务：{}，线程：{}，开始处理", aiTaskMessage.getTaskId(), Thread.currentThread().getName());
                     aiTaskWorker.processTask(aiTaskMessage);
                 } else {
-                    log.warn("丢弃未知消息，queue={}, headers={}, bodySize={}", queue.getName(), message.getMessageProperties().getHeaders(), message.getBody() == null ? 0 : message.getBody().length);
+                    log.warn("丢弃未知消息，queue={}, headers={}, bodySize={}, rawBody={}", queue.getName(), message.getMessageProperties().getHeaders(), message.getBody() == null ? 0 : message.getBody().length, rawBody);
                 }
             });
             registrar.registerEndpoint(endpoint);

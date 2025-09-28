@@ -35,4 +35,14 @@ public class NodeType {
      */
     public static final String CIRCUIT_POINT = "circuit-point";
 
+    /**
+     * PDF电路实验任务分析点节点
+     */
+    public static final String PDF_CIRCUIT_POINT = "pdf-circuit-point";
+
+    /**
+     * PDF电路实验任务分析详情节点
+     */
+    public static final String PDF_CIRCUIT_DETAIL = "pdf-circuit-detail";
+
 }
