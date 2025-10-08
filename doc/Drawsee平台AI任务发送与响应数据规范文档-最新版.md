@@ -1,37 +1,289 @@
-# Drawsee平台AI任务发送与响应数据规范文档（最新版）
+# Drawsee 平台 AI 任务发送与响应数据规范（最新版）
 
-## 一、通用任务结构
+本文档描述当前后端实现已经适配的请求与响应数据结构、SSE 事件类型、各任务类型的节点产出形态。请以前后端联调为准，字段名、大小写与类型值需和代码常量严格一致。
 
-### 1. 前端发送的任务数据结构
+参考代码：
+- 任务创建接口：`FlowController.createTask`（POST `/flow/tasks`，DTO：`CreateAiTaskDTO`）
+- SSE 订阅：`FlowController.getCompletion`（GET `/flow/completion?taskId=...`）
+- 事件类型常量：`AiTaskMessageType`（node/text/title/data/done/error）
+- 节点类型常量：`NodeType`
+- 节点载体：`NodeVO`
+
+更新时间：2025-09-28
+
+---
+
+## 一、请求规范（CreateAiTaskDTO）
+
+后端从登录态读取 userId，前端提交以下 JSON：
 
 ```json
 {
-  "userId": 123456,  // 用户ID（必填）
-  "convId": 789012,  // 会话ID（必填）
-  "parentId": 345678,  // 父节点ID（必填）
-  "taskId": "task_uuid",  // 任务ID（必填）
-  "type": "TASK_TYPE",  // 任务类型（必填）
-  "model": "deepseekV3",  // 使用的AI模型（可选）
-  "prompt": "用户输入的提示内容",  // 提示内容（必填）
-  "promptParams": {  // 额外的提示参数（可选）
-    "method": "解题方法"  // 特定任务类型的参数
+  "type": "TASK_TYPE",
+  "prompt": "用户输入内容或对象（字符串）",
+  "promptParams": { "k": "v" },
+  "model": "可选模型名",
+  "convId": 5001,
+  "parentId": 1000,
+  "classId": "可选-班级ID，用于知识库选择"
+}
+```
+
+说明：
+- 必填字段：type、prompt。
+- convId 为空时，后端会新建会话与 ROOT 节点，并回填到返回值的 `conversation` 中。
+- parentId 为会话内已有节点 id。不同任务类型对父节点有类型要求（见各类型说明）。
+- type 取值必须来自 `AiTaskType` 常量。
+
+任务创建成功返回：
+
+```json
+{
+  "taskId": 12345,
+  "conversation": {
+    "id": 5001,
+    "title": "新会话",
+    "createdAt": "2025-09-28T10:20:30.000+08:00",
+    "updatedAt": "2025-09-28T10:20:30.000+08:00"
   }
 }
 ```
 
-### 2. 后端响应的基本流程
+---
 
-后端通过Redis Stream持续向前端推送如下类型的数据：
+## 二、SSE 事件规范（/flow/completion?taskId=...）
 
-1. **NODE类型**：创建节点
-2. **TEXT类型**：流式输出文本内容
-3. **DATA类型**：更新节点属性或进度
-4. **TITLE类型**：更新会话标题
-5. **DONE类型**：任务完成信号
-6. **ERROR类型**：错误信息
-5
+后端通过 Redis Stream 推送事件，SSE 的单条消息结构统一为：
 
-## 二、各类任务模式详细说明
+```json
+{
+  "type": "node | text | data | title | done | error",
+  "data": any
+}
+```
+
+- type 取值：见 `AiTaskMessageType`
+  - node：推送新建节点（载荷为 NodeVO）
+  - text：流式 token（载荷 `{ nodeId, content }`）
+  - data：进度/阶段性数据（结构因任务不同而异）
+  - title：会话标题更新（载荷为字符串）
+  - done：任务结束（载荷为空字符串）
+  - error：错误信息（载荷为字符串或对象）
+
+---
+
+## 三、核心节点结构（NodeVO）
+
+```json
+{
+  "id": 1011,
+  "type": "query | answer | answer-point | answer-detail | knowledge-head | knowledge-detail | resource | circuit-canvas | circuit-point | pdf-circuit-point | pdf-circuit-detail",
+  "data": { "title": "...", "text": "...", "...任务特定字段" },
+  "position": { "x": 0, "y": 0 },
+  "height": null,
+  "parentId": 1000,
+  "convId": 5001,
+  "userId": 3002,
+  "createdAt": "2025-09-28T10:20:30.000+08:00",
+  "updatedAt": "2025-09-28T10:20:30.000+08:00"
+}
+```
+
+---
+
+## 四、任务类型与数据形态
+
+下列为常用任务的请求/响应与节点产出示例。示例中 id 与时间仅为演示。
+
+### 1) 通用对话（GENERAL）
+
+请求：
+```json
+{ "type": "GENERAL", "prompt": "请介绍一下Java的基本语法", "model": "deepseekV3", "convId": 5001, "parentId": 1000 }
+```
+
+事件序列（简化）：
+- node：QUERY 节点（data.title="用户提问"，data.text=prompt，data.mode=GENERAL）
+- node：ANSWER_POINT 流节点（title="回答角度"）
+- text：持续 token（“角度1：…\n…\n\n角度2：…\n…”）
+- node：多个 ANSWER_POINT 子节点（每个角度一个）
+- done
+
+ANSWER_POINT 子节点示例：
+```json
+{
+  "id": 126,
+  "type": "answer-point",
+  "data": { "title": "变量和数据类型", "text": "…", "subtype": "ANSWER_POINT" },
+  "parentId": 124
+}
+```
+
+### 2) 通用对话详情（GENERAL_DETAIL）
+
+请求：
+```json
+{ "type": "GENERAL_DETAIL", "prompt": "", "convId": 5001, "parentId": 126 }
+```
+
+事件序列（简化）：
+- node：ANSWER_DETAIL 流节点（title="详细解析"，angle 由父节点标题自动带入）
+- text：持续 token
+- done
+
+ANSWER_DETAIL 节点最终形态：
+```json
+{
+  "id": 127,
+  "type": "answer-detail",
+  "data": { "title": "详细解析", "subtype": "ANSWER_DETAIL", "text": "……", "angle": "变量和数据类型" },
+  "parentId": 126
+}
+```
+
+### 3) 电路分析（CIRCUIT_ANALYSIS）→ 分点
+
+请求的 prompt 为电路画布对象（此处略）。事件序列：
+- node：CIRCUIT_CANVAS 画布节点
+- text：ANSWER_POINT 流式角度文本
+- node：多个 CIRCUIT_POINT 分点子节点
+- done
+
+分点节点示例：
+```json
+{
+  "id": 141,
+  "type": "circuit-point",
+  "data": { "title": "工作原理", "text": "……", "subtype": "circuit-point" },
+  "parentId": 140
+}
+```
+
+### 4) 电路分析点详情（CIRCUIT_DETAIL）
+
+请求：
+```json
+{ "type": "CIRCUIT_DETAIL", "prompt": "", "convId": 5001, "parentId": 141 }
+```
+
+事件序列：
+- node：ANSWER 流节点（title="电路类型详情" 等，angle 从父节点标题带入）
+- text：持续 token
+- done
+
+---
+
+### 5) PDF 电路实验任务分点（PDF_CIRCUIT_ANALYSIS）
+
+用途：前端传入 PDF 的 Minio 预签名 URL，后端尝试下载并抽取正文，按模板生成“分点”。
+
+请求：
+```json
+{ "type": "PDF_CIRCUIT_ANALYSIS", "prompt": "https://minio.example.com/bucket/docs/exp-001.pdf?X-Amz-...", "convId": 5001, "parentId": 1000 }
+```
+
+事件序列：
+- node：QUERY 节点（data.text=该 URL，data.mode=PDF_CIRCUIT_ANALYSIS）
+- text：ANSWER_POINT 流式角度文本
+- node：多个 PDF_CIRCUIT_POINT 分点子节点
+- done
+
+分点节点示例：
+```json
+{
+  "id": 1013,
+  "type": "pdf-circuit-point",
+  "data": { "title": "关键器件与连接关系", "text": "识别运放/电阻/电容…", "subtype": "pdf-circuit-point" },
+  "parentId": 1011
+}
+```
+
+实现细节：
+- 后端会优先尝试从 URL 解析 Minio objectName，下载 PDF，使用 `PdfUtils` 抽取正文填充模板 `{{text}}`；失败时将 URL 作为兜底文本。
+- 分点文本解析遵循“角度X：标题 + 下一行描述 + 空行分隔”的规则；兼容 JSON 数组旧格式（title/description）。
+
+### 6) PDF 电路实验任务分点详情（PDF_CIRCUIT_ANALYSIS_DETAIL）
+
+用途：对选中的 `pdf-circuit-point` 进行“视觉+文本”双通道深度分析，伴随进度事件。
+
+请求：
+```json
+{ "type": "PDF_CIRCUIT_ANALYSIS_DETAIL", "prompt": "文档UUID", "convId": 5001, "parentId": 1013 }
+```
+
+事件序列（含进度 DATA）：
+- node：QUERY 节点（data 含 documentId/title/type 等）
+- node：PDF_CIRCUIT_DETAIL 流式节点（title="电路分析回答"）
+- data：{ stage: "init", status: "START", nodeId }
+- 若为 PDF：
+  - data：{ stage: "vision", status: "START", pages: [..], imageCount: n, nodeId }
+  - data：{ stage: "vision", status: "BATCH_START", batchNo, totalBatches, nodeId }
+  - data：{ stage: "vision", status: "BATCH_DONE", batchNo, keyPoints, nodeId }
+  - …（多批）
+  - data：{ stage: "summary", status: "START", nodeId }
+- text：持续 token（最终一致性校验与总结）
+- data：{ progress: "PDF电路分析完成", analysisResult: "…", nodeId }
+- done
+
+最终详情节点示例：
+```json
+{
+  "id": 1021,
+  "type": "pdf-circuit-detail",
+  "data": { "title": "电路分析回答", "text": "一、实验概述…\n二、器件清单…\n…" },
+  "parentId": 1020
+}
+```
+
+注意：
+- 详情任务要求父节点类型为 `pdf-circuit-point`。
+- 视觉模型兜底：未显式选择视觉模型时默认切换为 `doubaoVision`。
+- 出错时会发送 data：{ stage: "error", status: "FAILED", message, nodeId }，随后立即 done。
+
+---
+
+## 五、错误与完成事件
+
+错误：
+```json
+{ "type": "error", "data": "错误信息或异常字符串" }
+```
+
+完成：
+```json
+{ "type": "done", "data": "" }
+```
+
+---
+
+## 六、字段与类型对照表（关键）
+
+- 事件类型（`AiTaskMessageType`）：`node` | `text` | `data` | `title` | `done` | `error`
+- 节点类型（`NodeType`）：
+  - `root`, `query`, `answer`, `answer-point`, `answer-detail`,
+  - `knowledge-head`, `knowledge-detail`, `resource`,
+  - `circuit-canvas`, `circuit-point`,
+  - `pdf-circuit-point`, `pdf-circuit-detail`
+- 节点标题（常见，`NodeTitle`）：`用户提问`、`回答角度`、`详细解析`、`电路设计`、`电路分析点`、`电路分析详情`、`PDF文档` 等
+
+---
+
+## 七、解析规则补充（回答角度）
+
+系统对回答角度的解析：
+1. 若响应为 JSON 数组（旧格式）：元素包含 `title`、`description` 字段
+2. 否则按文本格式解析：
+   - 标题行：匹配 `^角度\d+：.+`
+   - 标题下一行：描述
+   - 空行：分隔
+
+---
+
+## 八、联调建议
+
+- SSE 订阅：前端收到 `done` 后应关闭对应任务的流；收到 `error` 需提示并允许重试。
+- 节点树：渲染时以 `parentId` 组织层级，`position/height` 可用于画布布局。
+- PDF URL：优先传 Minio 预签名 URL，便于后端落地抽取；其他外链目前走兜底路径。
 
 ### 1. 通用对话模式 (GENERAL)
 

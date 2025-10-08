@@ -10,6 +10,7 @@ management: # 开启监控
 logging:
   level:
     cn.yifan.drawsee.mapper : debug
+    cn.yifan.drawsee.worker : info
 
 sa-token:
   # token 名称（同时也是 cookie 名称）
@@ -34,6 +35,7 @@ drawsee:
     driver-class-name: com.mysql.cj.jdbc.Driver
     host: rm-2ze68xa54uq7agma27o.mysql.rds.aliyuncs.com
     port: 3306
+    database: drawsee
     username: root
     password: Funstack@3205
   minio:

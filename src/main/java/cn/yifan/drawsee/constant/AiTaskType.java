@@ -57,12 +57,6 @@ public class AiTaskType {
      * HTML生成
      */
     public static final String HTML_MAKER = "HTML_MAKER";
-    
-    /**
-     * 电路分析（旧版常量）
-     * @deprecated 请使用 CIRCUIT_ANALYSIS 代替，此常量将在未来版本移除
-     */
-    public static final String CIRCUIT_ANALYZE = "CIRCUIT_ANALYZE";
 
     /**
      * 电路分析
