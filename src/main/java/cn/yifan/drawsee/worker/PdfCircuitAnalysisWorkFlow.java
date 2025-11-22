@@ -1,0 +1,352 @@
+package cn.yifan.drawsee.worker;
+
+import cn.yifan.drawsee.constant.NodeTitle;
+import cn.yifan.drawsee.constant.AiTaskMessageType;
+import cn.yifan.drawsee.constant.NodeSubType;
+import cn.yifan.drawsee.constant.NodeType;
+import cn.yifan.drawsee.mapper.AiTaskMapper;
+import cn.yifan.drawsee.mapper.ConversationMapper;
+import cn.yifan.drawsee.mapper.NodeMapper;
+import cn.yifan.drawsee.mapper.UserMapper;
+import cn.yifan.drawsee.pojo.XYPosition;
+import cn.yifan.drawsee.pojo.entity.Node;
+import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
+import cn.yifan.drawsee.service.base.AiService;
+import cn.yifan.drawsee.service.base.MinioService;
+import cn.yifan.drawsee.service.base.PromptService;
+import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.util.PdfUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.StreamingResponseHandler;
+import dev.langchain4j.model.output.Response;
+import io.minio.GetObjectResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RStream;
+import org.redisson.api.RedissonClient;
+import org.redisson.api.stream.StreamAddArgs;
+import org.springframework.stereotype.Service;
+
+import java.net.URI;
+import java.util.LinkedList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * @FileName PdfCircuitAnalysisWorkFlow
+ * @Description PDF电路实验任务文档分析工作流，处理PDF电路实验任务分析任务
+ * @Author yifan
+ * @date 2025-10-08
+ **/
+
+@Slf4j
+@Service
+public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
+
+    private final PromptService promptService;
+    private final MinioService minioService;
+
+    public PdfCircuitAnalysisWorkFlow(
+            UserMapper userMapper,
+            AiService aiService,
+            StreamAiService streamAiService,
+            RedissonClient redissonClient,
+            NodeMapper nodeMapper,
+            ConversationMapper conversationMapper,
+            AiTaskMapper aiTaskMapper,
+            ObjectMapper objectMapper,
+            PromptService promptService,
+            MinioService minioService
+    ) {
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        this.promptService = promptService;
+        this.minioService = minioService;
+    }
+
+    @Override
+    public Boolean validateAndInit(WorkContext workContext) {
+        log.info("PDF电路分析工作流开始验证和初始化，taskId: {}", workContext.getAiTaskMessage().getTaskId());
+        Boolean isValid = super.validateAndInit(workContext);
+        if (!isValid) {
+            log.error("PDF电路分析工作流验证失败，taskId: {}", workContext.getAiTaskMessage().getTaskId());
+            return false;
+        }
+
+        // 设置不需要发送DONE消息（在createOtherNodesOrUpdateNodeData中发送）
+        workContext.setIsSendDone(false);
+        log.info("PDF电路分析工作流验证和初始化成功，taskId: {}", workContext.getAiTaskMessage().getTaskId());
+        return true;
+    }
+
+    /**
+     * 覆盖父类方法，为PDF电路实验任务分析流程提供优化的实现
+     * 不创建父角度节点，而是仅保留QUERY节点作为后续分析点节点的父节点
+     */
+    @Override
+    public void createInitNodes(WorkContext workContext) throws JsonProcessingException {
+        log.info("PDF电路分析工作流开始创建初始节点，taskId: {}", workContext.getAiTaskMessage().getTaskId());
+        // 只创建查询节点，不创建流式节点
+        Long queryNodeId = createInitQueryNode(workContext);
+
+        // 创建一个虚拟的流式节点用于后续处理，但不实际存储到数据库
+        setupVirtualStreamNode(workContext, queryNodeId);
+        log.info("PDF电路分析工作流初始节点创建完成，taskId: {}", workContext.getAiTaskMessage().getTaskId());
+    }
+
+    /**
+     * 覆盖父类方法，创建PDF实验任务查询节点
+     */
+    @Override
+    public Long createInitQueryNode(WorkContext workContext) throws JsonProcessingException {
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+
+        // 创建PDF实验任务查询节点
+        Map<String, Object> queryNodeData = new ConcurrentHashMap<>();
+        queryNodeData.put("title", NodeTitle.PDF_CIRCUIT_QUERY);
+        queryNodeData.put("text", aiTaskMessage.getPrompt()); // PDF文档URL
+        queryNodeData.put("mode", aiTaskMessage.getType());
+
+        Node queryNode = new Node(
+            NodeType.QUERY,
+            objectMapper.writeValueAsString(queryNodeData),
+            objectMapper.writeValueAsString(XYPosition.origin()),
+            aiTaskMessage.getParentId(),
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            true
+        );
+
+        insertAndPublishNoneStreamNode(workContext, queryNode, queryNodeData);
+
+        // 添加PDF内容到历史
+        LinkedList<ChatMessage> history = workContext.getHistory();
+        if (history == null) {
+            history = new LinkedList<>();
+            workContext.setHistory(history);
+        }
+        String pdfContent = aiTaskMessage.getPrompt(); // PDF URL
+        history.add(new UserMessage(pdfContent));
+
+        return queryNode.getId();
+    }
+
+    /**
+     * 设置一个虚拟的流式节点，用于后续的分析点节点创建
+     * 该节点不会实际插入数据库，仅用于后续处理
+     */
+    private void setupVirtualStreamNode(WorkContext workContext, Long parentNodeId) throws JsonProcessingException {
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+
+        // 创建流式节点数据，但不实际保存到数据库
+        Map<String, Object> streamNodeData = new ConcurrentHashMap<>();
+        streamNodeData.put("title", NodeTitle.ANSWER_POINT);
+        streamNodeData.put("text", "");
+
+        // 创建一个Node对象，但不实际插入数据库
+        Node virtualNode = new Node(
+            null,
+            objectMapper.writeValueAsString(streamNodeData),
+            objectMapper.writeValueAsString(XYPosition.origin()),
+            parentNodeId,
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            false // 标记为非活跃
+        );
+
+        // 为虚拟节点设置一个临时ID
+        virtualNode.setId(-1L);
+
+        // 设置到WorkContext中
+        workContext.setStreamNode(virtualNode);
+        workContext.setStreamNodeData(streamNodeData);
+    }
+
+    /**
+     * 不创建流式节点，保持空实现
+     */
+    @Override
+    public void createInitStreamNode(WorkContext workContext, Long parentNodeId) throws JsonProcessingException {
+        // 空实现，实际节点创建在setupVirtualStreamNode方法中
+    }
+
+    @Override
+    public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
+        log.info("PDF电路分析工作流开始流式聊天，taskId: {}", workContext.getAiTaskMessage().getTaskId());
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        LinkedList<ChatMessage> history = workContext.getHistory();
+        String model = aiTaskMessage.getModel();
+
+        // 获取PDF文档URL
+        String pdfUrl = aiTaskMessage.getPrompt();
+        log.info("PDF电路分析工作流处理PDF URL: {}, taskId: {}", pdfUrl, aiTaskMessage.getTaskId());
+
+        // 优先尝试：如果是 MinIO 预签名 URL，下载 PDF 并抽取正文作为 {{text}}
+        String prompt;
+        String extractedText = tryExtractPdfTextFromMinioUrl(pdfUrl);
+        if (extractedText != null && !extractedText.isBlank()) {
+            // 为避免上下文过长，做一次长度裁剪
+            int maxChars = 6000;
+            if (extractedText.length() > maxChars) {
+                extractedText = extractedText.substring(0, maxChars);
+            }
+            prompt = promptService.getPdfCircuitPointAnalysisPrompt(extractedText);
+            log.info("PDF电路分析工作流：使用抽取的PDF正文生成提示词，chars={}", extractedText.length());
+        } else {
+            // 回退：直接把 URL 作为文本放入模板（模型可能无法访问网络，仅供兜底）
+            prompt = promptService.getPdfCircuitPointAnalysisPrompt("文档链接：" + pdfUrl + "\n(如无法访问链接，请根据常见电路实验任务要点给出通用分点)");
+            log.info("PDF电路分析工作流：未能抽取正文，回退为URL兜底");
+        }
+
+        log.info("PDF电路分析工作流生成提示词完成，taskId: {}", aiTaskMessage.getTaskId());
+        // 调用AI进行PDF电路实验任务分析，使用answerPointChat以生成分点
+        // 将系统提示词添加到历史消息中
+        history.add(new UserMessage(prompt));
+        streamAiService.answerPointChat(history, "", model, handler);
+        log.info("PDF电路分析工作流流式聊天调用完成，taskId: {}", aiTaskMessage.getTaskId());
+    }
+
+    /**
+     * 从 MinIO 预签名 URL 解析 objectName 并抽取 PDF 文本
+     * 返回抽取的文本；若失败返回 null
+     */
+    private String tryExtractPdfTextFromMinioUrl(String url) {
+        try {
+            if (url == null || url.isBlank()) return null;
+            URI uri = URI.create(url);
+            String path = uri.getPath(); // 形如 /{bucket}/{object...}
+            if (path == null || path.length() <= 1) return null;
+            String[] parts = path.split("/", 3);
+            if (parts.length < 3) return null; // 不符合 /bucket/object 结构
+            String objectName = parts[2];
+            if (!objectName.toLowerCase().endsWith(".pdf")) {
+                // 仅在 PDF 时尝试抽取
+                return null;
+            }
+            try (GetObjectResponse resp = minioService.getObjectStream(objectName)) {
+                String text = PdfUtils.extractAllText(resp);
+                return text == null ? null : text.trim();
+            }
+        } catch (Exception e) {
+            log.warn("从URL抽取PDF正文失败，url={}，error={}", url, e.toString());
+            return null;
+        }
+    }
+
+    @Override
+    public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
+        RStream<String, Object> redisStream = workContext.getRedisStream();
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        Node streamNode = workContext.getStreamNode();
+        Response<AiMessage> streamResponse = workContext.getStreamResponse();
+
+        // 获取父节点ID（查询节点ID）
+        Long parentId = streamNode.getParentId();
+
+        // 解析分析点结果
+        String responseText = streamResponse.content().text();
+
+        try {
+            // 解析回答角度（分析点）
+            processPdfCircuitAnalysisPoints(workContext, responseText, parentId);
+        } catch (Exception e) {
+            log.error("解析PDF电路实验任务分析点失败: {}", responseText, e);
+        }
+
+        // 更新进度信息
+        Map<String, Object> data = new ConcurrentHashMap<>();
+        data.put("progress", "PDF实验任务分析点生成完成");
+        redisStream.add(StreamAddArgs.entries(
+            "type", AiTaskMessageType.DATA,
+            "data", data
+        ));
+
+        // 发送结束消息
+        redisStream.add(StreamAddArgs.entries(
+            "type", AiTaskMessageType.DONE,
+            "data", ""
+        ));
+    }
+
+    /**
+     * 处理PDF电路实验任务分析点，创建分析点节点
+     */
+    private void processPdfCircuitAnalysisPoints(WorkContext workContext, String responseText, Long parentId) throws JsonProcessingException {
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+
+        // 使用文本方式解析
+        String[] lines = responseText.split("\n");
+        String currentTitle = null;
+        String currentDescription = null;
+
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+
+            if (line.isEmpty()) {
+                // 如果是空行，且已有标题和描述，创建节点
+                if (currentTitle != null && currentDescription != null) {
+                    createPdfCircuitPointNode(workContext, parentId, aiTaskMessage, currentTitle, currentDescription);
+                    currentTitle = null;
+                    currentDescription = null;
+                }
+                continue;
+            }
+
+            // 匹配"角度X：[标题]"格式
+            if (line.matches("^角度\\d+：.+")) {
+                // 如果已有标题和描述，先创建之前的节点
+                if (currentTitle != null && currentDescription != null) {
+                    createPdfCircuitPointNode(workContext, parentId, aiTaskMessage, currentTitle, currentDescription);
+                }
+
+                // 提取标题
+                currentTitle = line.substring(line.indexOf("：") + 1).trim();
+                currentDescription = null;
+            }
+            // 如果有标题但没有描述，当前行作为描述
+            else if (currentTitle != null && currentDescription == null) {
+                currentDescription = line;
+            }
+        }
+
+        // 处理最后一个角度
+        if (currentTitle != null && currentDescription != null) {
+            createPdfCircuitPointNode(workContext, parentId, aiTaskMessage, currentTitle, currentDescription);
+        }
+    }
+
+    /**
+     * 创建PDF电路实验任务分析点节点
+     */
+    private void createPdfCircuitPointNode(WorkContext workContext, Long parentId, AiTaskMessage aiTaskMessage,
+                                          String title, String description) throws JsonProcessingException {
+        Map<String, Object> pdfCircuitPointNodeData = new ConcurrentHashMap<>();
+        pdfCircuitPointNodeData.put("title", title);
+        pdfCircuitPointNodeData.put("text", description);
+        pdfCircuitPointNodeData.put("subtype", NodeSubType.PDF_CIRCUIT_POINT);
+
+        Node pdfCircuitPointNode = new Node(
+            NodeType.PDF_CIRCUIT_POINT,
+            objectMapper.writeValueAsString(pdfCircuitPointNodeData),
+            objectMapper.writeValueAsString(XYPosition.origin()),
+            parentId,
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            true
+        );
+
+        try {
+            insertAndPublishNoneStreamNode(workContext, pdfCircuitPointNode, pdfCircuitPointNodeData);
+        } catch (Exception e) {
+            log.error("创建PDF电路实验任务分析点节点失败: {}", e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void updateStreamNode(WorkContext workContext) throws JsonProcessingException {
+        // 由于使用虚拟节点，不需要更新节点内容
+        log.info("跳过虚拟流节点更新");
+    }
+}

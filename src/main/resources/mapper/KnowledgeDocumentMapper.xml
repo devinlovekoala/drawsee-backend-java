@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.yifan.drawsee.mapper.KnowledgeDocumentMapper">
+
+    <resultMap id="KnowledgeDocumentResultMap" type="cn.yifan.drawsee.pojo.entity.KnowledgeDocument">
+        <id property="id" column="id"/>
+        <result property="knowledgeBaseId" column="knowledge_base_id"/>
+        <result property="title" column="title"/>
+        <result property="originalFileName" column="original_file_name"/>
+        <result property="fileType" column="file_type"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="pageCount" column="page_count"/>
+        <result property="status" column="status"
+                javaType="cn.yifan.drawsee.constant.KnowledgeDocumentStatus"
+                typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+        <result property="chunkCount" column="chunk_count"/>
+        <result property="storageUrl" column="storage_url"/>
+        <result property="storageObject" column="storage_object"/>
+        <result property="uploaderId" column="uploader_id"/>
+        <result property="uploadedAt" column="uploaded_at"/>
+        <result property="processedAt" column="processed_at"/>
+        <result property="failureReason" column="failure_reason"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="isDeleted" column="is_deleted"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="cn.yifan.drawsee.pojo.entity.KnowledgeDocument">
+        INSERT INTO knowledge_document (
+            id,
+            knowledge_base_id,
+            title,
+            original_file_name,
+            file_type,
+            file_size,
+            page_count,
+            status,
+            chunk_count,
+            storage_url,
+            storage_object,
+            uploader_id,
+            uploaded_at,
+            processed_at,
+            failure_reason,
+            created_at,
+            updated_at,
+            is_deleted
+        ) VALUES (
+            #{id},
+            #{knowledgeBaseId},
+            #{title},
+            #{originalFileName},
+            #{fileType},
+            #{fileSize},
+            #{pageCount},
+            #{status, typeHandler=org.apache.ibatis.type.EnumTypeHandler},
+            #{chunkCount},
+            #{storageUrl},
+            #{storageObject},
+            #{uploaderId},
+            #{uploadedAt},
+            #{processedAt},
+            #{failureReason},
+            #{createdAt},
+            #{updatedAt},
+            #{isDeleted}
+        )
+    </insert>
+
+    <update id="update" parameterType="cn.yifan.drawsee.pojo.entity.KnowledgeDocument">
+        UPDATE knowledge_document
+        SET
+            title = #{title},
+            file_type = #{fileType},
+            file_size = #{fileSize},
+            page_count = #{pageCount},
+            status = #{status, typeHandler=org.apache.ibatis.type.EnumTypeHandler},
+            chunk_count = #{chunkCount},
+            storage_url = #{storageUrl},
+            storage_object = #{storageObject},
+            processed_at = #{processedAt},
+            failure_reason = #{failureReason},
+            updated_at = #{updatedAt},
+            is_deleted = #{isDeleted}
+        WHERE id = #{id}
+    </update>
+
+    <select id="getById" resultMap="KnowledgeDocumentResultMap">
+        SELECT * FROM knowledge_document WHERE id = #{id}
+    </select>
+
+    <select id="listByKnowledgeBaseId" resultMap="KnowledgeDocumentResultMap">
+        SELECT *
+        FROM knowledge_document
+        WHERE knowledge_base_id = #{knowledgeBaseId}
+          <if test="includeDeleted == false">
+              AND (is_deleted IS NULL OR is_deleted = FALSE)
+          </if>
+        ORDER BY created_at DESC
+    </select>
+
+    <update id="softDelete">
+        UPDATE knowledge_document
+        SET is_deleted = TRUE,
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="increaseChunkCount">
+        UPDATE knowledge_document
+        SET chunk_count = COALESCE(chunk_count, 0) + #{delta},
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="setChunkCount">
+        UPDATE knowledge_document
+        SET chunk_count = #{chunkCount},
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="updatePageCount">
+        UPDATE knowledge_document
+        SET page_count = #{pageCount},
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <select id="countByKnowledgeBaseId" resultType="int">
+        SELECT COUNT(1)
+        FROM knowledge_document
+        WHERE knowledge_base_id = #{knowledgeBaseId}
+          AND (is_deleted IS NULL OR is_deleted = FALSE)
+    </select>
+
+    <select id="countCompletedByKnowledgeBaseId" resultType="int">
+        SELECT COUNT(1)
+        FROM knowledge_document
+        WHERE knowledge_base_id = #{knowledgeBaseId}
+          AND (is_deleted IS NULL OR is_deleted = FALSE)
+          AND status = 'COMPLETED'
+    </select>
+
+</mapper>

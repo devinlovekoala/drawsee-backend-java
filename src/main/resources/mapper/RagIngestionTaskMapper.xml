@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.yifan.drawsee.mapper.RagIngestionTaskMapper">
+
+    <resultMap id="RagIngestionTaskResultMap" type="cn.yifan.drawsee.pojo.entity.RagIngestionTask">
+        <id property="id" column="id"/>
+        <result property="knowledgeBaseId" column="knowledge_base_id"/>
+        <result property="documentId" column="document_id"/>
+        <result property="stage" column="stage"
+                javaType="cn.yifan.drawsee.constant.RagIngestionStage"
+                typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+        <result property="status" column="status"
+                javaType="cn.yifan.drawsee.constant.KnowledgeDocumentStatus"
+                typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+        <result property="progress" column="progress"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="durationMs" column="duration_ms"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="completedAt" column="completed_at"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="cn.yifan.drawsee.pojo.entity.RagIngestionTask">
+        INSERT INTO rag_ingestion_task (
+            id,
+            knowledge_base_id,
+            document_id,
+            stage,
+            status,
+            progress,
+            error_message,
+            duration_ms,
+            created_at,
+            updated_at,
+            completed_at
+        ) VALUES (
+            #{id},
+            #{knowledgeBaseId},
+            #{documentId},
+            #{stage, typeHandler=org.apache.ibatis.type.EnumTypeHandler},
+            #{status, typeHandler=org.apache.ibatis.type.EnumTypeHandler},
+            #{progress},
+            #{errorMessage},
+            #{durationMs},
+            #{createdAt},
+            #{updatedAt},
+            #{completedAt}
+        )
+    </insert>
+
+    <update id="update" parameterType="cn.yifan.drawsee.pojo.entity.RagIngestionTask">
+        UPDATE rag_ingestion_task
+        SET
+            stage = #{stage, typeHandler=org.apache.ibatis.type.EnumTypeHandler},
+            status = #{status, typeHandler=org.apache.ibatis.type.EnumTypeHandler},
+            progress = #{progress},
+            error_message = #{errorMessage},
+            duration_ms = #{durationMs},
+            updated_at = #{updatedAt},
+            completed_at = #{completedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="getById" resultMap="RagIngestionTaskResultMap">
+        SELECT * FROM rag_ingestion_task WHERE id = #{id}
+    </select>
+
+    <select id="listByDocumentId" resultMap="RagIngestionTaskResultMap">
+        SELECT *
+        FROM rag_ingestion_task
+        WHERE document_id = #{documentId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="listPendingTasks" resultMap="RagIngestionTaskResultMap">
+        SELECT *
+        FROM rag_ingestion_task
+        WHERE status IN ('UPLOADED', 'PARSING', 'CHUNKING', 'EMBEDDING', 'INDEXING')
+        ORDER BY created_at ASC
+        LIMIT #{limit}
+    </select>
+
+</mapper>
