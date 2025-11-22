@@ -11,7 +11,7 @@ import java.util.List;
 /**
  * @FileName CircuitNodeVO
  * @Description 电路节点标号信息VO
- * @Author devin
+ * @Author yifan
  * @date 2025-04-13 14:36
  **/
 

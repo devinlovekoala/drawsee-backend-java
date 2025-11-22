@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * @FileName CircuitDesignService
  * @Description 电路设计服务接口
- * @Author devin
+ * @Author yifan
  * @date 2025-07-18 16:25
  **/
 public interface CircuitDesignService {
@@ -43,4 +43,13 @@ public interface CircuitDesignService {
      * @return 删除结果
      */
     Map<String, Object> deleteCircuitDesign(Long userId, Long id);
+
+    /**
+     * 更新电路设计
+     * @param userId 用户ID
+     * @param id 电路设计ID
+     * @param circuitDesign 电路设计数据
+     * @return 更新结果
+     */
+    Map<String, Object> updateCircuitDesign(Long userId, Long id, CircuitDesign circuitDesign);
 }

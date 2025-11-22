@@ -11,7 +11,6 @@ import cn.yifan.drawsee.pojo.vo.R;
 import cn.yifan.drawsee.pojo.vo.rag.RagKnowledgeVO;
 import cn.yifan.drawsee.service.business.KnowledgeBaseService;
 import cn.yifan.drawsee.service.business.KnowledgeResourceService;
-import cn.yifan.drawsee.service.business.RagFlowService;
 import cn.yifan.drawsee.service.business.UserRoleService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +26,7 @@ import java.util.Map;
 /**
  * @FileName KnowledgeBaseController
  * @Description 知识库控制器类，作为通用入口
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 11:10
  * @update 2025-08-15 17:30 重构为通用入口，根据用户角色引导到专用控制器
  * @update 2025-09-20 15:00 移除知识点相关功能，集成RagFlow服务
@@ -35,7 +34,7 @@ import java.util.Map;
  **/
 
 @RestController
-@RequestMapping("/api/knowledge-base")
+@RequestMapping("/api/knowledge-bases")
 @Slf4j
 public class KnowledgeBaseController {
     
@@ -48,16 +47,13 @@ public class KnowledgeBaseController {
     private UserRoleService userRoleService;
 
     @Autowired
-    private RagFlowService ragFlowService;
-    
-    @Autowired
     private KnowledgeResourceService knowledgeResourceService;
 
     /**
      * 创建知识库
      */
     @SaCheckLogin
-    @PostMapping("/create")
+    @PostMapping({"/create", ""})
     public R<String> createKnowledgeBase(@RequestBody @Valid CreateKnowledgeBaseDTO createKnowledgeBaseDTO) {
         try {
             String knowledgeBaseId = knowledgeBaseService.createKnowledgeBase(createKnowledgeBaseDTO);
@@ -153,7 +149,7 @@ public class KnowledgeBaseController {
      * @return 知识库列表
      */
     @SaCheckLogin
-    @GetMapping("/list")
+    @GetMapping({"/list", ""})
     public R<List<KnowledgeBaseVO>> getKnowledgeBasesForCurrentUser() {
         try {
             List<KnowledgeBaseVO> knowledgeBases = knowledgeBaseService.getKnowledgeBasesForCurrentUser();
@@ -175,8 +171,7 @@ public class KnowledgeBaseController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
         try {
-            // 获取当前用户的RAG知识库列表
-            List<RagKnowledgeVO> ragKnowledgeBases = ragFlowService.listKnowledges(page, size).getKnowledges();
+            List<RagKnowledgeVO> ragKnowledgeBases = knowledgeBaseService.listRagKnowledgeBasesForCurrentUser(page, size);
             return R.ok(ragKnowledgeBases);
         } catch (Exception e) {
             log.error("获取RAG知识库列表失败", e);

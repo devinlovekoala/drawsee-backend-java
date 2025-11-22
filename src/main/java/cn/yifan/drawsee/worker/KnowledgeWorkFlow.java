@@ -19,6 +19,8 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.ClassKnowledgeService;
+import cn.yifan.drawsee.service.business.RagQueryService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * @FileName KnowledgeWorkFlow
  * @Description 知识点分点AI工作流 - MySQL版本
- * @Author devin
+ * @Author yifan
  * @date 2025-04-15 15:40
  **/
 
@@ -48,6 +50,8 @@ public class KnowledgeWorkFlow extends WorkFlow {
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final KnowledgeMapper knowledgeMapper;
     private final ClassMapper classMapper;
+    private final ClassKnowledgeService classKnowledgeService;
+    private final RagQueryService ragQueryService;
 
     public KnowledgeWorkFlow(
         UserMapper userMapper,
@@ -61,13 +65,17 @@ public class KnowledgeWorkFlow extends WorkFlow {
         CourseMapper courseMapper,
         KnowledgeBaseMapper knowledgeBaseMapper,
         KnowledgeMapper knowledgeMapper,
-        ClassMapper classMapper
+        ClassMapper classMapper,
+        ClassKnowledgeService classKnowledgeService,
+        RagQueryService ragQueryService
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.courseMapper = courseMapper;
         this.knowledgeBaseMapper = knowledgeBaseMapper;
         this.knowledgeMapper = knowledgeMapper;
         this.classMapper = classMapper;
+        this.classKnowledgeService = classKnowledgeService;
+        this.ragQueryService = ragQueryService;
         
         // 全局默认知识点列表 - 这里将保留用于通用模式
         refreshGlobalKnowledgePoints();
@@ -94,6 +102,9 @@ public class KnowledgeWorkFlow extends WorkFlow {
     public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         Node streamNode = workContext.getStreamNode();
+        
+        // 首先尝试使用RAG增强AI回答
+        boolean ragSuccess = tryEnhanceWithRag(workContext);
         
         List<String> knowledgePoints;
         String classId = aiTaskMessage.getClassId();
@@ -276,5 +287,62 @@ public class KnowledgeWorkFlow extends WorkFlow {
         }
         
         return new ArrayList<>(knowledgePoints);
+    }
+
+    /**
+     * 尝试使用RAG增强AI回答
+     */
+    private boolean tryEnhanceWithRag(WorkContext workContext) {
+        try {
+            AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+            String classId = aiTaskMessage.getClassId();
+            Long userId = aiTaskMessage.getUserId();
+            
+            // 获取可访问的知识库列表
+            List<String> knowledgeBaseIds;
+            if (classId != null && !classId.isEmpty()) {
+                knowledgeBaseIds = classKnowledgeService.getAccessibleKnowledgeBaseIds(Long.parseLong(classId), userId);
+            } else {
+                knowledgeBaseIds = classKnowledgeService.getAccessibleKnowledgeBaseIds(null, userId);
+            }
+            
+            if (knowledgeBaseIds.isEmpty()) {
+                log.info("用户 {} 在班级 {} 中没有可访问的知识库，跳过RAG增强", userId, classId);
+                return false;
+            }
+            
+            // 使用RAG服务检索并生成增强回答
+            log.info("开始RAG检索，知识库数量: {}, 查询: {}", knowledgeBaseIds.size(), aiTaskMessage.getPrompt());
+            var ragResponse = ragQueryService.query(knowledgeBaseIds, aiTaskMessage.getPrompt(), null);
+            
+            if (ragResponse != null && ragResponse.getAnswer() != null && !ragResponse.getAnswer().isEmpty()) {
+                // 将RAG增强的回答作为额外的上下文信息添加到streamNode
+                Node streamNode = workContext.getStreamNode();
+                String originalData = streamNode.getData();
+                
+                // 解析原始数据
+                Map<String, Object> dataMap = objectMapper.readValue(originalData, Map.class);
+                
+                // 添加RAG增强信息
+                dataMap.put("ragEnhanced", true);
+                dataMap.put("ragKnowledgeBaseCount", knowledgeBaseIds.size());
+                if (ragResponse.getChunks() != null) {
+                    dataMap.put("ragChunkCount", ragResponse.getChunks().size());
+                }
+                
+                // 更新节点数据
+                streamNode.setData(objectMapper.writeValueAsString(dataMap));
+                
+                log.info("RAG增强成功，知识库数量: {}, 检索到的块数量: {}", 
+                    knowledgeBaseIds.size(), 
+                    ragResponse.getChunks() != null ? ragResponse.getChunks().size() : 0);
+                return true;
+            }
+            
+        } catch (Exception e) {
+            log.warn("RAG增强失败: {}", e.getMessage(), e);
+        }
+        
+        return false;
     }
 }

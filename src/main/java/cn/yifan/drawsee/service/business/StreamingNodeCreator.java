@@ -11,6 +11,8 @@ import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.worker.WorkContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStream;
 import org.redisson.api.stream.StreamAddArgs;
@@ -226,7 +228,10 @@ public class StreamingNodeCreator {
     }
     
     // 内部类用于前端显示
+    @Setter
+    @Getter
     public static class NodeVO {
+        // getter and setter
         private Long id;
         private String type;
         private Map<String, Object> data;
@@ -234,27 +239,7 @@ public class StreamingNodeCreator {
         private Long parentId;
         private Long userId;
         private Long convId;
-        
-        // getter and setter
-        public Long getId() { return id; }
-        public void setId(Long id) { this.id = id; }
-        
-        public String getType() { return type; }
-        public void setType(String type) { this.type = type; }
-        
-        public Map<String, Object> getData() { return data; }
-        public void setData(Map<String, Object> data) { this.data = data; }
-        
-        public String getPosition() { return position; }
-        public void setPosition(String position) { this.position = position; }
-        
-        public Long getParentId() { return parentId; }
-        public void setParentId(Long parentId) { this.parentId = parentId; }
-        
-        public Long getUserId() { return userId; }
-        public void setUserId(Long userId) { this.userId = userId; }
-        
-        public Long getConvId() { return convId; }
-        public void setConvId(Long convId) { this.convId = convId; }
+
     }
 }
+

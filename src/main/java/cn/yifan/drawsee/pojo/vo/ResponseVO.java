@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 /**
  * 通用响应VO
  * 
- * @author devin
+ * @author yifan
  * @date 2025-05-08
  */
 @Data

@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * @FileName CourseVO
  * @Description 课程的VO类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 10:59
  **/
 

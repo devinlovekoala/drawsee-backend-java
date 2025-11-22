@@ -10,7 +10,7 @@ import java.io.Serializable;
 /**
  * @FileName CourseStatsVO
  * @Description 课程统计信息VO类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 10:59
  **/
 

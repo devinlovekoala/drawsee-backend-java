@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * @FileName TeacherService
  * @Description 教师服务类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 11:02
  **/
 

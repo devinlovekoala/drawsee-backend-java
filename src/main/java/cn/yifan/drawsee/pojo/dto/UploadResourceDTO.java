@@ -11,7 +11,7 @@ import java.io.Serializable;
 /**
  * @FileName UploadResourceDTO
  * @Description 上传资源的DTO类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 10:55
  **/
 

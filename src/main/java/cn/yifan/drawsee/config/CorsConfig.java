@@ -18,14 +18,14 @@ public class CorsConfig implements WebMvcConfigurer {
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
                 .allowedOrigins(
-                    "http://localhost:3000",  // React默认端口
+                    "http://localhost:5174",  // Vite备用端口
                     "http://localhost:5173",  // Vite默认端口
                     "http://localhost:6868",  // 课程服务端口
-                    "http://127.0.0.1:3000",
+                    "http://127.0.0.1:5174",
                     "http://127.0.0.1:5173",
                     "http://127.0.0.1:6868",
                     "http://42.193.107.127:6868",
-                    "http://42.193.107.127:3000",
+                    "http://42.193.107.127:5174",
                     "http://42.193.107.127:5173",
                     "http://drawsee.cn",
                     "https://drawsee.cn",

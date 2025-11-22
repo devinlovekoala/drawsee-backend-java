@@ -11,7 +11,7 @@ import java.io.Serializable;
 /**
  * @FileName CreateClassDTO
  * @Description 创建班级DTO
- * @Author devin
+ * @Author yifan
  * @date 2025-06-10 11:25
  **/
 

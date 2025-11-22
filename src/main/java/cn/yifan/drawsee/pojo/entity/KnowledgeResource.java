@@ -10,7 +10,7 @@ import java.util.Map;
  * MySQL数据库对应表：knowledge_resource
  * 主要用于存储各类资源，包括视频链接、文档URL等非RAG资源
  * 
- * @author devin
+ * @author yifan
  * @date 2025-03-28 19:15
  */
 @Data

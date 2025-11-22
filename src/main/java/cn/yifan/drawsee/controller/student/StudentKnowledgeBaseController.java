@@ -10,7 +10,6 @@ import cn.yifan.drawsee.pojo.vo.R;
 import cn.yifan.drawsee.pojo.vo.rag.RagKnowledgeVO;
 import cn.yifan.drawsee.service.business.KnowledgeBaseService;
 import cn.yifan.drawsee.service.business.KnowledgeResourceService;
-import cn.yifan.drawsee.service.business.RagFlowService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,14 +21,14 @@ import java.util.Map;
 /**
  * @FileName StudentKnowledgeBaseController
  * @Description 学生知识库控制器类，提供学生用户访问已加入知识库的接口
- * @Author devin
+ * @Author yifan
  * @date 2025-08-15 16:30
  * @update 2025-10-05 15:10 更新接口返回格式，增加资源访问接口
  **/
 
 @RestController
-@RequestMapping("/api/student/knowledge-base")
-@SaCheckRole(value = "STUDENT")
+@RequestMapping("/api/student/knowledge-bases")
+@SaCheckRole(UserRole.STUDENT)
 @Slf4j
 public class StudentKnowledgeBaseController {
 
@@ -38,9 +37,6 @@ public class StudentKnowledgeBaseController {
     
     @Autowired
     private KnowledgeResourceService knowledgeResourceService;
-    
-    @Autowired
-    private RagFlowService ragFlowService;
 
     /**
      * 获取学生可访问的所有知识库列表
@@ -48,7 +44,7 @@ public class StudentKnowledgeBaseController {
      * @return 知识库列表
      */
     @SaCheckLogin
-    @GetMapping("/list")
+    @GetMapping({"/list", ""})
     public R<List<KnowledgeBaseVO>> getAccessibleKnowledgeBases() {
         try {
             List<KnowledgeBaseVO> knowledgeBases = knowledgeBaseService.getKnowledgeBasesForCurrentUser();
@@ -118,8 +114,7 @@ public class StudentKnowledgeBaseController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
         try {
-            // 获取当前学生的RAG知识库列表
-            List<RagKnowledgeVO> ragKnowledgeBases = ragFlowService.listKnowledges(page, size).getKnowledges();
+            List<RagKnowledgeVO> ragKnowledgeBases = knowledgeBaseService.listRagKnowledgeBasesForCurrentUser(page, size);
             return R.ok(ragKnowledgeBases);
         } catch (Exception e) {
             log.error("获取学生RAG知识库列表失败", e);

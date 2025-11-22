@@ -56,11 +56,16 @@ drawsee:
       baseUrl: https://api.siliconflow.cn/v1
       apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
       modelName: Qwen/Qwen2.5-VL-72B-Instruct
+    embedding:
+      baseUrl: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
+      apiKey: ${EMBEDDING_API_KEY:sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm}
+      modelName: ${EMBEDDING_MODEL:BAAI/bge-m3}
   rabbitmq:
     aiConfig:
       exchangeName: direct_ai_task_exchange
       queueName: direct_ai_task_queue
       routingKey: ai_task
+      queueCount: 3
     animationConfig:
       exchangeName: direct_animation_task_exchange
       queueName: direct_animation_task_queue
@@ -125,6 +130,14 @@ spring:
           max-idle: 10
           # 连接池中的最小空闲连接
           min-idle: 0
+
+rag:
+  weaviate:
+    endpoint: ${WEAVIATE_ENDPOINT:http://117.72.9.87:8080}
+    api-key: ${WEAVIATE_API_KEY:}
+    class-prefix: ${WEAVIATE_CLASS_PREFIX:KB}
+    chunk-size: ${WEAVIATE_CHUNK_SIZE:800}
+    chunk-overlap: ${WEAVIATE_CHUNK_OVERLAP:200}
 
 mybatis:
   #mapper配置文件

@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 /**
  * 节点内容模型，用于存储解析后的节点内容信息
  *
- * @author devin
+ * @author yifan
  * @date 2025-04-13 15:10
  */
 @Data

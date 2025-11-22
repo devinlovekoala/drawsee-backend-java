@@ -14,7 +14,7 @@ import java.util.Map;
  * 解析器配置
  * 配置不同类型的响应解析器
  *
- * @author devin
+ * @author yifan
  * @date 2025-04-13 15:40
  */
 @Configuration

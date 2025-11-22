@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * @FileName CircuitDesignServiceImpl
  * @Description 电路设计服务实现类
- * @Author devin
+ * @Author yifan
  * @date 2025-07-18 16:30
  **/
 @Slf4j
@@ -151,6 +151,50 @@ public class CircuitDesignServiceImpl implements CircuitDesignService {
             result.put("success", false);
         }
         
+        return result;
+    }
+
+    @Override
+    public Map<String, Object> updateCircuitDesign(Long userId, Long id, CircuitDesign circuitDesign) {
+        Map<String, Object> result = new HashMap<>(2);
+
+        try {
+            CircuitDesign.CircuitMetadata metadata = circuitDesign.getMetadata();
+            if (metadata == null) {
+                metadata = new CircuitDesign.CircuitMetadata();
+                metadata.setTitle("电路设计");
+                metadata.setDescription("使用DrawSee创建的电路");
+                metadata.setCreatedAt(new Date().toString());
+                circuitDesign.setMetadata(metadata);
+            }
+            metadata.setUpdatedAt(new Date().toString());
+
+            String circuitDesignJson = objectMapper.writeValueAsString(circuitDesign);
+
+            Map<String, Object> params = new HashMap<>(6);
+            params.put("id", id);
+            params.put("userId", userId);
+            params.put("title", metadata.getTitle());
+            params.put("description", metadata.getDescription());
+            params.put("data", circuitDesignJson);
+
+            int rows = circuitDesignMapper.updateCircuitDesign(params);
+            result.put("id", id.toString());
+            result.put("success", rows > 0);
+
+            if (rows == 0) {
+                log.warn("更新电路设计失败，未影响任何行. id: {}", id);
+            }
+        } catch (JsonProcessingException e) {
+            log.error("更新电路设计失败，序列化异常", e);
+            result.put("id", "");
+            result.put("success", false);
+        } catch (Exception e) {
+            log.error("更新电路设计失败", e);
+            result.put("id", "");
+            result.put("success", false);
+        }
+
         return result;
     }
 }

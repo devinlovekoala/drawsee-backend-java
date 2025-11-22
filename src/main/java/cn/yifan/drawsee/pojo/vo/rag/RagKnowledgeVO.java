@@ -13,7 +13,7 @@ import java.util.Map;
 /**
  * RAGFlow知识库响应VO
  * 
- * @author devin
+ * @author yifan
  * @date 2023-11-28
  */
 @Data

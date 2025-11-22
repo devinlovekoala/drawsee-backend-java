@@ -49,4 +49,19 @@ public class NodeTitle {
      */
     public static final String CIRCUIT_DETAIL = "电路分析详情";
 
+    /**
+     * PDF电路实验任务查询标题
+     */
+    public static final String PDF_CIRCUIT_QUERY = "PDF实验任务文档";
+
+    /**
+     * PDF电路实验任务分析点标题
+     */
+    public static final String PDF_CIRCUIT_POINT = "实验任务分析点";
+
+    /**
+     * PDF电路实验任务分析详情标题
+     */
+    public static final String PDF_CIRCUIT_DETAIL = "实验任务分析详情";
+
 }

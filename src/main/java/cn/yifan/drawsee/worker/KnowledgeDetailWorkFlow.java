@@ -41,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * @FileName KnowledgeDetailWorkFlow
  * @Description 知识点详情AI工作流 - MySQL版本
- * @Author devin
+ * @Author yifan
  * @date 2025-04-15 15:45
  **/
 

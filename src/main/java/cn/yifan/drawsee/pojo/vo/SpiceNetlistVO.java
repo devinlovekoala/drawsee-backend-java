@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * @FileName SpiceNetlistVO
  * @Description SPICE网表视图对象
- * @Author devin
+ * @Author yifan
  * @date 2025-07-18 15:10
  **/
 @Data

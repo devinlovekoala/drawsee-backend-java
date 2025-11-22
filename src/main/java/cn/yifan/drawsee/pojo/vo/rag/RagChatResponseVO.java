@@ -58,4 +58,4 @@ public class RagChatResponseVO {
      * 相关的索引块
      */
     private List<Map<String, Object>> chunks;
-} 
+}

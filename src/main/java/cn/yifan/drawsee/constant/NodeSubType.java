@@ -56,4 +56,14 @@ public class NodeSubType {
      */
     public static final String CIRCUIT_DETAIL = "circuit-detail";
 
+    /**
+     * PDF电路实验任务分析点子类型
+     */
+    public static final String PDF_CIRCUIT_POINT = "pdf-circuit-point";
+
+    /**
+     * PDF电路实验任务分析详情子类型
+     */
+    public static final String PDF_CIRCUIT_DETAIL = "pdf-circuit-detail";
+
 }

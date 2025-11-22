@@ -45,6 +45,11 @@ public class KnowledgeBase implements Serializable {
     private Long creatorId;
     
     /**
+     * 关联班级ID列表（可选）
+     */
+    private List<Long> classIds;
+    
+    /**
      * 成员ID列表
      */
     private List<Long> members;

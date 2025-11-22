@@ -10,7 +10,7 @@ import java.io.Serializable;
 /**
  * @FileName TeacherRegisterDTO
  * @Description 教师注册DTO
- * @Author devin
+ * @Author yifan
  * @date 2025-06-10 11:35
  **/
 

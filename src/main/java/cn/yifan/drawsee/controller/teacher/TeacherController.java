@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 /**
  * @FileName TeacherController
  * @Description 教师控制器类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 11:15
  **/
 

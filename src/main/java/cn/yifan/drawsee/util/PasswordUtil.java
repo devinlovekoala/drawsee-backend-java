@@ -4,7 +4,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 /**
  * 密码工具类，提供加密和验证功能
- * @author yifan
+ * @author devin
  * @date 2025-04-22
  */
 public class PasswordUtil {
@@ -31,4 +31,4 @@ public class PasswordUtil {
     public static boolean matches(String rawPassword, String encodedPassword) {
         return encoder.matches(rawPassword, encodedPassword);
     }
-} 
+}

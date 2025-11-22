@@ -11,7 +11,7 @@ import java.util.List;
 /**
  * 知识库数据传输对象
  * 
- * @author devin
+ * @author yifan
  * @date 2025-03-28 20:15
  */
 @Data

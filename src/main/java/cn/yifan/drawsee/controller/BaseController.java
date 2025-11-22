@@ -6,7 +6,7 @@ import cn.yifan.drawsee.pojo.vo.ResponseVO;
 /**
  * 基础控制器，提供通用的响应处理方法
  * 
- * @author devin
+ * @author yifan
  * @date 2025-05-08
  */
 public class BaseController {

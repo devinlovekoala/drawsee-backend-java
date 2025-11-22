@@ -11,7 +11,7 @@ import java.util.Map;
 /**
  * RAGFlow聊天响应DTO
  * 
- * @author devin
+ * @author yifan
  * @date 2025-05-08
  */
 @Data

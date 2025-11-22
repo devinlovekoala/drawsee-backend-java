@@ -7,7 +7,7 @@ import java.util.Date;
 /**
  * 用户文档VO类
  * 
- * @author devin
+ * @author yifan
  * @date 2025-07-25 19:00
  */
 @Data

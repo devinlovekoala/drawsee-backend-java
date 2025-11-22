@@ -11,7 +11,7 @@ import java.io.Serializable;
 /**
  * @FileName UpdateCourseDTO
  * @Description 更新课程的DTO类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-30 16:00
  **/
 

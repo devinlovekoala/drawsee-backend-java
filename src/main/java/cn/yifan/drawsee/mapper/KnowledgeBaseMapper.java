@@ -5,12 +5,11 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * 知识库Mapper接口
  * 
- * @author devin
+ * @author yifan
  * @date 2025-03-28 19:30
  */
 @Mapper
@@ -139,4 +138,20 @@ public interface KnowledgeBaseMapper {
      * @return 知识库列表
      */
     List<KnowledgeBase> getByIsPublishedTrue();
+    
+    /**
+     * 根据班级ID查询知识库列表
+     * 
+     * @param classId 班级ID
+     * @return 知识库列表
+     */
+    List<KnowledgeBase> listByClassId(@Param("classId") Long classId);
+    
+    /**
+     * 根据创建者ID查询知识库列表
+     * 
+     * @param creatorId 创建者ID
+     * @return 知识库列表
+     */
+    List<KnowledgeBase> listByCreatorId(@Param("creatorId") Long creatorId);
 } 

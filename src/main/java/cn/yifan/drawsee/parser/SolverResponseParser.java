@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
  * 解题工作流专用响应解析器
  * 针对解题过程提供更精确的节点提取
  *
- * @author devin
+ * @author yifan
  * @date 2025-04-13 19:20
  */
 @Slf4j

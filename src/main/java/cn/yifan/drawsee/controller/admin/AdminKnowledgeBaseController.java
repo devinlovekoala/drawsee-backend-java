@@ -11,7 +11,6 @@ import cn.yifan.drawsee.pojo.vo.R;
 import cn.yifan.drawsee.pojo.vo.rag.RagKnowledgeVO;
 import cn.yifan.drawsee.service.business.KnowledgeBaseService;
 import cn.yifan.drawsee.service.business.KnowledgeResourceService;
-import cn.yifan.drawsee.service.business.RagFlowService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,14 +23,14 @@ import java.util.Map;
 /**
  * @FileName AdminKnowledgeBaseController
  * @Description 管理员知识库控制器类
- * @Author devin
+ * @Author yifan
  * @date 2025-08-15 15:30
  * @update 2025-10-05 15:20 标准化接口路径，使用统一响应，优化资源管理接口
  **/
 
 @RestController
-@RequestMapping("/api/admin/knowledge-base")
-@SaCheckRole(value = "ADMIN")
+@RequestMapping("/api/admin/knowledge-bases")
+@SaCheckRole(UserRole.ADMIN)
 @Slf4j
 public class AdminKnowledgeBaseController {
 
@@ -40,9 +39,6 @@ public class AdminKnowledgeBaseController {
 
     @Autowired
     private KnowledgeResourceService knowledgeResourceService;
-    
-    @Autowired
-    private RagFlowService ragFlowService;
 
     /**
      * 管理员创建知识库
@@ -51,7 +47,7 @@ public class AdminKnowledgeBaseController {
      * @return 知识库ID
      */
     @SaCheckLogin
-    @PostMapping("/create")
+    @PostMapping({"/create", ""})
     public R<String> createKnowledgeBase(
             @RequestBody @Valid CreateKnowledgeBaseDTO createKnowledgeBaseDTO,
             @RequestParam(defaultValue = "true") boolean isPublished
@@ -104,7 +100,7 @@ public class AdminKnowledgeBaseController {
      * @return 知识库列表
      */
     @SaCheckLogin
-    @GetMapping("/list")
+    @GetMapping({"/list", ""})
     public R<List<KnowledgeBaseVO>> getMyCreatedKnowledgeBases() {
         try {
             List<KnowledgeBaseVO> knowledgeBases = knowledgeBaseService.getMyCreatedKnowledgeBases();
@@ -124,8 +120,7 @@ public class AdminKnowledgeBaseController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
         try {
-            // 获取当前管理员的RAG知识库列表
-            List<RagKnowledgeVO> ragKnowledgeBases = ragFlowService.listKnowledges(page, size).getKnowledges();
+            List<RagKnowledgeVO> ragKnowledgeBases = knowledgeBaseService.listAllRagKnowledgeBases(page, size);
             return R.ok(ragKnowledgeBases);
         } catch (Exception e) {
             log.error("获取管理员RAG知识库列表失败", e);

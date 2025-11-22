@@ -15,7 +15,7 @@ import java.util.Map;
 /**
  * @FileName CircuitController
  * @Description 电路设计控制器
- * @Author devin
+ * @Author yifan
  * @date 2025-07-18 16:40
  **/
 @RestController
@@ -142,6 +142,45 @@ public class CircuitController extends BaseController {
             Result<Map<String, Object>> errorResult = new Result<>();
             errorResult.setCode(500);
             errorResult.setMessage("删除电路设计失败: " + e.getMessage());
+            return errorResult;
+        }
+    }
+
+    /**
+     * 更新电路设计
+     * @param id 电路设计ID
+     * @param circuitDesign 电路设计数据
+     * @return 更新结果
+     */
+    @PutMapping("/{id}")
+    public Result<Map<String, Object>> updateCircuitDesign(@PathVariable String id,
+                                                           @RequestBody CircuitDesign circuitDesign) {
+        try {
+            Long userId = StpUtil.getLoginIdAsLong();
+            Long designId = Long.parseLong(id);
+            Map<String, Object> result = circuitDesignService.updateCircuitDesign(userId, designId, circuitDesign);
+
+            if ((Boolean) result.get("success")) {
+                log.info("更新电路设计成功, id: {}", id);
+                return Result.success(result);
+            } else {
+                log.error("更新电路设计失败, id: {}", id);
+                Result<Map<String, Object>> errorResult = new Result<>();
+                errorResult.setCode(500);
+                errorResult.setMessage("更新电路设计失败");
+                return errorResult;
+            }
+        } catch (NumberFormatException e) {
+            log.error("更新电路设计失败: 无效的ID格式 {}", id);
+            Result<Map<String, Object>> errorResult = new Result<>();
+            errorResult.setCode(400);
+            errorResult.setMessage("无效的电路设计ID格式");
+            return errorResult;
+        } catch (Exception e) {
+            log.error("更新电路设计失败", e);
+            Result<Map<String, Object>> errorResult = new Result<>();
+            errorResult.setCode(500);
+            errorResult.setMessage("更新电路设计失败: " + e.getMessage());
             return errorResult;
         }
     }

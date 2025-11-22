@@ -13,7 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 /**
  * @FileName AbstractKnowledgeBaseService
  * @Description 知识库服务抽象基类，提供公共功能
- * @Author devin
+ * @Author yifan
  * @date 2025-04-10 08:30
  **/
 public abstract class AbstractKnowledgeBaseService {

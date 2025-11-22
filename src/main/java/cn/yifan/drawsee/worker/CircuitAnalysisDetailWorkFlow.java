@@ -33,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * @FileName CircuitAnalysisDetailWorkFlow
  * @Description 处理电路分析点详情任务的工作流
- * @Author devin
+ * @Author yifan
  * @date 2025-04-15 14:30
  **/
 

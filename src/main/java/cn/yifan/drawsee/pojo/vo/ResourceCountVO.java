@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 /**
  * @FileName ResourceCountVO
  * @Description 资源数量统计VO
- * @Author devin
+ * @Author yifan
  * @date 2025-06-20 16:30
  * @update 2025-10-05 14:35 更新字段命名以更好地反映资源类型
  **/

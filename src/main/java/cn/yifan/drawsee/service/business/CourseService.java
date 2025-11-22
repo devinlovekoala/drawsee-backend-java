@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 /**
  * @FileName CourseService
  * @Description 课程服务类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 11:12
  **/
 @Slf4j

@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 /**
  * 创建知识库数据传输对象
  * 
- * @author devin
+ * @author yifan
  * @date 2025-03-28 17:20
  */
 @Data

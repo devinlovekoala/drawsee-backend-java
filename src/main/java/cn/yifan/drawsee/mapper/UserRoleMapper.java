@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Param;
 /**
  * @FileName UserRoleMapper
  * @Description 用户角色Mapper接口
- * @Author devin
+ * @Author yifan
  * @date 2025-06-12 10:15
  **/
 

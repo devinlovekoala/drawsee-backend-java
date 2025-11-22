@@ -23,8 +23,7 @@ public class RedisUtils {
         RAtomicLong counter = redissonClient.getAtomicLong(key);
         // 原子操作：如果计数器不存在则初始化并设置过期时间
         if (!counter.isExists()) {
-            // 设置过期时间为今日的23:59:59，并且为北京时间
-
+        // 设置过期时间为今日的23:59:59，并且为北京时间
             // 获取当前北京时间
             LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
             // 获取当天23:59:59的时间

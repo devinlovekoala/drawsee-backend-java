@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 /**
  * @FileName CircuitAnalysisService
  * @Description 电路分析服务
- * @Author devin
+ * @Author yifan
  * @date 2025-04-13 21:38
  **/
 

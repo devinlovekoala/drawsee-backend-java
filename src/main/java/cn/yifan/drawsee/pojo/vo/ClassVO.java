@@ -11,7 +11,7 @@ import java.sql.Timestamp;
 /**
  * @FileName ClassVO
  * @Description 班级VO
- * @Author devin
+ * @Author yifan
  * @date 2025-06-10 11:45
  **/
 

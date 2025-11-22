@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * @FileName CircuitDesignMapper
  * @Description 电路设计数据库映射接口
- * @Author devin
+ * @Author yifan
  * @date 2025-07-18 16:20
  **/
 @Mapper

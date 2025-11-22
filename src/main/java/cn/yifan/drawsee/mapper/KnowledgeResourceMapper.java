@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * 知识资源Mapper接口
  * 
- * @author devin
+ * @author yifan
  * @date 2025-03-28 20:00
  */
 @Mapper

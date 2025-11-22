@@ -20,6 +20,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * @FileName MinioService
@@ -29,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
  **/
 
 @Service
+@Slf4j
 public class MinioService {
 
     @Autowired
@@ -110,6 +112,7 @@ public class MinioService {
         if (contentType == null || !contentType.startsWith("image/")) {
             throw new IllegalArgumentException("只能上传图片文件");
         }
+        ensureBucketExists();
         // 上传文件到MinIO
         minioClient.putObject(
             PutObjectArgs.builder()
@@ -127,6 +130,7 @@ public class MinioService {
 		javax.imageio.ImageIO.write(image, "png", baos);
 		byte[] bytes = baos.toByteArray();
 		java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(bytes);
+        ensureBucketExists();
 		minioClient.putObject(
 			PutObjectArgs.builder()
 				.bucket(minioConfig.getBucketName())
@@ -160,6 +164,8 @@ public class MinioService {
             // 如果无法获取Content-Type，根据文件名推断
             contentType = getContentType(Objects.requireNonNull(file.getOriginalFilename()));
         }
+
+        ensureBucketExists();
         
         // 上传文件到MinIO
         minioClient.putObject(
@@ -170,9 +176,34 @@ public class MinioService {
                 .contentType(contentType)
                 .build()
         );
+        log.info("MinIO 文件上传成功: bucket={}, object={}, size={}",
+            minioConfig.getBucketName(), objectName, file.getSize());
         
         // 返回完整URL
         return getObjectUrl(objectName);
+    }
+    
+    private void ensureBucketExists() throws MinioException, IOException, NoSuchAlgorithmException, InvalidKeyException {
+        String bucket = minioConfig.getBucketName();
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalStateException("MinIO bucketName 未配置");
+        }
+        boolean exists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
+        if (!exists) {
+            log.warn("MinIO 桶 [{}] 不存在，尝试自动创建", bucket);
+            minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
+        } else {
+            log.debug("MinIO 桶 [{}] 已存在", bucket);
+        }
+    }
+
+    public GetObjectResponse downloadFile(String objectName) throws MinioException, IOException, NoSuchAlgorithmException, InvalidKeyException {
+        return minioClient.getObject(
+            GetObjectArgs.builder()
+                .bucket(minioConfig.getBucketName())
+                .object(objectName)
+                .build()
+        );
     }
 
     public String getObjectBase64(String objectName, int maxBytes) throws MinioException, IOException, NoSuchAlgorithmException, InvalidKeyException {
@@ -262,5 +293,17 @@ public class MinioService {
                 .contentLength(stat.size())
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + objectName + "\"")
                 .body(resource);
+    }
+
+    public void deleteObject(String objectName) throws MinioException, IOException, NoSuchAlgorithmException, InvalidKeyException {
+        if (objectName == null || objectName.isBlank()) {
+            return;
+        }
+        minioClient.removeObject(
+            RemoveObjectArgs.builder()
+                .bucket(minioConfig.getBucketName())
+                .object(objectName)
+                .build()
+        );
     }
 }

@@ -11,7 +11,7 @@ import java.util.Date;
 /**
  * @FileName CourseProgressVO
  * @Description 课程学习进度VO类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 11:00
  **/
 

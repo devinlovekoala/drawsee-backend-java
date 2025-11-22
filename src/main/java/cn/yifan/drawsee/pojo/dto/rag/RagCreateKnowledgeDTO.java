@@ -10,7 +10,7 @@ import java.io.Serializable;
 /**
  * RAGFlow创建知识库请求DTO
  * 
- * @author devin
+ * @author yifan
  * @date 2023-11-28
  */
 @Data

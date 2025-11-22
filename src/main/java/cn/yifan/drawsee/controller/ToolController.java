@@ -4,8 +4,8 @@ import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.annotation.SaIgnore;
 import cn.yifan.drawsee.pojo.dto.GetSolveWaysDTO;
 import cn.yifan.drawsee.pojo.dto.UploadAnimationFrameDTO;
+import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import cn.yifan.drawsee.pojo.vo.RecognizeTextVO;
-import cn.yifan.drawsee.service.business.CircuitAnalysisService;
 import cn.yifan.drawsee.service.business.ToolService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +39,11 @@ public class ToolController {
     @PostMapping(value = "/recognize_text", consumes = "multipart/form-data")
     public RecognizeTextVO recognizeTextFromImage(@RequestPart("file") MultipartFile file) {
         return toolService.recognizeTextFromImage(file);
+    }
+
+    @PostMapping(value = "/recognize_circuit", consumes = "multipart/form-data")
+    public CircuitDesign recognizeCircuitFromImage(@RequestPart("file") MultipartFile file) {
+        return toolService.recognizeCircuitFromImage(file);
     }
 
     @PostMapping("/solve_ways")

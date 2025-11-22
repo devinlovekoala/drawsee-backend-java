@@ -11,7 +11,7 @@ import java.io.Serializable;
 /**
  * @FileName CreateTeacherDTO
  * @Description 创建教师的DTO类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 10:53
  **/
 

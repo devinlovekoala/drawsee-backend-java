@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * @FileName CourseMapper
  * @Description 课程数据访问层
- * @Author devin
+ * @Author yifan
  * @date 2025-04-10 15:30
  **/
 @Mapper

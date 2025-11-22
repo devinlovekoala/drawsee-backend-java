@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * 响应解析器接口，用于解析AI回答内容
  *
- * @author devin
+ * @author yifan
  * @date 2025-04-13 15:10
  */
 public interface ResponseParser {

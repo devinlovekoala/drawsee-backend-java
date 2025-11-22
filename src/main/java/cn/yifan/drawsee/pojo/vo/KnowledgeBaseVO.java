@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * @FileName KnowledgeBaseVO
  * @Description 知识库的VO类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 10:57
  **/
 
@@ -53,7 +53,7 @@ public class KnowledgeBaseVO implements Serializable {
     /**
      * 是否启用RAG功能
      */
-    private boolean ragEnabled;
+    private Boolean ragEnabled;
     
     /**
      * RAGFlow知识库ID

@@ -1,5 +1,6 @@
 package cn.yifan.drawsee.service.base;
 
+import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -72,6 +73,28 @@ public class AiService {
         return response.content().text();
     }
 
+    /**
+     * 使用视觉模型识别电路图并转换为电路画布设计
+     * @param imageUrl MinIO生成的图片地址
+     * @return CircuitDesign 对象
+     */
+    public CircuitDesign recognizeCircuitDesignFromImage(String imageUrl) {
+        String prompt = promptService.getCircuitImageDesignPrompt();
+        UserMessage userMessage = UserMessage.from(
+            TextContent.from(prompt),
+            ImageContent.from(imageUrl)
+        );
+        Response<AiMessage> response = doubaoVisionChatLanguageModel.generate(userMessage);
+        String raw = response.content().text();
+        String json = extractJsonBlock(raw);
+        try {
+            return objectMapper.readValue(json, CircuitDesign.class);
+        } catch (JsonProcessingException e) {
+            log.error("识别电路图失败，模型输出: {}", raw, e);
+            throw new RuntimeException("解析电路设计JSON失败", e);
+        }
+    }
+
     public List<String> getSolveWays(String question) throws JsonProcessingException {
         String prompt = promptService.getSolveWaysPrompt(question);
         String result = doubaoChatLanguageModel.chat(prompt);
@@ -86,6 +109,18 @@ public class AiService {
         tokens.addAndGet(response.tokenUsage().totalTokenCount());
         TypeReference<List<String>> typeReference = new TypeReference<>() {};
         return objectMapper.readValue(response.content().text(), typeReference);
+    }
+
+    private String extractJsonBlock(String text) {
+        if (text == null) {
+            return "{}";
+        }
+        int start = text.indexOf('{');
+        int end = text.lastIndexOf('}');
+        if (start >= 0 && end >= start) {
+            return text.substring(start, end + 1);
+        }
+        return text;
     }
 
 }

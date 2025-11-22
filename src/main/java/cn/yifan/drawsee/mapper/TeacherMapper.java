@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 /**
  * @FileName TeacherMapper
  * @Description 教师Mapper接口
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 10:42
  **/
 

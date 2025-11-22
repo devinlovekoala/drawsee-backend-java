@@ -6,7 +6,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
  * 密码生成器工具类
  * 用于生成BCrypt加密的密码哈希，通常在系统初始化和密码迁移时使用
  * 
- * @author yifan
+ * @author devin
  * @date 2025-04-22
  */
 public class PasswordGenerator {
@@ -41,4 +41,4 @@ public class PasswordGenerator {
         System.out.println("验证结果: " + encoder.matches(rawPassword, encoded));
         System.out.println("----------------------------");
     }
-} 
+}

@@ -11,12 +11,15 @@ import cn.yifan.drawsee.pojo.entity.KnowledgeResource;
 import cn.yifan.drawsee.pojo.vo.KnowledgeBaseVO;
 import cn.yifan.drawsee.constant.KnowledgeResourceType;
 import cn.yifan.drawsee.service.base.MinioService;
-import cn.yifan.drawsee.service.base.RAGFlowClient;
 import cn.yifan.drawsee.mapper.KnowledgeResourceMapper;
 import cn.yifan.drawsee.mapper.KnowledgeBaseMapper;
 import cn.yifan.drawsee.util.UUIDUtils;
 import cn.yifan.drawsee.pojo.entity.Course;
 import cn.yifan.drawsee.mapper.CourseMapper;
+import cn.yifan.drawsee.mapper.KnowledgeDocumentMapper;
+import cn.yifan.drawsee.mapper.KnowledgeDocumentChunkMapper;
+import cn.yifan.drawsee.config.EmbeddingModelProperties;
+import cn.yifan.drawsee.service.business.parser.DocumentParser;
 import lombok.extern.slf4j.Slf4j;
 
 import org.slf4j.Logger;
@@ -25,9 +28,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import cn.yifan.drawsee.pojo.dto.rag.RagCreateKnowledgeDTO;
 import cn.yifan.drawsee.pojo.vo.rag.RagKnowledgeVO;
-import cn.yifan.drawsee.config.RagFlowConfig;
 import java.util.stream.Collectors;
 import java.util.Objects;
 
@@ -42,7 +43,7 @@ import java.util.Random;
 /**
  * @FileName KnowledgeBaseService
  * @Description 知识库服务类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 11:05
  **/
 
@@ -62,19 +63,19 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
     private KnowledgeResourceMapper knowledgeResourceMapper;
 
     @Autowired
-    private RagFlowService ragFlowService;
-    
-    @Autowired
-    private RagFlowConfig ragFlowConfig;
-    
-    @Autowired
-    private RAGFlowClient ragFlowClient;
-
-    @Autowired
     private KnowledgeBaseMapper knowledgeBaseMapper;
     
     @Autowired
     private CourseMapper courseMapper;
+
+    @Autowired
+    private KnowledgeDocumentMapper knowledgeDocumentMapper;
+
+    @Autowired
+    private KnowledgeDocumentChunkMapper knowledgeDocumentChunkMapper;
+
+    @Autowired
+    private EmbeddingModelProperties embeddingModelProperties;
 
     /**
      * 创建知识库
@@ -287,12 +288,55 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         if (knowledgeBases == null) {
             return new ArrayList<>();
         }
-        
         return knowledgeBases.stream()
                 .filter(kb -> !kb.getIsDeleted())
                 .map(this::convertToVO)
                 .collect(Collectors.toList());
     }
+
+    private List<RagKnowledgeVO> convertToRagVOList(List<KnowledgeBase> knowledgeBases) {
+        if (knowledgeBases == null) {
+            return new ArrayList<>();
+        }
+        return knowledgeBases.stream()
+                .filter(kb -> Boolean.TRUE.equals(kb.getRagEnabled()) && !Boolean.TRUE.equals(kb.getIsDeleted()))
+                .map(this::convertToRagVO)
+                .collect(Collectors.toList());
+    }
+
+    private RagKnowledgeVO convertToRagVO(KnowledgeBase knowledgeBase) {
+        int documentCount = knowledgeDocumentMapper.countCompletedByKnowledgeBaseId(knowledgeBase.getId());
+        int chunkCount = knowledgeDocumentChunkMapper.countByKnowledgeBaseId(knowledgeBase.getId());
+
+        String embeddingModel = embeddingModelProperties != null ? embeddingModelProperties.getModelName() : null;
+        return RagKnowledgeVO.builder()
+                .id(knowledgeBase.getId())
+                .name(knowledgeBase.getName())
+                .description(knowledgeBase.getDescription())
+                .embeddingModel(embeddingModel)
+                .createdAt(knowledgeBase.getCreatedAt())
+                .updatedAt(knowledgeBase.getUpdatedAt())
+                .documentCount(documentCount)
+                .chunkCount(chunkCount)
+                .isPublic(Boolean.TRUE.equals(knowledgeBase.getIsPublished()))
+                .build();
+    }
+
+    private <T> List<T> paginate(List<T> source, int page, int size) {
+        if (source == null || source.isEmpty()) {
+            return new ArrayList<>();
+        }
+        if (size <= 0) {
+            return new ArrayList<>(source);
+        }
+        int fromIndex = Math.max(0, (page - 1) * size);
+        if (fromIndex >= source.size()) {
+            return new ArrayList<>();
+        }
+        int toIndex = Math.min(source.size(), fromIndex + size);
+        return new ArrayList<>(source.subList(fromIndex, toIndex));
+    }
+
     
     /**
      * 将知识库实体转换为前端VO
@@ -345,16 +389,35 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         knowledgeBase.setUpdatedAt(new Date());
         knowledgeBaseMapper.update(knowledgeBase);
         
-        // 如果是RAG知识库，也删除RAGFlow中的知识库
-        if (knowledgeBase.getRagEnabled() && knowledgeBase.getRagKnowledgeId() != null) {
-            try {
-                ragFlowService.deleteKnowledgeBase(knowledgeBase.getRagKnowledgeId());
-            } catch (Exception e) {
-                logger.error("删除RAGFlow知识库失败: {}", e.getMessage());
-            }
-        }
+        // 删除后刷新统计
+        // RAG 统计由文档服务刷新
     }
     
+    public List<RagKnowledgeVO> listAllRagKnowledgeBases(int page, int size) {
+        List<KnowledgeBase> knowledgeBases = knowledgeBaseMapper.getAll(false);
+        return paginate(convertToRagVOList(knowledgeBases), page, size);
+    }
+
+    public List<RagKnowledgeVO> listRagKnowledgeBasesForCurrentUser(int page, int size) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        List<KnowledgeBase> created = knowledgeBaseMapper.getByCreatorId(userId, false);
+        List<KnowledgeBase> joined = knowledgeBaseMapper.getByMemberId(userId, false);
+        Map<String, KnowledgeBase> map = new HashMap<>();
+        if (created != null) {
+            created.stream().filter(kb -> !kb.getIsDeleted()).forEach(kb -> map.put(kb.getId(), kb));
+        }
+        if (joined != null) {
+            joined.stream().filter(kb -> !kb.getIsDeleted()).forEach(kb -> map.putIfAbsent(kb.getId(), kb));
+        }
+        return paginate(convertToRagVOList(new ArrayList<>(map.values())), page, size);
+    }
+
+    public List<RagKnowledgeVO> listRagKnowledgeBasesCreatedByCurrentUser(int page, int size) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        List<KnowledgeBase> created = knowledgeBaseMapper.getByCreatorId(userId, false);
+        return paginate(convertToRagVOList(created), page, size);
+    }
+
     /**
      * 获取当前用户的所有知识库（包括创建的和加入的）
      * @return 知识库列表
@@ -400,66 +463,14 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
      */
     @Transactional(rollbackFor = Exception.class)
     public String createRagEnabledKnowledgeBase(CreateKnowledgeBaseDTO createKnowledgeBaseDTO) {
-        // 验证用户是否为教师
-        teacherService.validateTeacher();
-        
-        // 检查知识库名称是否已存在
-        KnowledgeBase existKnowledgeBase = knowledgeBaseMapper.getByName(createKnowledgeBaseDTO.getName());
-        if (existKnowledgeBase != null) {
-            throw new ApiException(ApiError.KNOWLEDGE_BASE_HAD_EXISTED, "文件不能为空");
+        String knowledgeBaseId = createKnowledgeBase(createKnowledgeBaseDTO);
+        KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
+        if (knowledgeBase != null) {
+            knowledgeBase.setRagEnabled(true);
+            knowledgeBase.setUpdatedAt(new Date());
+            knowledgeBaseMapper.update(knowledgeBase);
         }
-        
-        // 检查RAGFlow服务是否可用
-        if (!ragFlowConfig.isEnabled()) {
-            throw new ApiException(ApiError.RAG_SERVICE_DISABLED, "文件不能为空");
-        }
-        
-        // 生成邀请码
-        String invitationCode = generateInvitationCode();
-        
-        // 创建知识库
-        KnowledgeBase knowledgeBase = new KnowledgeBase();
-        knowledgeBase.setId(UUIDUtils.generateUUID());
-        knowledgeBase.setName(createKnowledgeBaseDTO.getName());
-        knowledgeBase.setDescription(createKnowledgeBaseDTO.getDescription());
-        knowledgeBase.setSubject(createKnowledgeBaseDTO.getSubject());
-        knowledgeBase.setInvitationCode(invitationCode);
-        knowledgeBase.setCreatorId(StpUtil.getLoginIdAsLong());
-        knowledgeBase.setCreatedAt(new Date());
-        knowledgeBase.setUpdatedAt(new Date());
-        knowledgeBase.setMembers(new ArrayList<>());
-        knowledgeBase.getMembers().add(StpUtil.getLoginIdAsLong());
-        knowledgeBase.setIsDeleted(false);
-        knowledgeBase.setRagEnabled(true);
-        knowledgeBase.setRagDocumentCount(0);
-        knowledgeBase.setSyncToRagFlow(true);
-        knowledgeBase.setRagSyncStatus("pending");
-        
-        // 创建RAGFlow知识库
-        try {
-            RagCreateKnowledgeDTO ragDto = new RagCreateKnowledgeDTO();
-            ragDto.setName(createKnowledgeBaseDTO.getName());
-            ragDto.setDescription(createKnowledgeBaseDTO.getDescription());
-            
-            RagKnowledgeVO ragKnowledge = ragFlowService.createKnowledgeBase(ragDto);
-            if (ragKnowledge != null) {
-                knowledgeBase.setRagKnowledgeId(ragKnowledge.getId());
-                knowledgeBase.setRagSyncStatus("synced");
-                knowledgeBase.setLastSyncTime(new Date());
-                logger.info("成功创建RAGFlow知识库: {}", ragKnowledge.getId());
-            } else {
-                knowledgeBase.setRagSyncStatus("failed");
-                logger.error("创建RAGFlow知识库失败");
-            }
-        } catch (Exception e) {
-            knowledgeBase.setRagSyncStatus("failed");
-            logger.error("创建RAGFlow知识库异常: {}", e.getMessage(), e);
-        }
-        
-        // 保存知识库
-        knowledgeBaseMapper.insert(knowledgeBase);
-        
-        return knowledgeBase.getId();
+        return knowledgeBaseId;
     }
     
     /**
@@ -496,25 +507,6 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         
         // 保存到数据库
         knowledgeBaseMapper.update(knowledgeBase);
-        
-        // 如果启用了RAG，同步更新RAGFlow知识库
-        if (knowledgeBase.getRagEnabled() && knowledgeBase.getRagKnowledgeId() != null) {
-            try {
-                // 使用RAGFlowClient更新知识库
-                boolean updateResult = ragFlowClient.updateKnowledgeBase(
-                    knowledgeBase.getRagKnowledgeId(),
-                    createKnowledgeBaseDTO.getName(),
-                    createKnowledgeBaseDTO.getDescription()
-                );
-                
-                if (!updateResult) {
-                    logger.warn("同步更新RAGFlow知识库失败，但本地知识库已更新: {}", knowledgeBase.getId());
-                }
-            } catch (Exception e) {
-                logger.error("同步更新RAGFlow知识库时出错: {}", e.getMessage(), e);
-                // 不阻止更新，继续返回成功
-            }
-        }
         
         return knowledgeBase.getId();
     }
@@ -579,4 +571,4 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         
         return knowledgeBase.getId();
     }
-} 
+}

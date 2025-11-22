@@ -15,7 +15,7 @@ import java.util.List;
 /**
  * @FileName TeacherInvitationCodeController
  * @Description 教师邀请码控制器
- * @Author devin
+ * @Author yifan
  * @date 2025-06-11 14:45
  **/
 

@@ -12,7 +12,6 @@ import cn.yifan.drawsee.pojo.vo.R;
 import cn.yifan.drawsee.pojo.vo.rag.RagKnowledgeVO;
 import cn.yifan.drawsee.service.business.KnowledgeBaseService;
 import cn.yifan.drawsee.service.business.KnowledgeResourceService;
-import cn.yifan.drawsee.service.business.RagFlowService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -25,14 +24,14 @@ import java.util.Map;
 /**
  * @FileName TeacherKnowledgeBaseController
  * @Description 教师的知识库控制器
- * @Author devin
+ * @Author yifan
  * @date 2025-08-15 17:35
  * @update 2025-10-05 14:40 更新资源管理相关API
  **/
 
 @Slf4j
 @RestController
-@RequestMapping("/api/teacher/knowledge-base")
+@RequestMapping("/api/teacher/knowledge-bases")
 @SaCheckRole(UserRole.TEACHER)
 public class TeacherKnowledgeBaseController {
 
@@ -40,16 +39,13 @@ public class TeacherKnowledgeBaseController {
     private KnowledgeBaseService knowledgeBaseService;
 
     @Autowired
-    private RagFlowService ragFlowService;
-    
-    @Autowired
     private KnowledgeResourceService knowledgeResourceService;
 
     /**
      * 创建知识库
      */
     @SaCheckLogin
-    @PostMapping("/create")
+    @PostMapping({"/create", ""})
     public R<String> createKnowledgeBase(@RequestBody @Valid CreateKnowledgeBaseDTO createKnowledgeBaseDTO) {
         try {
             String knowledgeBaseId = knowledgeBaseService.createKnowledgeBase(createKnowledgeBaseDTO);
@@ -145,13 +141,30 @@ public class TeacherKnowledgeBaseController {
      * @return 知识库列表
      */
     @SaCheckLogin
-    @GetMapping("/list")
+    @GetMapping({"/list", "/created"})
     public R<List<KnowledgeBaseVO>> getTeacherKnowledgeBases() {
         try {
             List<KnowledgeBaseVO> knowledgeBases = knowledgeBaseService.getMyCreatedKnowledgeBases();
             return R.ok(knowledgeBases);
         } catch (Exception e) {
             log.error("获取教师知识库列表失败", e);
+            return R.fail(e.getMessage());
+        }
+    }
+
+    /**
+     * 获取教师加入的知识库列表
+     *
+     * @return 知识库列表
+     */
+    @SaCheckLogin
+    @GetMapping("/joined")
+    public R<List<KnowledgeBaseVO>> getTeacherJoinedKnowledgeBases() {
+        try {
+            List<KnowledgeBaseVO> knowledgeBases = knowledgeBaseService.getMyJoinedKnowledgeBases();
+            return R.ok(knowledgeBases);
+        } catch (Exception e) {
+            log.error("获取教师加入的知识库列表失败", e);
             return R.fail(e.getMessage());
         }
     }
@@ -167,8 +180,7 @@ public class TeacherKnowledgeBaseController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
         try {
-            // 获取当前教师的RAG知识库列表
-            List<RagKnowledgeVO> ragKnowledgeBases = ragFlowService.listKnowledges(page, size).getKnowledges();
+            List<RagKnowledgeVO> ragKnowledgeBases = knowledgeBaseService.listRagKnowledgeBasesForCurrentUser(page, size);
             return R.ok(ragKnowledgeBases);
         } catch (Exception e) {
             log.error("获取教师RAG知识库列表失败", e);

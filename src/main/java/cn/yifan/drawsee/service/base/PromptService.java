@@ -56,6 +56,9 @@ public interface PromptService {
     @PromptResource(fromResource = "/prompt/image-text.txt")
     String getImageTextPrompt();
 
+    @PromptResource(fromResource = "/prompt/circuit-image-to-design.txt")
+    String getCircuitImageDesignPrompt();
+
     @PromptResource(fromResource = "/prompt/solve-ways.txt")
     String getSolveWaysPrompt(@PromptParam("question") String question);
 
@@ -111,10 +114,31 @@ public interface PromptService {
         @PromptParam("spiceNetlist") String spiceNetlist,
         @PromptParam("angle") String angle
     );
-    
-    @PromptResource(fromResource = "/prompt/circuit-pdf/circuit-pdf-analysis.txt")
-    // 注意：模板中使用的是 {{text}} 占位符，这里参数名需与之保持一致
-    String getPdfCircuitAnalysisPrompt(@PromptParam("text") String pdfContent);
+
+    /**
+     * 获取PDF电路实验任务分析点提示词模板
+     * 用于解析PDF实验任务文档并生成分析点
+     *
+     * @param text PDF文档提取的文本内容
+     * @return 提示词内容
+     */
+    @PromptResource(fromResource = "/prompt/pdf-circuit-point-analysis.txt")
+    String getPdfCircuitPointAnalysisPrompt(@PromptParam("text") String text);
+
+    /**
+     * 获取PDF电路实验任务分析点详情提示词模板
+     * 用于展开特定分析点的详细内容
+     *
+     * @param text PDF文档提取的文本内容
+     * @param angle 分析角度
+     * @return 提示词内容
+     */
+    @PromptResource(fromResource = "/prompt/pdf-circuit-point-detail.txt")
+    String getPdfCircuitPointDetailPrompt(
+        @PromptParam("text") String text,
+        @PromptParam("angle") String angle
+    );
+
     @PromptResource(fromResource = "/prompt/document-analysis-vision.txt")
     String getDocumentAnalysisVisionPrompt();
 }

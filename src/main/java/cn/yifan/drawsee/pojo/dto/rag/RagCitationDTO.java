@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 /**
  * RAGFlow引用片段DTO
  * 
- * @author devin
+ * @author yifan
  * @date 2025-05-08
  */
 @Data

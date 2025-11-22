@@ -8,6 +8,7 @@ import cn.yifan.drawsee.exception.ApiException;
 import cn.yifan.drawsee.mapper.NodeMapper;
 import cn.yifan.drawsee.pojo.dto.GetSolveWaysDTO;
 import cn.yifan.drawsee.pojo.dto.UploadAnimationFrameDTO;
+import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.vo.RecognizeTextVO;
 import cn.yifan.drawsee.service.base.AiService;
@@ -22,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -126,5 +128,78 @@ public class ToolService {
         } catch (JsonProcessingException e) {
             throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
         }
+    }
+
+    public CircuitDesign recognizeCircuitFromImage(MultipartFile file) {
+        validateImageFile(file);
+        String originalName = file.getOriginalFilename();
+        String suffix = "";
+        if (originalName != null && originalName.contains(".")) {
+            suffix = originalName.substring(originalName.lastIndexOf('.'));
+        } else if (Objects.equals(file.getContentType(), "image/png")) {
+            suffix = ".png";
+        } else {
+            suffix = ".jpg";
+        }
+        String uuid = UUID.randomUUID().toString().replace("-", "");
+        String objectName = MinioObjectPath.CIRCUIT_RECOGNIZE_IMAGE_PATH + uuid + suffix;
+        try {
+            minioService.uploadImage(file, objectName);
+        } catch (Exception e) {
+            log.error("电路图片上传失败", e);
+            throw new ApiException(ApiError.FILE_UPLOAD_FAILED, "电路图片上传失败");
+        }
+
+        try {
+            String imageUrl = minioService.getObjectUrl(objectName);
+            CircuitDesign design = aiService.recognizeCircuitDesignFromImage(imageUrl);
+            normalizeCircuitDesign(design);
+            return design;
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("电路图识别失败", e);
+            throw new ApiException(ApiError.IMAGE_RECOGNIZE_FAILED, "电路图识别失败，请重试");
+        }
+    }
+
+    private void validateImageFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || (!contentType.equals("image/png") &&
+            !contentType.equals("image/jpeg") &&
+            !contentType.equals("image/jpg"))) {
+            throw new ApiException(ApiError.FILE_TYPE_NOT_SUPPORTED, "仅支持PNG或JPEG图片");
+        }
+    }
+
+    private void normalizeCircuitDesign(CircuitDesign design) {
+        if (design == null) {
+            throw new ApiException(ApiError.IMAGE_RECOGNIZE_FAILED, "未识别到电路设计");
+        }
+        if (design.getElements() == null) {
+            design.setElements(new ArrayList<>());
+        }
+        if (design.getConnections() == null) {
+            design.setConnections(new ArrayList<>());
+        }
+        CircuitDesign.CircuitMetadata metadata = design.getMetadata();
+        if (metadata == null) {
+            metadata = new CircuitDesign.CircuitMetadata();
+            design.setMetadata(metadata);
+        }
+        if (metadata.getTitle() == null || metadata.getTitle().isBlank()) {
+            metadata.setTitle("AI识别电路");
+        }
+        if (metadata.getDescription() == null || metadata.getDescription().isBlank()) {
+            metadata.setDescription("由电路图识别自动生成");
+        }
+        String now = OffsetDateTime.now().toString();
+        if (metadata.getCreatedAt() == null || metadata.getCreatedAt().isBlank()) {
+            metadata.setCreatedAt(now);
+        }
+        metadata.setUpdatedAt(now);
     }
 }

@@ -3,7 +3,7 @@ package cn.yifan.drawsee.constant;
 /**
  * @FileName KnowledgeResourceType
  * @Description 知识资源类型常量类
- * @Author devin
+ * @Author yifan
  * @date 2025-06-10 11:00
  **/
 

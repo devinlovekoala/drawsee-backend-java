@@ -10,7 +10,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 /**
  * @FileName WebConfig
  * @Description Web配置类，处理静态资源和请求路径配置
- * @Author devin
+ * @Author yifan
  * @date 2025-04-12 10:30
  **/
 

@@ -12,7 +12,7 @@ import java.util.Map;
  * RAG聊天请求DTO
  * 用于向RAGFlow发送知识库问答请求
  * 
- * @author devin
+ * @author yifan
  * @date 2025-05-09
  */
 @Data

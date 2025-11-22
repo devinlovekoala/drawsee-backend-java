@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
  * 电路分析专用响应解析器
  * 针对电路分析结果提供更精确的节点提取
  *
- * @author devin
+ * @author yifan
  * @date 2025-04-13 15:20
  */
 @Slf4j

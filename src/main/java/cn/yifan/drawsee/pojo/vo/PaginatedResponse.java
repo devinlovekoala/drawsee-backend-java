@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * @FileName PaginatedResponse
  * @Description 分页响应
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 14:36
  **/
 

@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * 知识点VO
  * 
- * @author devin
+ * @author yifan
  * @date 2025-05-09
  */
 @Data

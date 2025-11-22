@@ -5,7 +5,7 @@ import lombok.Data;
 /**
  * 统一API响应结果封装
  * 
- * @author devin
+ * @author yifan
  * @date 2025-05-08
  */
 @Data

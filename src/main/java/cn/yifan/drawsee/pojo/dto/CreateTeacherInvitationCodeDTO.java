@@ -13,7 +13,7 @@ import java.io.Serializable;
 /**
  * @FileName CreateTeacherInvitationCodeDTO
  * @Description 创建教师邀请码DTO类
- * @Author devin
+ * @Author yifan
  * @date 2025-06-11 14:35
  **/
 

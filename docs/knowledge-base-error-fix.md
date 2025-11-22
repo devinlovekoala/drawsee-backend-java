@@ -7,7 +7,7 @@
 ```
 org.springframework.jdbc.BadSqlGrammarException: 
 ### Error querying database.  Cause: java.sql.SQLSyntaxErrorException: Unknown column 'members' in 'where clause'
-### The error may exist in file [/home/devin/Workspace/drawsee-platform/drawsee-java/target/classes/mapper/KnowledgeBaseMapper.xml]
+### The error may exist in file [/home/yifan/Workspace/drawsee-platform/drawsee-java/target/classes/mapper/KnowledgeBaseMapper.xml]
 ### The error occurred while setting parameters
 ### SQL: SELECT * FROM knowledge_base WHERE JSON_CONTAINS(members, CAST(? AS JSON), '$') AND is_deleted = ?
 ### Cause: java.sql.SQLSyntaxErrorException: Unknown column 'members' in 'where clause'

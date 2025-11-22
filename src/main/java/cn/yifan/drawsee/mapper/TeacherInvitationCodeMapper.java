@@ -11,7 +11,7 @@ import java.util.List;
 /**
  * @FileName TeacherInvitationCodeMapper
  * @Description 教师邀请码Mapper接口
- * @Author devin
+ * @Author yifan
  * @date 2025-06-11 14:25
  **/
 

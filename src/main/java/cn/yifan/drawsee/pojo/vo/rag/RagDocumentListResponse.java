@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * RAGFlow文档列表响应
  * 
- * @author devin
+ * @author yifan
  * @date 2025-05-08
  */
 @Data

@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * @FileName ClassMemberMapper
  * @Description 班级成员Mapper接口
- * @Author devin
+ * @Author yifan
  * @date 2025-06-10 10:35
  **/
 

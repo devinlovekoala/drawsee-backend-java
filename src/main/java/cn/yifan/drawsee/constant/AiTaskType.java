@@ -3,7 +3,7 @@ package cn.yifan.drawsee.constant;
 /**
  * AI任务类型常量
  * 
- * @author yifan
+ * @author devin
  * @date 2024/03/19
  */
 public class AiTaskType {

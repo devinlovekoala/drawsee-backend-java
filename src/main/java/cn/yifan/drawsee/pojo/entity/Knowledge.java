@@ -74,4 +74,4 @@ public class Knowledge implements Serializable {
      * 是否已删除
      */
     private Boolean isDeleted;
-} 
+}

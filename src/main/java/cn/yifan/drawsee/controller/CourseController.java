@@ -15,7 +15,7 @@ import java.util.List;
 /**
  * @FileName CourseController
  * @Description 课程控制器类
- * @Author devin
+ * @Author yifan
  * @date 2025-03-28 11:12
  **/
 

@@ -10,7 +10,7 @@ import java.sql.Timestamp;
 /**
  * @FileName InvitationCode
  * @Description
- * @Author yifan
+ * @Author devin
  * @date 2025-03-25 08:45
  **/
 

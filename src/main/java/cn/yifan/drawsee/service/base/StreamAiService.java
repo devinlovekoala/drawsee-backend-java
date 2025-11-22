@@ -197,7 +197,7 @@ public class StreamAiService {
     public void circuitAnalysisChat(LinkedList<ChatMessage> history, String prompt, String model, StreamingResponseHandler<AiMessage> handler) {
         LinkedList<ChatMessage> messages = new LinkedList<>(history);
         messages.add(new UserMessage(prompt));
-        
+
         if (model.equals(AiModel.DEEPSEEKV3)) {
             log.info("使用DeepSeekV3模型");
             deepseekV3StreamingChatLanguageModel.generate(messages, handler);

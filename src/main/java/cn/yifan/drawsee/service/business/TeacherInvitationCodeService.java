@@ -22,7 +22,7 @@ import java.util.Random;
 /**
  * @FileName TeacherInvitationCodeService
  * @Description 教师邀请码服务类
- * @Author devin
+ * @Author yifan
  * @date 2025-06-11 14:40
  **/
 
