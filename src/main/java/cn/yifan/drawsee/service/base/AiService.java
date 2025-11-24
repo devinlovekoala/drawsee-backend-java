@@ -1,5 +1,6 @@
 package cn.yifan.drawsee.service.base;
 
+import cn.yifan.drawsee.parser.CircuitImageNetlistParser;
 import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -37,6 +38,8 @@ public class AiService {
     private ChatLanguageModel doubaoVisionChatLanguageModel;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private CircuitImageNetlistParser circuitImageNetlistParser;
 
     public String getConvTitle(String question) {
         String prompt = promptService.getConvTitlePrompt(question);
@@ -86,12 +89,11 @@ public class AiService {
         );
         Response<AiMessage> response = doubaoVisionChatLanguageModel.generate(userMessage);
         String raw = response.content().text();
-        String json = extractJsonBlock(raw);
         try {
-            return objectMapper.readValue(json, CircuitDesign.class);
-        } catch (JsonProcessingException e) {
+            return circuitImageNetlistParser.parse(raw);
+        } catch (Exception e) {
             log.error("识别电路图失败，模型输出: {}", raw, e);
-            throw new RuntimeException("解析电路设计JSON失败", e);
+            throw new RuntimeException("解析电路网表失败", e);
         }
     }
 
@@ -109,18 +111,6 @@ public class AiService {
         tokens.addAndGet(response.tokenUsage().totalTokenCount());
         TypeReference<List<String>> typeReference = new TypeReference<>() {};
         return objectMapper.readValue(response.content().text(), typeReference);
-    }
-
-    private String extractJsonBlock(String text) {
-        if (text == null) {
-            return "{}";
-        }
-        int start = text.indexOf('{');
-        int end = text.lastIndexOf('}');
-        if (start >= 0 && end >= start) {
-            return text.substring(start, end + 1);
-        }
-        return text;
     }
 
 }

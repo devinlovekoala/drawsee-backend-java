@@ -2,9 +2,11 @@ package cn.yifan.drawsee.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.annotation.SaIgnore;
+import cn.yifan.drawsee.pojo.dto.CircuitImageConvertRequest;
 import cn.yifan.drawsee.pojo.dto.GetSolveWaysDTO;
 import cn.yifan.drawsee.pojo.dto.UploadAnimationFrameDTO;
 import cn.yifan.drawsee.pojo.entity.CircuitDesign;
+import cn.yifan.drawsee.pojo.vo.CircuitImageUploadVO;
 import cn.yifan.drawsee.pojo.vo.RecognizeTextVO;
 import cn.yifan.drawsee.service.business.ToolService;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +46,16 @@ public class ToolController {
     @PostMapping(value = "/recognize_circuit", consumes = "multipart/form-data")
     public CircuitDesign recognizeCircuitFromImage(@RequestPart("file") MultipartFile file) {
         return toolService.recognizeCircuitFromImage(file);
+    }
+
+    @PostMapping(value = "/recognize_circuit/upload", consumes = "multipart/form-data")
+    public CircuitImageUploadVO uploadCircuitImage(@RequestPart("file") MultipartFile file) {
+        return toolService.uploadCircuitImage(file);
+    }
+
+    @PostMapping(value = "/recognize_circuit/convert")
+    public CircuitDesign recognizeCircuitFromUploaded(@RequestBody CircuitImageConvertRequest request) {
+        return toolService.recognizeCircuitFromUploadedImage(request.getImageUrl());
     }
 
     @PostMapping("/solve_ways")

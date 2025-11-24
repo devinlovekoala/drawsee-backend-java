@@ -10,6 +10,7 @@ import cn.yifan.drawsee.pojo.dto.GetSolveWaysDTO;
 import cn.yifan.drawsee.pojo.dto.UploadAnimationFrameDTO;
 import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import cn.yifan.drawsee.pojo.entity.Node;
+import cn.yifan.drawsee.pojo.vo.CircuitImageUploadVO;
 import cn.yifan.drawsee.pojo.vo.RecognizeTextVO;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
@@ -130,7 +131,7 @@ public class ToolService {
         }
     }
 
-    public CircuitDesign recognizeCircuitFromImage(MultipartFile file) {
+    public CircuitImageUploadVO uploadCircuitImage(MultipartFile file) {
         validateImageFile(file);
         String originalName = file.getOriginalFilename();
         String suffix = "";
@@ -152,6 +153,23 @@ public class ToolService {
 
         try {
             String imageUrl = minioService.getObjectUrl(objectName);
+            return new CircuitImageUploadVO(imageUrl);
+        } catch (Exception e) {
+            log.error("获取电路图片URL失败", e);
+            throw new ApiException(ApiError.FILE_UPLOAD_FAILED, "获取图片地址失败");
+        }
+    }
+
+    public CircuitDesign recognizeCircuitFromImage(MultipartFile file) {
+        CircuitImageUploadVO uploadResult = uploadCircuitImage(file);
+        return recognizeCircuitFromUploadedImage(uploadResult.getImageUrl());
+    }
+
+    public CircuitDesign recognizeCircuitFromUploadedImage(String imageUrl) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            throw new ApiException(ApiError.PARAM_ERROR, "图片地址不能为空");
+        }
+        try {
             CircuitDesign design = aiService.recognizeCircuitDesignFromImage(imageUrl);
             normalizeCircuitDesign(design);
             return design;
