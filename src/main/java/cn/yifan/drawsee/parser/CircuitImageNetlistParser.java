@@ -213,6 +213,10 @@ public class CircuitImageNetlistParser {
             new PortTemplate("negative", "negative", "input", "left", 0, 50)
         ));
         map.put("ac_source", map.get("dc_source"));
+        map.put("current_source", List.of(
+            new PortTemplate("positive", "positive", "output", "right", 100, 50),
+            new PortTemplate("negative", "negative", "input", "left", 0, 50)
+        ));
         map.put("ammeter", List.of(
             new PortTemplate("in", "in", "bidirectional", "left", 0, 50),
             new PortTemplate("out", "out", "bidirectional", "right", 100, 50)
@@ -220,6 +224,11 @@ public class CircuitImageNetlistParser {
         map.put("voltmeter", List.of(
             new PortTemplate("positive", "positive", "bidirectional", "left", 0, 30),
             new PortTemplate("negative", "negative", "bidirectional", "right", 100, 70)
+        ));
+        map.put("oscilloscope", List.of(
+            new PortTemplate("channel1", "channel1", "input", "left", 0, 40),
+            new PortTemplate("channel2", "channel2", "input", "left", 0, 70),
+            new PortTemplate("ground", "ground", "bidirectional", "bottom", 50, 100)
         ));
         map.put("ground", List.of(
             new PortTemplate("ground", "ground", "input", "top", 50, 0)
