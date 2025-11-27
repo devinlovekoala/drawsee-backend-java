@@ -16,6 +16,7 @@ public class CircuitImageNetlistParser {
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("(\\w+)=\\\"([^\\\"]*)\\\"|(\\w+)=([^\\s]+)");
 
     private static final Map<String, List<PortTemplate>> PORT_TEMPLATES = createPortTemplates();
+    private static final Set<String> POWER_ELEMENT_TYPES = Set.of("dc_source", "ac_source", "current_source");
 
     public CircuitDesign parse(String netlist) {
         if (netlist == null || netlist.isBlank()) {
@@ -56,6 +57,13 @@ public class CircuitImageNetlistParser {
         if (elements.isEmpty() || connections.isEmpty()) {
             throw new IllegalArgumentException("网表缺少元件或连接信息");
         }
+
+        Map<String, CircuitDesign.CircuitElement> elementMap = new HashMap<>();
+        for (CircuitDesign.CircuitElement element : elements) {
+            elementMap.put(element.getId(), element);
+        }
+
+        connections.removeIf(connection -> isInvalidPowerGroundConnection(connection, elementMap));
 
         CircuitDesign.CircuitMetadata metadata = new CircuitDesign.CircuitMetadata();
         metadata.setTitle(title.isBlank() ? "AI识别电路" : title);
@@ -164,6 +172,43 @@ public class CircuitImageNetlistParser {
         } catch (NumberFormatException ex) {
             return fallback;
         }
+    }
+
+    private boolean isInvalidPowerGroundConnection(
+        CircuitDesign.CircuitConnection connection,
+        Map<String, CircuitDesign.CircuitElement> elementMap
+    ) {
+        boolean sourcePositive = isPositivePowerPort(connection.getSource(), elementMap);
+        boolean targetPositive = isPositivePowerPort(connection.getTarget(), elementMap);
+        boolean sourceGround = isGroundPort(connection.getSource(), elementMap);
+        boolean targetGround = isGroundPort(connection.getTarget(), elementMap);
+        if ((sourcePositive && targetGround) || (targetPositive && sourceGround)) {
+            log.warn("移除非法电源正极与接地的连接: {}", connection.getId());
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isPositivePowerPort(
+        CircuitDesign.PortReference portReference,
+        Map<String, CircuitDesign.CircuitElement> elementMap
+    ) {
+        if (portReference == null) return false;
+        CircuitDesign.CircuitElement element = elementMap.get(portReference.getElementId());
+        if (element == null) return false;
+        return POWER_ELEMENT_TYPES.contains(element.getType()) &&
+            "positive".equalsIgnoreCase(portReference.getPortId());
+    }
+
+    private boolean isGroundPort(
+        CircuitDesign.PortReference portReference,
+        Map<String, CircuitDesign.CircuitElement> elementMap
+    ) {
+        if (portReference == null) return false;
+        CircuitDesign.CircuitElement element = elementMap.get(portReference.getElementId());
+        if (element == null) return false;
+        return "ground".equalsIgnoreCase(element.getType()) &&
+            "ground".equalsIgnoreCase(portReference.getPortId());
     }
 
     private static Map<String, List<PortTemplate>> createPortTemplates() {
