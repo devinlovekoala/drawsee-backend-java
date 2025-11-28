@@ -51,7 +51,7 @@ drawsee:
     deepseekV3:
       baseUrl: https://api.siliconflow.cn/v1
       apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
-      modelName: deepseek-ai/DeepSeek-V3
+      modelName: deepseek-ai/DeepSeek-V3.1-Terminus
     doubaoVision:
       baseUrl: https://ark.cn-beijing.volces.com/api/v3
       apiKey: a923c210-64ac-43db-b0b9-5122b11a6aa7
