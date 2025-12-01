@@ -46,11 +46,11 @@ drawsee:
   models:
     doubao:
       baseUrl: https://api.siliconflow.cn/v1
-      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
+      apiKey: sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv
       modelName: moonshotai/Kimi-K2-Instruct
     deepseekV3:
       baseUrl: https://api.siliconflow.cn/v1
-      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
+      apiKey: sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv
       modelName: deepseek-ai/DeepSeek-V3.1-Terminus
     doubaoVision:
       baseUrl: https://ark.cn-beijing.volces.com/api/v3
@@ -58,7 +58,7 @@ drawsee:
       modelName: doubao-seed-1-6-vision-250815
     embedding:
       baseUrl: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
-      apiKey: ${EMBEDDING_API_KEY:sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm}
+      apiKey: ${EMBEDDING_API_KEY:sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv}
       modelName: ${EMBEDDING_MODEL:BAAI/bge-m3}
   rabbitmq:
     aiConfig:
@@ -76,7 +76,7 @@ spring:
   application:
     name: drawsee-java
   profiles:
-    active: prod
+    active: dev
   mail:
     host: smtp.qq.com
     protocol: smtp

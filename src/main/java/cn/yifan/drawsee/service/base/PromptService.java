@@ -86,33 +86,26 @@ public interface PromptService {
     @PromptResource(fromResource = "/prompt/mode-detection.txt")
     String getModeDetectionPrompt(@PromptParam("prompt") String prompt);
     /**
-     * 获取电路分析点提示词模板
-     * 用于解析电路结构并生成分析点
-     * 
-     * @param design 电路设计
-     * @param spiceNetlist SPICE网表
-     * @return 提示词内容
+     * 获取电路分析预热提示词模板
+     * 生成电路简介与推荐追问
      */
-    @PromptResource(fromResource = "/prompt/circuit-point-analysis.txt")
-    String getCircuitPointAnalysisPrompt(
+    @PromptResource(fromResource = "/prompt/circuit-analysis.txt")
+    String getCircuitWarmupPrompt(
         @PromptParam("design") CircuitDesign design,
         @PromptParam("spiceNetlist") String spiceNetlist
     );
     
     /**
-     * 获取电路分析点详情提示词模板
-     * 用于展开特定分析点的详细内容
-     * 
-     * @param design 电路设计
-     * @param spiceNetlist SPICE网表
-     * @param angle 分析角度
-     * @return 提示词内容
+     * 获取电路分析追问详情提示词模板
+     * 用于响应指定追问
      */
     @PromptResource(fromResource = "/prompt/circuit-point-detail.txt")
-    String getCircuitPointDetailPrompt(
+    String getCircuitAnalyzeDetailPrompt(
         @PromptParam("design") CircuitDesign design,
         @PromptParam("spiceNetlist") String spiceNetlist,
-        @PromptParam("angle") String angle
+        @PromptParam("contextTitle") String contextTitle,
+        @PromptParam("contextText") String contextText,
+        @PromptParam("followUp") String followUp
     );
 
     /**

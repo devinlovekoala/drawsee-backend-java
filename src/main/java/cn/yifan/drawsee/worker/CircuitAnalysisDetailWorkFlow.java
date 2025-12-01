@@ -1,5 +1,6 @@
 package cn.yifan.drawsee.worker;
 
+import cn.yifan.drawsee.constant.AiTaskMessageType;
 import cn.yifan.drawsee.constant.NodeSubType;
 import cn.yifan.drawsee.constant.NodeTitle;
 import cn.yifan.drawsee.constant.NodeType;
@@ -21,10 +22,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
+import dev.langchain4j.model.output.Response;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RStream;
 import org.redisson.api.RedissonClient;
+import org.redisson.api.stream.StreamAddArgs;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -69,9 +76,9 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         Node parentNode = workContext.getParentNode();
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         
-        // 校验父节点类型是否为电路分析点节点
-        if (!parentNode.getType().equals(NodeType.CIRCUIT_POINT)) {
-            log.error("父节点不是电路分析点节点, taskMessage: {}", aiTaskMessage);
+        // 校验父节点类型是否为新的电路分析节点
+        if (!parentNode.getType().equals(NodeType.CIRCUIT_ANALYZE)) {
+            log.error("父节点不是电路分析节点, taskMessage: {}", aiTaskMessage);
             return false;
         }
         
@@ -80,7 +87,7 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
     
     /**
      * 覆盖父类方法，避免创建QUERY节点
-     * 直接使用CIRCUIT_POINT节点作为详情回答的父节点
+     * 直接使用circuit-analyze节点作为详情回答的父节点
      */
     @Override
     public void createInitNodes(WorkContext workContext) throws JsonProcessingException {
@@ -96,28 +103,32 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         Node parentNode = workContext.getParentNode();
         
-        // 从父节点(CIRCUIT_POINT)中读取角度信息
         TypeReference<Map<String, Object>> dataTypeRef = new TypeReference<>() {};
         Map<String, Object> parentNodeData = objectMapper.readValue(parentNode.getData(), dataTypeRef);
-        String angleTitle = (String) parentNodeData.get("title");
+        String contextTitle = parentNodeData.getOrDefault("contextTitle", parentNodeData.getOrDefault("title", "电路分析")).toString();
+        String contextText = parentNodeData.getOrDefault("text", "").toString();
+        String followUp = aiTaskMessage.getPrompt();
         
-        // 创建详细回答节点
         Map<String, Object> circuitDetailNodeData = new ConcurrentHashMap<>();
-        circuitDetailNodeData.put("subtype", "circuit-detail");
-        circuitDetailNodeData.put("title", angleTitle + "详情");
+        circuitDetailNodeData.put("subtype", NodeSubType.CIRCUIT_ANALYZE);
+        circuitDetailNodeData.put("title", NodeTitle.CIRCUIT_DETAIL);
         circuitDetailNodeData.put("text", "");
-        circuitDetailNodeData.put("angle", angleTitle);
+        circuitDetailNodeData.put("contextTitle", contextTitle);
+        circuitDetailNodeData.put("contextText", contextText);
+        circuitDetailNodeData.put("followUp", followUp);
+        circuitDetailNodeData.put("followUps", new ArrayList<>());
         
         Node circuitDetailNode = new Node(
-            NodeType.ANSWER,
+            NodeType.CIRCUIT_ANALYZE,
             objectMapper.writeValueAsString(circuitDetailNodeData),
-            objectMapper.writeValueAsString(XYPosition.origin()),
+            objectMapper.writeValueAsString(new XYPosition(420, 0)),
             parentNodeId,
             aiTaskMessage.getUserId(),
             aiTaskMessage.getConvId(),
             true
         );
         insertAndPublishStreamNode(workContext, circuitDetailNode, circuitDetailNodeData);
+        log.info("[CircuitAnalysisDetail] 创建追问解析节点, parentNodeId={}, detailNodeId={}", parentNodeId, circuitDetailNode.getId());
     }
     
     @Override
@@ -127,10 +138,11 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         Node parentNode = workContext.getParentNode();
         String model = aiTaskMessage.getModel();
         
-        // 从父节点(CIRCUIT_POINT)中读取角度信息
         TypeReference<Map<String, Object>> dataTypeRef = new TypeReference<>() {};
         Map<String, Object> parentNodeData = objectMapper.readValue(parentNode.getData(), dataTypeRef);
-        String angleTitle = (String) parentNodeData.get("title");
+        String contextTitle = parentNodeData.getOrDefault("contextTitle", parentNodeData.getOrDefault("title", "电路分析")).toString();
+        String contextText = parentNodeData.getOrDefault("text", "").toString();
+        String followUpQuestion = aiTaskMessage.getPrompt();
         
         // 找到电路画布节点以获取电路设计数据
         CircuitDesign circuitDesign = findCircuitDesign(workContext);
@@ -142,11 +154,142 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         // 生成SPICE网表
         String spiceNetlist = spiceConverter.generateNetlist(circuitDesign);
         
-        // 生成详细分析提示词
-        String detailPrompt = promptService.getCircuitPointDetailPrompt(circuitDesign, spiceNetlist, angleTitle);
+        String detailPrompt = promptService.getCircuitAnalyzeDetailPrompt(
+            circuitDesign,
+            spiceNetlist,
+            contextTitle,
+            contextText,
+            followUpQuestion
+        );
         
         // 调用AI进行详细分析
         streamAiService.circuitAnalysisChat(history, detailPrompt, model, handler);
+    }
+
+    private List<Map<String, Object>> extractContinuationSuggestions(String responseText) {
+        if (responseText == null || responseText.isBlank()) {
+            return Collections.emptyList();
+        }
+        String normalized = responseText.replace("\r", "");
+        final String sectionFlag = "## 继续探索";
+        int sectionIndex = normalized.indexOf(sectionFlag);
+        if (sectionIndex < 0) {
+            return Collections.emptyList();
+        }
+        String section = normalized.substring(sectionIndex + sectionFlag.length()).trim();
+        if (section.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String[] lines = section.split("\n");
+        List<String> suggestions = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        for (String rawLine : lines) {
+            String line = rawLine.trim();
+            if (line.startsWith("##")) {
+                break;
+            }
+            if (line.isEmpty()) {
+                if (current.length() > 0) {
+                    suggestions.add(current.toString().trim());
+                    current.setLength(0);
+                }
+                continue;
+            }
+            boolean isNewBullet = line.startsWith("-") || line.startsWith("*") || line.matches("^\\d+[\\.．、)]\\s*.*");
+            if (isNewBullet && current.length() > 0) {
+                suggestions.add(current.toString().trim());
+                current.setLength(0);
+            }
+            if (isNewBullet) {
+                current.append(normalizeSuggestionLine(line));
+            } else if (current.length() > 0) {
+                current.append(' ').append(line);
+            }
+        }
+        if (current.length() > 0) {
+            suggestions.add(current.toString().trim());
+        }
+        
+        List<Map<String, Object>> followUps = new ArrayList<>();
+        for (int i = 0; i < suggestions.size(); i++) {
+            String suggestion = suggestions.get(i);
+            if (suggestion.isEmpty()) {
+                continue;
+            }
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("title", "追问 " + (i + 1));
+            map.put("hint", suggestion);
+            map.put("followUp", ensureQuestionSentence(suggestion));
+            followUps.add(map);
+            if (followUps.size() >= 3) {
+                break;
+            }
+        }
+        return followUps;
+    }
+    
+    private String normalizeSuggestionLine(String line) {
+        String trimmed = line.trim();
+        if (trimmed.startsWith("-") || trimmed.startsWith("*")) {
+            trimmed = trimmed.substring(1).trim();
+        }
+        if (trimmed.matches("^\\d+[\\.．、)]\\s*.*")) {
+            trimmed = trimmed.replaceFirst("^\\d+[\\.．、)]\\s*", "");
+        }
+        return trimmed.trim();
+    }
+    
+    private String ensureQuestionSentence(String text) {
+        if (text == null) {
+            return "";
+        }
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+        if (trimmed.endsWith("？") || trimmed.endsWith("?")) {
+            return trimmed;
+        }
+        if (trimmed.endsWith("。") || trimmed.endsWith(".")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1).trim();
+        }
+        return trimmed + "？";
+    }
+    
+    @Override
+    public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
+        RStream<String, Object> redisStream = workContext.getRedisStream();
+        Node streamNode = workContext.getStreamNode();
+        Map<String, Object> streamNodeData = workContext.getStreamNodeData();
+        Response<AiMessage> streamResponse = workContext.getStreamResponse();
+        String detailText = streamResponse.content().text();
+        
+        List<Map<String, Object>> followUpSuggestions = extractContinuationSuggestions(detailText);
+        streamNodeData.put("text", detailText);
+        streamNodeData.put("followUps", followUpSuggestions);
+        streamNodeData.put("isGenerated", true);
+        streamNodeData.put("isDone", true);
+        log.info("[CircuitAnalysisDetail] 追问生成完成, nodeId={}, followUps={}", streamNode.getId(), followUpSuggestions.size());
+        
+        Map<String, Object> payload = new ConcurrentHashMap<>();
+        payload.put("nodeId", streamNode.getId());
+        payload.put("text", detailText);
+        payload.put("followUps", followUpSuggestions);
+        payload.put("isGenerated", true);
+        payload.put("isDone", true);
+        redisStream.add(StreamAddArgs.entries(
+            "type", AiTaskMessageType.DATA,
+            "data", payload
+        ));
+    }
+    
+    @Override
+    public void updateStreamNode(WorkContext workContext) throws JsonProcessingException {
+        Node streamNode = workContext.getStreamNode();
+        Map<String, Object> streamNodeData = workContext.getStreamNodeData();
+        streamNode.setIsDeleted(false);
+        streamNode.setData(objectMapper.writeValueAsString(streamNodeData));
+        workContext.getNodesToUpdate().add(streamNode);
     }
     
     /**

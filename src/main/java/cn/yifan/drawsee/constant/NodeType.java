@@ -31,6 +31,11 @@ public class NodeType {
     public static final String CIRCUIT_CANVAS = "circuit-canvas";
     
     /**
+     * 电路分析节点（预热/推荐/追问）
+     */
+    public static final String CIRCUIT_ANALYZE = "circuit-analyze";
+    
+    /**
      * 电路分析点节点
      */
     public static final String CIRCUIT_POINT = "circuit-point";

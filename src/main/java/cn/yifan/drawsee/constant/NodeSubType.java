@@ -33,6 +33,11 @@ public class NodeSubType {
 
     public static final String CIRCUIT_ANALYSIS = "circuit-analysis";
 
+    /**
+     * 电路统一分析节点子类型
+     */
+    public static final String CIRCUIT_ANALYZE = "circuit-analyze";
+
     public static final String CIRCUIT_SPICE = "circuit-spice";
 
     public static final String CIRCUIT_OPTIMIZATION = "circuit-optimization";
