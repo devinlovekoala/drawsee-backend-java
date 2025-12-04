@@ -105,10 +105,4 @@
         </foreach>
     </update>
 
-    <update id="softDeleteByType" parameterType="string">
-        UPDATE node
-        SET is_deleted = 1
-        WHERE type = #{type} AND is_deleted = 0
-    </update>
-
 </mapper>
