@@ -60,6 +60,11 @@ drawsee:
       baseUrl: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
       apiKey: ${EMBEDDING_API_KEY:sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv}
       modelName: ${EMBEDDING_MODEL:BAAI/bge-m3}
+  # Web搜索配置（用于查询电子元器件资料）
+  search:
+    enabled: ${SEARCH_ENABLED:false}  # 是否启用搜索功能，默认关闭
+    api-key: ${SEARCH_API_KEY:}  # Google Custom Search API Key
+    engine-id: ${SEARCH_ENGINE_ID:}  # Google Custom Search Engine ID
   rabbitmq:
     aiConfig:
       exchangeName: direct_ai_task_exchange

@@ -13,8 +13,10 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
+import cn.yifan.drawsee.service.base.PdfMultimodalService;
 import cn.yifan.drawsee.service.base.PromptService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.base.WebSearchService;
 import cn.yifan.drawsee.util.PdfUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,6 +34,7 @@ import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -48,6 +51,8 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
 
     private final PromptService promptService;
     private final MinioService minioService;
+    private final PdfMultimodalService pdfMultimodalService;
+    private final WebSearchService webSearchService;
 
     public PdfCircuitAnalysisWorkFlow(
             UserMapper userMapper,
@@ -59,11 +64,15 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             AiTaskMapper aiTaskMapper,
             ObjectMapper objectMapper,
             PromptService promptService,
-            MinioService minioService
+            MinioService minioService,
+            PdfMultimodalService pdfMultimodalService,
+            WebSearchService webSearchService
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.minioService = minioService;
+        this.pdfMultimodalService = pdfMultimodalService;
+        this.webSearchService = webSearchService;
     }
 
     @Override
@@ -183,29 +192,165 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
         String pdfUrl = aiTaskMessage.getPrompt();
         log.info("PDF电路分析工作流处理PDF URL: {}, taskId: {}", pdfUrl, aiTaskMessage.getTaskId());
 
-        // 优先尝试：如果是 MinIO 预签名 URL，下载 PDF 并抽取正文作为 {{text}}
-        String prompt;
-        String extractedText = tryExtractPdfTextFromMinioUrl(pdfUrl);
-        if (extractedText != null && !extractedText.isBlank()) {
-            // 为避免上下文过长，做一次长度裁剪
-            int maxChars = 6000;
-            if (extractedText.length() > maxChars) {
-                extractedText = extractedText.substring(0, maxChars);
+        // 使用增强的多模态分析
+        String enhancedContent = performEnhancedPdfAnalysis(pdfUrl);
+
+        if (enhancedContent == null || enhancedContent.isBlank()) {
+            // 回退到简单文本提取
+            enhancedContent = tryExtractPdfTextFromMinioUrl(pdfUrl);
+            if (enhancedContent != null && !enhancedContent.isBlank()) {
+                int maxChars = 6000;
+                if (enhancedContent.length() > maxChars) {
+                    enhancedContent = enhancedContent.substring(0, maxChars);
+                }
+            } else {
+                // 最终回退
+                enhancedContent = "文档链接：" + pdfUrl + "\n(如无法访问链接，请根据常见电路实验任务要点给出通用分点)";
+                log.warn("PDF电路分析工作流：未能抽取内容，使用URL兜底");
             }
-            prompt = promptService.getPdfCircuitPointAnalysisPrompt(extractedText);
-            log.info("PDF电路分析工作流：使用抽取的PDF正文生成提示词，chars={}", extractedText.length());
-        } else {
-            // 回退：直接把 URL 作为文本放入模板（模型可能无法访问网络，仅供兜底）
-            prompt = promptService.getPdfCircuitPointAnalysisPrompt("文档链接：" + pdfUrl + "\n(如无法访问链接，请根据常见电路实验任务要点给出通用分点)");
-            log.info("PDF电路分析工作流：未能抽取正文，回退为URL兜底");
         }
 
-        log.info("PDF电路分析工作流生成提示词完成，taskId: {}", aiTaskMessage.getTaskId());
-        // 调用AI进行PDF电路实验任务分析，使用answerPointChat以生成分点
-        // 将系统提示词添加到历史消息中
+        // 生成提示词
+        String prompt = promptService.getPdfCircuitPointAnalysisPrompt(enhancedContent);
+        log.info("PDF电路分析工作流生成提示词完成，内容长度: {}, taskId: {}",
+                 enhancedContent.length(), aiTaskMessage.getTaskId());
+
+        // 调用AI进行PDF电路实验任务分析
         history.add(new UserMessage(prompt));
         streamAiService.answerPointChat(history, "", model, handler);
         log.info("PDF电路分析工作流流式聊天调用完成，taskId: {}", aiTaskMessage.getTaskId());
+    }
+
+    /**
+     * 执行增强的PDF分析，包括多模态识别和元件信息搜索
+     * @param pdfUrl PDF文档URL
+     * @return 增强后的文档内容
+     */
+    private String performEnhancedPdfAnalysis(String pdfUrl) {
+        try {
+            log.info("开始执行增强PDF分析: {}", pdfUrl);
+
+            // 1. 多模态分析（文本+图片）
+            PdfMultimodalService.MultimodalAnalysis analysis =
+                pdfMultimodalService.analyzePdfFromUrl(pdfUrl, 3); // 分析最复杂的3页
+
+            if (analysis == null) {
+                log.warn("多模态分析失败，返回null");
+                return null;
+            }
+
+            StringBuilder enhancedContent = new StringBuilder();
+
+            // 2. 组合文本内容
+            if (analysis.getTextContent() != null && !analysis.getTextContent().isBlank()) {
+                enhancedContent.append("【文档文本内容】\n");
+                enhancedContent.append(analysis.getTextContent());
+                enhancedContent.append("\n\n");
+            }
+
+            // 3. 添加图片分析结果
+            if (!analysis.getImageAnalysis().isEmpty()) {
+                enhancedContent.append("【关键图表分析】\n");
+                for (String imageAnalysis : analysis.getImageAnalysis()) {
+                    enhancedContent.append(imageAnalysis);
+                    enhancedContent.append("\n\n");
+                }
+            }
+
+            // 4. 智能提取元件名称并搜索资料
+            List<String> components = extractComponentNames(enhancedContent.toString());
+            if (!components.isEmpty()) {
+                log.info("检测到{}个元器件，开始搜索资料: {}", components.size(), components);
+                Map<String, String> componentInfo = webSearchService.batchSearchComponents(components);
+
+                if (!componentInfo.isEmpty()) {
+                    enhancedContent.append("【元器件资料】\n");
+                    for (Map.Entry<String, String> entry : componentInfo.entrySet()) {
+                        enhancedContent.append(entry.getValue());
+                        enhancedContent.append("\n\n");
+                    }
+                    log.info("成功获取{}个元器件的资料", componentInfo.size());
+                }
+            }
+
+            String result = enhancedContent.toString();
+
+            // 5. 控制总长度
+            int maxChars = 10000;
+            if (result.length() > maxChars) {
+                result = result.substring(0, maxChars) + "\n...(内容过长已截断)";
+            }
+
+            log.info("增强PDF分析完成，最终内容长度: {}", result.length());
+            return result;
+
+        } catch (Exception e) {
+            log.error("增强PDF分析失败", e);
+            return null;
+        }
+    }
+
+    /**
+     * 从文档内容中智能提取元器件名称
+     * @param content 文档内容
+     * @return 元器件名称列表
+     */
+    private List<String> extractComponentNames(String content) {
+        List<String> components = new java.util.ArrayList<>();
+
+        // 常见元器件模式匹配
+        String[] patterns = {
+            // 集成电路芯片（如555、LM358、74HC04）
+            "\\b(\\d{3,4}[A-Z]{0,2})\\b",
+            "\\b([A-Z]{2,3}\\d{3,4}[A-Z]?)\\b",
+            // 带封装的芯片（如NE555、CD4017）
+            "\\b([A-Z]{2}\\d{3,4})\\b",
+            // 三极管、场效应管（如2N3904、IRF540）
+            "\\b(\\d[A-Z]\\d{4})\\b",
+            "\\b([A-Z]{3}\\d{3,4})\\b"
+        };
+
+        java.util.Set<String> componentSet = new java.util.HashSet<>();
+
+        for (String pattern : patterns) {
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+            java.util.regex.Matcher m = p.matcher(content);
+            while (m.find()) {
+                String component = m.group(1);
+                // 过滤掉一些误识别（如纯数字、时间等）
+                if (isLikelyComponent(component)) {
+                    componentSet.add(component);
+                }
+            }
+        }
+
+        components.addAll(componentSet);
+
+        // 限制数量，避免搜索过多
+        if (components.size() > 5) {
+            components = components.subList(0, 5);
+        }
+
+        return components;
+    }
+
+    /**
+     * 判断字符串是否可能是元器件型号
+     */
+    private boolean isLikelyComponent(String text) {
+        // 排除纯数字
+        if (text.matches("^\\d+$")) {
+            return false;
+        }
+        // 排除常见误识别词
+        String[] excludes = {"AND", "NOT", "FOR", "THE", "ALL", "OUT", "VCC", "GND"};
+        for (String exclude : excludes) {
+            if (text.equalsIgnoreCase(exclude)) {
+                return false;
+            }
+        }
+        // 必须包含数字
+        return text.matches(".*\\d.*");
     }
 
     /**
