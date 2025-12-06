@@ -220,22 +220,20 @@ message.setType("pdf_circuit_analysis");
 
 ### 启用联网搜索（可选）
 
-如果需要元器件资料搜索功能，需要配置Google Custom Search API：
+如果需要元器件资料搜索功能，需要配置**百度AI搜索API**：
 
-#### 步骤1：获取API密钥
+#### 步骤1：获取百度AppBuilder API密钥
 
-1. 访问 [Google Cloud Console](https://console.cloud.google.com/)
-2. 创建项目并启用 Custom Search API
-3. 创建API密钥
+1. 访问 [百度智能云千帆平台](https://qianfan.cloud.baidu.com/)
+2. 注册/登录百度智能云账号
+3. 开通"千帆AppBuilder"服务（新用户有免费额度）
+4. 在控制台点击"API Key" → "创建"
+5. 服务选择：**千帆AppBuilder**
+6. 复制生成的API Key（格式：`bce-v3/ALTAK-***`）
 
-#### 步骤2：创建自定义搜索引擎
+详细步骤请查看：[百度AI搜索API接入指南.md](百度AI搜索API接入指南.md)
 
-1. 访问 [Google Programmable Search Engine](https://programmablesearchengine.google.com/)
-2. 创建新的搜索引擎
-3. 配置搜索范围（可选择全网搜索）
-4. 获取搜索引擎ID（Engine ID）
-
-#### 步骤3：配置应用
+#### 步骤2：配置应用
 
 修改 `application.yaml` 或设置环境变量：
 
@@ -243,16 +241,25 @@ message.setType("pdf_circuit_analysis");
 drawsee:
   search:
     enabled: true
-    api-key: YOUR_GOOGLE_CUSTOM_SEARCH_API_KEY
-    engine-id: YOUR_SEARCH_ENGINE_ID
+    api-key: bce-v3/ALTAK-YourApiKeyHere
 ```
 
 或使用环境变量：
 ```bash
 export SEARCH_ENABLED=true
-export SEARCH_API_KEY=your_api_key
-export SEARCH_ENGINE_ID=your_engine_id
+export SEARCH_API_KEY="bce-v3/ALTAK-YourApiKeyHere"
 ```
+
+#### 关于搜索服务
+
+- 🔍 **使用百度AI搜索API**（百度AppBuilder服务）
+- ✅ **国内可用**，无需翻墙
+- 🧠 **AI生成结构化答案**，比链接列表更实用
+- 🆓 **新用户有免费额度**
+- 💰 **按使用量计费**（每个PDF约0-10次API调用）
+
+**为什么不用Google？**
+由于地区政策限制，Google搜索服务在国内暂不可用，百度AI搜索是更好的替代方案，且对中文电子元器件资料查询准确度更高。
 
 ---
 
@@ -266,9 +273,14 @@ export SEARCH_ENGINE_ID=your_engine_id
 
 ### 联网搜索
 
-- **搜索API调用**：每个PDF最多15次（最多5个元器件，每个3种搜索）
+- **搜索API调用**：每个PDF最多10次（最多5个元器件，每个2种搜索）
 - **处理时间**：增加约2-5秒
-- **成本**：Google Custom Search免费额度100次/天，超出后$5/1000次
+- **成本**：百度AppBuilder按Token计费，新用户有免费额度
+
+**百度AI搜索优势**：
+- ✅ 国内可用，无需翻墙
+- ✅ AI生成结构化答案（比Google链接列表更实用）
+- ✅ 中文电子元器件资料准确度高
 
 ### 建议
 
@@ -389,7 +401,7 @@ RC电路常用电阻：1kΩ-100kΩ碳膜电阻，±5%精度
 **A**: 系统会自动回退到纯文本分析模式，不影响基本功能。检查Vision API配置和网络连接。
 
 ### Q2: 搜索功能未生效？
-**A**: 确认配置文件中 `drawsee.search.enabled=true` 且API密钥正确。查看日志是否有错误提示。
+**A**: 确认配置文件中 `drawsee.search.enabled=true` 且API Key格式正确（`bce-v3/ALTAK-***`）。查看日志是否有错误提示。检查网络连接和百度AppBuilder服务状态。
 
 ### Q3: 分析速度慢？
 **A**: 多模态分析和搜索会增加5-15秒处理时间。可通过以下方式优化：
@@ -400,8 +412,15 @@ RC电路常用电阻：1kΩ-100kΩ碳膜电阻，±5%精度
 ### Q4: 识别不到元器件？
 **A**: 元器件识别基于正则匹配，可能遗漏非标准命名的元器件。可在 `extractComponentNames()` 方法中添加更多识别模式。
 
-### Q5: 如何调整分点数量？
+### Q4: 如何调整分点数量？
 **A**: 分点数量由AI根据文档复杂度自动判断（3-6个）。如需固定数量，可修改提示词模板中的指导说明。
+
+### Q5: 为什么使用百度搜索而不是Google？
+**A**: 由于地区政策限制，Google搜索服务在国内暂不可用。百度AI搜索是更好的替代方案：
+- ✅ 国内直接访问，稳定可靠
+- ✅ AI生成结构化答案，比链接列表更实用
+- ✅ 对中文电子元器件资料准确度更高
+- ✅ 新用户有免费额度
 
 ---
 

@@ -11,7 +11,7 @@ import java.util.*;
 
 /**
  * @FileName WebSearchService
- * @Description Web搜索服务，用于联网查询电子元件资料、引脚图、数据手册等信息
+ * @Description Web搜索服务，使用百度AI搜索API查询电子元件资料、引脚图、数据手册等信息
  * @Author yifan
  * @date 2025-12-05
  **/
@@ -26,11 +26,12 @@ public class WebSearchService {
     @Value("${drawsee.search.api-key:}")
     private String searchApiKey;
 
-    @Value("${drawsee.search.engine-id:}")
-    private String searchEngineId;
-
     @Value("${drawsee.search.enabled:false}")
     private boolean searchEnabled;
+
+    // 百度AI搜索API V1版本端点
+    private static final String BAIDU_SEARCH_API_URL =
+        "https://appbuilder.baidu.com/rpc/2.0/cloud_hub/v1/ai_engine/copilot_engine/service/v1/baidu_search_rag/general";
 
     /**
      * 搜索电子元件相关资料
@@ -46,14 +47,14 @@ public class WebSearchService {
 
         try {
             String query = buildSearchQuery(componentName, searchType);
-            List<SearchResult> results = performSearch(query);
+            String result = performBaiduSearch(query);
 
-            if (results == null || results.isEmpty()) {
+            if (result == null || result.isBlank()) {
                 log.info("未找到元件{}的{}信息", componentName, searchType);
                 return null;
             }
 
-            return formatSearchResults(componentName, searchType, results);
+            return formatSearchResult(componentName, searchType, result);
         } catch (Exception e) {
             log.error("搜索元件信息失败: component={}, type={}", componentName, searchType, e);
             return null;
@@ -84,6 +85,13 @@ public class WebSearchService {
             if (summary.length() > 0) {
                 results.put(component, summary.toString());
             }
+
+            // 添加延迟避免频繁调用API
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
 
         return results;
@@ -95,98 +103,99 @@ public class WebSearchService {
     private String buildSearchQuery(String componentName, String searchType) {
         switch (searchType) {
             case "datasheet":
-                return componentName + " datasheet PDF 中文";
+                return componentName + " 数据手册 datasheet PDF 参数";
             case "pinout":
-                return componentName + " 引脚图 pinout diagram";
+                return componentName + " 引脚图 引脚定义 pinout";
             case "tutorial":
-                return componentName + " 使用教程 实验";
+                return componentName + " 使用教程 应用电路 实验";
             case "general":
             default:
-                return componentName + " 电子元件 参数 应用";
+                return componentName + " 电子元件 芯片参数 功能介绍";
         }
     }
 
     /**
-     * 执行搜索请求（使用Google Custom Search API或其他搜索引擎API）
+     * 执行百度AI搜索请求
+     * @param query 搜索查询
+     * @return 搜索结果文本
      */
-    private List<SearchResult> performSearch(String query) {
+    private String performBaiduSearch(String query) {
         try {
-            // 使用Google Custom Search API
-            String url = String.format(
-                "https://www.googleapis.com/customsearch/v1?key=%s&cx=%s&q=%s&num=5",
-                searchApiKey, searchEngineId, query
-            );
+            // 构建请求体
+            Map<String, Object> requestBody = new HashMap<>();
 
+            // 构建消息列表
+            List<Map<String, String>> messages = new ArrayList<>();
+            Map<String, String> userMessage = new HashMap<>();
+            userMessage.put("role", "user");
+            userMessage.put("content", query);
+            messages.add(userMessage);
+
+            requestBody.put("message", messages);
+            requestBody.put("instruction", "你是一位专业的电子工程助手，请简洁准确地回答用户关于电子元器件的问题，重点提供参数、引脚定义、应用场景等实用信息。");
+            requestBody.put("stream", false);
+            requestBody.put("model", "ERNIE-4.0-8K");
+
+            // 设置请求头
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+            headers.set("X-Appbuilder-Authorization", "Bearer " + searchApiKey);
 
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+            // 发送请求
             @SuppressWarnings("rawtypes")
             ResponseEntity<Map> response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
+                BAIDU_SEARCH_API_URL,
+                HttpMethod.POST,
                 entity,
                 Map.class
             );
 
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                return parseSearchResponse(response.getBody());
+                return parseBaiduSearchResponse(response.getBody());
             }
         } catch (Exception e) {
-            log.error("执行搜索请求失败: query={}", query, e);
+            log.error("执行百度搜索请求失败: query={}", query, e);
         }
 
-        return Collections.emptyList();
+        return null;
     }
 
     /**
-     * 解析搜索API响应
+     * 解析百度AI搜索API响应
      */
     @SuppressWarnings("unchecked")
-    private List<SearchResult> parseSearchResponse(Map<String, Object> responseBody) {
-        List<SearchResult> results = new ArrayList<>();
-
+    private String parseBaiduSearchResponse(Map<String, Object> responseBody) {
         try {
-            List<Map<String, Object>> items = (List<Map<String, Object>>) responseBody.get("items");
-            if (items == null) {
-                return results;
-            }
-
-            for (Map<String, Object> item : items) {
-                SearchResult result = new SearchResult();
-                result.setTitle((String) item.get("title"));
-                result.setLink((String) item.get("link"));
-                result.setSnippet((String) item.get("snippet"));
-                results.add(result);
+            // 百度AI搜索API返回结构: {"result": {"answer": "..."}, ...}
+            Map<String, Object> result = (Map<String, Object>) responseBody.get("result");
+            if (result != null) {
+                String answer = (String) result.get("answer");
+                if (answer != null && !answer.isBlank()) {
+                    // 限制答案长度
+                    if (answer.length() > 500) {
+                        answer = answer.substring(0, 500) + "...";
+                    }
+                    return answer;
+                }
             }
         } catch (Exception e) {
-            log.error("解析搜索结果失败", e);
+            log.error("解析百度搜索结果失败", e);
         }
 
-        return results;
+        return null;
     }
 
     /**
      * 格式化搜索结果为可读文本
      */
-    private String formatSearchResults(String componentName, String searchType, List<SearchResult> results) {
-        StringBuilder formatted = new StringBuilder();
-
+    private String formatSearchResult(String componentName, String searchType, String searchResult) {
         String typeLabel = getTypeLabel(searchType);
-        formatted.append(String.format("【%s - %s】\n", componentName, typeLabel));
 
-        int count = Math.min(3, results.size()); // 最多取前3条结果
-        for (int i = 0; i < count; i++) {
-            SearchResult result = results.get(i);
-            formatted.append(String.format("%d. %s\n", i + 1, result.getTitle()));
-            if (result.getSnippet() != null && !result.getSnippet().isBlank()) {
-                formatted.append(String.format("   %s\n", result.getSnippet()));
-            }
-            formatted.append(String.format("   链接: %s\n", result.getLink()));
-            if (i < count - 1) {
-                formatted.append("\n");
-            }
-        }
+        StringBuilder formatted = new StringBuilder();
+        formatted.append(String.format("【%s - %s】\n", componentName, typeLabel));
+        formatted.append(searchResult);
 
         return formatted.toString();
     }
@@ -199,21 +208,5 @@ public class WebSearchService {
             case "general":
             default: return "基本信息";
         }
-    }
-
-    /**
-     * 搜索结果内部类
-     */
-    private static class SearchResult {
-        private String title;
-        private String link;
-        private String snippet;
-
-        public String getTitle() { return title; }
-        public void setTitle(String title) { this.title = title; }
-        public String getLink() { return link; }
-        public void setLink(String link) { this.link = link; }
-        public String getSnippet() { return snippet; }
-        public void setSnippet(String snippet) { this.snippet = snippet; }
     }
 }

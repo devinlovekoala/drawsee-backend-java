@@ -62,9 +62,8 @@ drawsee:
       modelName: ${EMBEDDING_MODEL:BAAI/bge-m3}
   # Web搜索配置（用于查询电子元器件资料）
   search:
-    enabled: ${SEARCH_ENABLED:true}  # 是否启用搜索功能，默认关闭
-    api-key: ${SEARCH_API_KEY:AIzaSyAYRppiV8zFcubE04nFAGkc18kq6UDVZ_0}  # Google Custom Search API Key
-    engine-id: ${SEARCH_ENGINE_ID:837e46d3f9a}  # Google Custom Search Engine ID
+    enabled: ${SEARCH_ENABLED:true}  # 是否启用搜索功能
+    api-key: ${SEARCH_API_KEY:bce-v3/ALTAK-9uOVZ9zTecaAKTY3taFhJ/71ee329eea9a9df805e15aa310110dc13ddf8e71}  # 百度AppBuilder API Key，获取方式见文档
   rabbitmq:
     aiConfig:
       exchangeName: direct_ai_task_exchange
