@@ -34,11 +34,6 @@ public class NodeType {
      * 电路分析节点（预热/推荐/追问）
      */
     public static final String CIRCUIT_ANALYZE = "circuit-analyze";
-    
-    /**
-     * 电路分析点节点
-     */
-    public static final String CIRCUIT_POINT = "circuit-point";
 
     /**
      * PDF电路实验任务分析点节点

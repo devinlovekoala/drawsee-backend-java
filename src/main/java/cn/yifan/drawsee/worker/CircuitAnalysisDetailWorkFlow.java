@@ -1,6 +1,7 @@
 package cn.yifan.drawsee.worker;
 
 import cn.yifan.drawsee.constant.AiTaskMessageType;
+import cn.yifan.drawsee.constant.AiTaskStatus;
 import cn.yifan.drawsee.constant.NodeSubType;
 import cn.yifan.drawsee.constant.NodeTitle;
 import cn.yifan.drawsee.constant.NodeType;
@@ -10,6 +11,7 @@ import cn.yifan.drawsee.mapper.ConversationMapper;
 import cn.yifan.drawsee.mapper.NodeMapper;
 import cn.yifan.drawsee.mapper.UserMapper;
 import cn.yifan.drawsee.pojo.XYPosition;
+import cn.yifan.drawsee.pojo.entity.AiTask;
 import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
@@ -81,6 +83,15 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
             log.error("父节点不是电路分析节点, taskMessage: {}", aiTaskMessage);
             return false;
         }
+
+        // 预先查找电路画布节点，避免后续流程中断导致超时
+        CircuitDesign circuitDesign = findCircuitDesign(workContext);
+        if (circuitDesign == null) {
+            log.error("未在会话中找到电路画布节点, taskMessage: {}", aiTaskMessage);
+            publishErrorAndFail(workContext, "未找到电路设计数据，请先完成电路画布解析后再追问");
+            return false;
+        }
+        workContext.putExtraData("circuitDesign", circuitDesign);
         
         return true;
     }
@@ -110,13 +121,14 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         String followUp = aiTaskMessage.getPrompt();
         
         Map<String, Object> circuitDetailNodeData = new ConcurrentHashMap<>();
-        circuitDetailNodeData.put("subtype", NodeSubType.CIRCUIT_ANALYZE);
+        circuitDetailNodeData.put("subtype", NodeSubType.CIRCUIT_DETAIL);
         circuitDetailNodeData.put("title", NodeTitle.CIRCUIT_DETAIL);
         circuitDetailNodeData.put("text", "");
         circuitDetailNodeData.put("contextTitle", contextTitle);
         circuitDetailNodeData.put("contextText", contextText);
         circuitDetailNodeData.put("followUp", followUp);
         circuitDetailNodeData.put("followUps", new ArrayList<>());
+        circuitDetailNodeData.put("parentPointId", String.valueOf(parentNodeId));
         
         Node circuitDetailNode = new Node(
             NodeType.CIRCUIT_ANALYZE,
@@ -145,10 +157,14 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         String followUpQuestion = aiTaskMessage.getPrompt();
         
         // 找到电路画布节点以获取电路设计数据
-        CircuitDesign circuitDesign = findCircuitDesign(workContext);
+        CircuitDesign circuitDesign = (CircuitDesign) workContext.getExtraData("circuitDesign");
+        if (circuitDesign == null) {
+            circuitDesign = findCircuitDesign(workContext);
+        }
         if (circuitDesign == null) {
             log.error("未找到电路设计数据, taskMessage: {}", aiTaskMessage);
-            throw new RuntimeException("未找到电路设计数据");
+            publishErrorAndFail(workContext, "未找到电路设计数据，请重新上传或刷新页面");
+            return;
         }
         
         // 生成SPICE网表
@@ -328,5 +344,35 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         }
         
         return null;
+    }
+
+    /**
+     * 在校验失败时，向前端推送错误并标记任务失败，避免SSE一直等待
+     */
+    private void publishErrorAndFail(WorkContext workContext, String message) {
+        try {
+            RStream<String, Object> redisStream = workContext.getRedisStream();
+            if (redisStream != null) {
+                redisStream.add(StreamAddArgs.entries(
+                    "type", AiTaskMessageType.ERROR,
+                    "data", message
+                ));
+                redisStream.add(StreamAddArgs.entries(
+                    "type", AiTaskMessageType.DONE,
+                    "data", ""
+                ));
+            }
+        } catch (Exception e) {
+            log.warn("推送电路详情错误消息失败: {}", e.getMessage());
+        }
+
+        try {
+            AiTask aiTask = workContext.getAiTask();
+            aiTask.setStatus(AiTaskStatus.FAILED);
+            aiTask.setResult(message);
+            aiTaskMapper.update(aiTask);
+        } catch (Exception e) {
+            log.warn("更新电路详情任务状态失败: {}", e.getMessage());
+        }
     }
 }

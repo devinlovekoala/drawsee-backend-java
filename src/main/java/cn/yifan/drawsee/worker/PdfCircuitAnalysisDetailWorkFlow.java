@@ -1,5 +1,6 @@
 package cn.yifan.drawsee.worker;
 
+import cn.yifan.drawsee.constant.AiTaskMessageType;
 import cn.yifan.drawsee.constant.NodeSubType;
 import cn.yifan.drawsee.constant.NodeType;
 import cn.yifan.drawsee.mapper.AiTaskMapper;
@@ -19,11 +20,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
+import dev.langchain4j.model.output.Response;
 import io.minio.GetObjectResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
+import org.redisson.api.RStream;
+import org.redisson.api.stream.StreamAddArgs;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -109,9 +112,12 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
         pdfCircuitDetailNodeData.put("title", angleTitle + "详情");
         pdfCircuitDetailNodeData.put("text", "");
         pdfCircuitDetailNodeData.put("angle", angleTitle);
+        pdfCircuitDetailNodeData.put("parentPointId", String.valueOf(parentNodeId));
+        pdfCircuitDetailNodeData.put("isGenerated", false);
+        pdfCircuitDetailNodeData.put("isDone", false);
 
         Node pdfCircuitDetailNode = new Node(
-            NodeType.ANSWER,
+            NodeType.PDF_CIRCUIT_DETAIL,
             objectMapper.writeValueAsString(pdfCircuitDetailNodeData),
             objectMapper.writeValueAsString(XYPosition.origin()),
             parentNodeId,
@@ -158,11 +164,8 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
             log.info("PDF电路分析详情工作流：未能抽取正文，回退为URL兜底");
         }
 
-        // 将系统提示词添加到历史消息中
-        history.add(new UserMessage(prompt));
-
-        // 调用AI进行详细分析，使用answerDetailChat
-        streamAiService.answerDetailChat(history, "", angleTitle, model, handler);
+        // 调用AI进行详细分析，直接使用生成好的提示词
+        streamAiService.circuitAnalysisChat(history, prompt, model, handler);
     }
 
     /**
@@ -224,5 +227,28 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
         }
 
         return null;
+    }
+
+    @Override
+    public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
+        RStream<String, Object> redisStream = workContext.getRedisStream();
+        Node streamNode = workContext.getStreamNode();
+        Map<String, Object> streamNodeData = workContext.getStreamNodeData();
+        Response<AiMessage> streamResponse = workContext.getStreamResponse();
+        String detailText = streamResponse.content().text();
+
+        streamNodeData.put("text", detailText);
+        streamNodeData.put("isGenerated", true);
+        streamNodeData.put("isDone", true);
+
+        Map<String, Object> payload = new ConcurrentHashMap<>();
+        payload.put("nodeId", streamNode.getId());
+        payload.put("text", detailText);
+        payload.put("isGenerated", true);
+        payload.put("isDone", true);
+        redisStream.add(StreamAddArgs.entries(
+            "type", AiTaskMessageType.DATA,
+            "data", payload
+        ));
     }
 }

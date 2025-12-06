@@ -146,7 +146,7 @@ public class MinioService {
      * 上传任意文件到MinIO
      * @param file 要上传的文件
      * @param objectName 对象名称
-     * @return 上传后的对象URL
+     * @return 上传后的对象名称（路径）
      * @throws MinioException MinIO异常
      * @throws IOException IO异常
      * @throws NoSuchAlgorithmException 算法异常
@@ -157,7 +157,7 @@ public class MinioService {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("文件不能为空");
         }
-        
+
         // 获取文件类型
         String contentType = file.getContentType();
         if (contentType == null) {
@@ -166,7 +166,7 @@ public class MinioService {
         }
 
         ensureBucketExists();
-        
+
         // 上传文件到MinIO
         minioClient.putObject(
             PutObjectArgs.builder()
@@ -178,9 +178,9 @@ public class MinioService {
         );
         log.info("MinIO 文件上传成功: bucket={}, object={}, size={}",
             minioConfig.getBucketName(), objectName, file.getSize());
-        
-        // 返回完整URL
-        return getObjectUrl(objectName);
+
+        // 返回对象路径，不返回预签名URL（避免URL过长且会过期）
+        return objectName;
     }
     
     private void ensureBucketExists() throws MinioException, IOException, NoSuchAlgorithmException, InvalidKeyException {

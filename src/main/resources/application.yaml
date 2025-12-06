@@ -51,7 +51,7 @@ drawsee:
     deepseekV3:
       baseUrl: https://api.siliconflow.cn/v1
       apiKey: sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv
-      modelName: deepseek-ai/DeepSeek-V3.1-Terminus
+      modelName: Pro/deepseek-ai/DeepSeek-V3.2
     doubaoVision:
       baseUrl: https://ark.cn-beijing.volces.com/api/v3
       apiKey: a923c210-64ac-43db-b0b9-5122b11a6aa7
@@ -62,9 +62,9 @@ drawsee:
       modelName: ${EMBEDDING_MODEL:BAAI/bge-m3}
   # Web搜索配置（用于查询电子元器件资料）
   search:
-    enabled: ${SEARCH_ENABLED:false}  # 是否启用搜索功能，默认关闭
-    api-key: ${SEARCH_API_KEY:}  # Google Custom Search API Key
-    engine-id: ${SEARCH_ENGINE_ID:}  # Google Custom Search Engine ID
+    enabled: ${SEARCH_ENABLED:true}  # 是否启用搜索功能，默认关闭
+    api-key: ${SEARCH_API_KEY:AIzaSyAYRppiV8zFcubE04nFAGkc18kq6UDVZ_0}  # Google Custom Search API Key
+    engine-id: ${SEARCH_ENGINE_ID:837e46d3f9a}  # Google Custom Search Engine ID
   rabbitmq:
     aiConfig:
       exchangeName: direct_ai_task_exchange

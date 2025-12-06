@@ -61,8 +61,8 @@ public class UserDocumentService {
             // 上传到MinIO
             String fileName = file.getOriginalFilename();
             String objectName = "user-documents/" + userId + "/" + System.currentTimeMillis() + "_" + fileName;
-            String minioUrl = minioService.uploadFile(file, objectName);
-            
+            minioService.uploadFile(file, objectName);
+
             // 保存到数据库
             UserDocument document = new UserDocument();
             document.setUuid(UUID.randomUUID().toString());
@@ -70,15 +70,20 @@ public class UserDocumentService {
             document.setTitle(title != null ? title : fileName);
             document.setDescription(description);
             document.setDocumentType(getDocumentTypeFromContentType(contentType));
-            // store the presigned URL returned by MinioService so frontend can preview/download
-            document.setFileUrl(minioUrl);
+            // Do not store presigned URL as it will expire - generate it on demand
+            document.setFileUrl(null);
             document.setObjectPath(objectName);
             document.setFileSize(file.getSize());
             document.setCreatedAt(new Date());
             document.setUpdatedAt(new Date());
             document.setIsDeleted(false);
-            
+
             userDocumentMapper.insert(document);
+
+            // Generate presigned URL after saving to database
+            String presignedUrl = minioService.getObjectUrl(objectName);
+            document.setFileUrl(presignedUrl);
+
             return document;
             
         } catch (Exception e) {
@@ -91,7 +96,18 @@ public class UserDocumentService {
      * 获取用户文档列表
      */
     public List<UserDocument> getUserDocuments(Long userId) {
-        return userDocumentMapper.getByUserId(userId);
+        List<UserDocument> documents = userDocumentMapper.getByUserId(userId);
+        // 为每个文档生成预签名URL
+        for (UserDocument doc : documents) {
+            if (doc.getObjectPath() != null) {
+                try {
+                    doc.setFileUrl(minioService.getObjectUrl(doc.getObjectPath()));
+                } catch (Exception e) {
+                    log.warn("生成文档预签名URL失败: documentId={}, objectPath={}", doc.getId(), doc.getObjectPath(), e);
+                }
+            }
+        }
+        return documents;
     }
 
     /**
@@ -102,12 +118,21 @@ public class UserDocumentService {
         if (document == null || document.getIsDeleted()) {
             throw new ApiException(ApiError.RESOURCE_NOT_FOUND);
         }
-        
+
         // 验证文档所有权
         if (!document.getUserId().equals(userId)) {
             throw new ApiException(ApiError.ACCESS_DENIED);
         }
-        
+
+        // 生成预签名URL
+        if (document.getObjectPath() != null) {
+            try {
+                document.setFileUrl(minioService.getObjectUrl(document.getObjectPath()));
+            } catch (Exception e) {
+                log.warn("生成文档预签名URL失败: documentId={}, objectPath={}", document.getId(), document.getObjectPath(), e);
+            }
+        }
+
         return document;
     }
 
@@ -119,12 +144,21 @@ public class UserDocumentService {
         if (document == null || document.getIsDeleted()) {
             throw new ApiException(ApiError.RESOURCE_NOT_FOUND);
         }
-        
+
         // 验证文档所有权
         if (!document.getUserId().equals(userId)) {
             throw new ApiException(ApiError.ACCESS_DENIED);
         }
-        
+
+        // 生成预签名URL
+        if (document.getObjectPath() != null) {
+            try {
+                document.setFileUrl(minioService.getObjectUrl(document.getObjectPath()));
+            } catch (Exception e) {
+                log.warn("生成文档预签名URL失败: documentUuid={}, objectPath={}", document.getUuid(), document.getObjectPath(), e);
+            }
+        }
+
         return document;
     }
 
