@@ -43,8 +43,9 @@ public class KnowledgeDocumentService {
     @Autowired
     private MinioService minioService;
 
-    @Autowired
-    private WeaviateVectorStore weaviateVectorStore;
+    // TODO: 已废弃 - 迁移到Python RAG服务
+    // @Autowired
+    // private WeaviateVectorStore weaviateVectorStore;
 
     /**
      * 创建文档元数据并生成处理任务
@@ -121,7 +122,9 @@ public class KnowledgeDocumentService {
 
         for (KnowledgeDocumentChunk chunk : chunks) {
             try {
-                weaviateVectorStore.deleteChunk(knowledgeBase, chunk);
+                // TODO: 已废弃 - 应调用Python RAG服务删除向量
+                // weaviateVectorStore.deleteChunk(knowledgeBase, chunk);
+                log.debug("跳过向量删除（待迁移到Python RAG服务）: chunkId={}", chunk.getId());
             } catch (Exception ex) {
                 log.warn("删除向量失败 documentId={}, chunkId={}", documentId, chunk.getId(), ex);
             }

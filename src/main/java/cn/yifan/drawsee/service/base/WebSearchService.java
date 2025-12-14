@@ -12,7 +12,7 @@ import java.util.*;
 /**
  * @FileName WebSearchService
  * @Description Web搜索服务，使用百度AI搜索API查询电子元件资料、引脚图、数据手册等信息
- * @Author yifan
+ * @Author devin
  * @date 2025-12-05
  **/
 
@@ -23,10 +23,8 @@ public class WebSearchService {
     @Autowired
     private RestTemplate restTemplate;
 
-    @Value("${drawsee.search.api-key:}")
     private String searchApiKey;
 
-    @Value("${drawsee.search.enabled:false}")
     private boolean searchEnabled;
 
     // 百度AI搜索API V1版本端点

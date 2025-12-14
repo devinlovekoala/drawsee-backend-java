@@ -7,11 +7,16 @@ import lombok.Getter;
  */
 @Getter
 public enum ApiError {
-    
+
     /**
      * 参数错误
      */
     PARAM_ERROR(400, "参数错误"),
+
+    /**
+     * 未授权
+     */
+    UNAUTHORIZED(401, "未授权"),
 
     /**
      * 系统错误

@@ -9,6 +9,7 @@ import cn.yifan.drawsee.pojo.entity.KnowledgeDocumentChunk;
 import cn.yifan.drawsee.pojo.entity.RagIngestionTask;
 import cn.yifan.drawsee.pojo.entity.KnowledgeBase;
 import cn.yifan.drawsee.service.base.MinioService;
+import cn.yifan.drawsee.service.base.PythonRagService;
 import cn.yifan.drawsee.service.business.parser.DocumentParser;
 import cn.yifan.drawsee.service.business.parser.TextChunker;
 import cn.yifan.drawsee.util.UUIDUtils;
@@ -21,11 +22,13 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 文档入库流水线服务
  *
  * 负责协调解析、分块、向量化等耗时操作
+ * 已迁移到Python RAG微服务 - 文档导入调用Python服务的文档入库API
  *
  * @author yifan
  * @date 2025-10-10
@@ -56,13 +59,19 @@ public class DocumentIngestionService {
     private EmbeddingService embeddingService;
 
     @Autowired
-    private WeaviateVectorStore weaviateVectorStore;
+    private PythonRagService pythonRagService;
+
+    // TODO: 已废弃 - 迁移到Python RAG服务
+    // @Autowired
+    // private WeaviateVectorStore weaviateVectorStore;
 
     @Autowired
     private KnowledgeBaseMapper knowledgeBaseMapper;
 
     /**
      * 异步触发入库流程
+     *
+     * 已迁移到Python RAG服务 - 调用Python服务的文档入库API进行ETL处理
      */
     @Async("ragIngestionExecutor")
     public void ingestAsync(String taskId) {
@@ -89,60 +98,46 @@ public class DocumentIngestionService {
                 throw new IllegalStateException("文档存储对象未知，无法下载");
             }
 
+            // 检查 Python RAG 服务是否可用
+            if (!pythonRagService.isServiceAvailable()) {
+                throw new IllegalStateException("Python RAG 服务不可用");
+            }
+
+            // 更新状态为 PARSING（准备调用 Python 服务）
             ragIngestionTaskService.updateTask(task, RagIngestionStage.PARSING, KnowledgeDocumentStatus.PARSING, 10);
             knowledgeDocumentService.updateStatus(document.getId(), KnowledgeDocumentStatus.PARSING, null);
 
-            DocumentParser.ParsedDocument parsed;
-            try (GetObjectResponse objectResponse = minioService.downloadFile(document.getStorageObject())) {
-                parsed = documentParser.parse(objectResponse, document.getOriginalFileName(), document.getFileType());
+            // 调用 Python RAG 服务进行 ETL 处理
+            log.info("调用Python RAG服务进行文档入库: documentId={}, storage_object={}",
+                document.getId(), document.getStorageObject());
+
+            Map<String, Object> result = pythonRagService.ingestDocument(
+                document.getId(),
+                document.getKnowledgeBaseId(),
+                "",  // class_id 留空，由 Python 服务处理
+                document.getUploaderId(),
+                document.getStorageObject()  // 传递 MinIO 对象名称
+            );
+
+            if (result == null) {
+                throw new IllegalStateException("Python RAG 服务返回结果为空");
             }
 
-            knowledgeDocumentService.updateParsedMetadata(document.getId(), parsed.getPageCount());
-
-            ragIngestionTaskService.updateTask(task, RagIngestionStage.CHUNKING, KnowledgeDocumentStatus.CHUNKING, 40);
-            knowledgeDocumentService.updateStatus(document.getId(), KnowledgeDocumentStatus.CHUNKING, null);
-
-            List<String> chunkTexts = textChunker.chunk(parsed.getContent());
-            if (chunkTexts.isEmpty()) {
-                throw new IllegalStateException("文档内容为空，无法生成知识块");
+            Boolean success = (Boolean) result.get("success");
+            if (!Boolean.TRUE.equals(success)) {
+                String message = (String) result.get("message");
+                throw new IllegalStateException("Python RAG 服务处理失败: " + message);
             }
 
-            List<KnowledgeDocumentChunk> chunks = new ArrayList<>();
-            Date now = new Date();
-            int index = 0;
+            String pythonTaskId = (String) result.get("task_id");
+            log.info("Python RAG服务已接受文档入库请求: documentId={}, pythonTaskId={}",
+                document.getId(), pythonTaskId);
 
-            ragIngestionTaskService.updateTask(task, RagIngestionStage.EMBEDDING, KnowledgeDocumentStatus.EMBEDDING, 70);
-            knowledgeDocumentService.updateStatus(document.getId(), KnowledgeDocumentStatus.EMBEDDING, null);
-
-            weaviateVectorStore.ensureClassExists(knowledgeBase);
-
-            for (String chunkText : chunkTexts) {
-                double[] embedding = embeddingService.generateEmbedding(chunkText);
-
-                KnowledgeDocumentChunk chunk = new KnowledgeDocumentChunk();
-                chunk.setId(UUIDUtils.generateUUID());
-                chunk.setDocumentId(document.getId());
-                chunk.setKnowledgeBaseId(document.getKnowledgeBaseId());
-                chunk.setChunkIndex(index++);
-                chunk.setContent(chunkText);
-                chunk.setTokenCount(chunkText.length());
-                chunk.setVectorId(chunk.getId());
-                chunk.setVectorDimension(embedding.length);
-                chunk.setCreatedAt(now);
-                chunk.setUpdatedAt(now);
-
-                weaviateVectorStore.upsertChunk(knowledgeBase, document, chunk, embedding);
-                chunks.add(chunk);
-            }
-
-            knowledgeDocumentChunkMapper.insertBatch(chunks);
-            knowledgeDocumentService.setChunkCount(document.getId(), chunks.size());
-
-            ragIngestionTaskService.updateTask(task, RagIngestionStage.INDEXING, KnowledgeDocumentStatus.INDEXING, 90);
-            knowledgeDocumentService.updateStatus(document.getId(), KnowledgeDocumentStatus.INDEXING, null);
-
-            knowledgeDocumentService.updateStatus(document.getId(), KnowledgeDocumentStatus.COMPLETED, null);
+            // Python 服务将异步处理 ETL，Java 端任务标记为完成
+            // 后续状态更新由 Python 服务通过回调或轮询机制更新
             ragIngestionTaskService.markCompleted(taskId);
+            log.info("文档入库任务已委托给Python RAG服务: taskId={}, pythonTaskId={}", taskId, pythonTaskId);
+
         } catch (Exception ex) {
             log.error("文档入库流程失败, taskId={}", taskId, ex);
             ragIngestionTaskService.markFailed(taskId, ex.getMessage());

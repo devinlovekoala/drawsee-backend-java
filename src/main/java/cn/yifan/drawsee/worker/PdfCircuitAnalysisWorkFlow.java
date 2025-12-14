@@ -15,6 +15,7 @@ import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
 import cn.yifan.drawsee.service.base.PdfMultimodalService;
 import cn.yifan.drawsee.service.base.PromptService;
+import cn.yifan.drawsee.service.base.PythonRagService;
 import cn.yifan.drawsee.service.base.StreamAiService;
 import cn.yifan.drawsee.service.base.WebSearchService;
 import cn.yifan.drawsee.util.PdfUtils;
@@ -53,6 +54,7 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
     private final MinioService minioService;
     private final PdfMultimodalService pdfMultimodalService;
     private final WebSearchService webSearchService;
+    private final PythonRagService pythonRagService;
 
     public PdfCircuitAnalysisWorkFlow(
             UserMapper userMapper,
@@ -66,13 +68,15 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             PromptService promptService,
             MinioService minioService,
             PdfMultimodalService pdfMultimodalService,
-            WebSearchService webSearchService
+            WebSearchService webSearchService,
+            PythonRagService pythonRagService
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.minioService = minioService;
         this.pdfMultimodalService = pdfMultimodalService;
         this.webSearchService = webSearchService;
+        this.pythonRagService = pythonRagService;
     }
 
     @Override
@@ -223,6 +227,10 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
 
     /**
      * 执行增强的PDF分析，包括多模态识别和元件信息搜索
+     *
+     * 注意：用户上传的PDF实验任务文档使用传统多模态分析方案，不调用Python RAG服务
+     * Python RAG服务仅用于检索后台导入的知识文档
+     *
      * @param pdfUrl PDF文档URL
      * @return 增强后的文档内容
      */
@@ -273,10 +281,19 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
                 }
             }
 
+            // 5. RAG知识库增强（注入相关电路原理知识）
+            String ragKnowledge = tryEnhanceWithKnowledgeBase(enhancedContent.toString());
+            if (ragKnowledge != null && !ragKnowledge.isBlank()) {
+                enhancedContent.append("【知识库相关电路原理】\n");
+                enhancedContent.append(ragKnowledge);
+                enhancedContent.append("\n\n");
+                log.info("RAG知识库增强成功，新增内容长度: {}", ragKnowledge.length());
+            }
+
             String result = enhancedContent.toString();
 
-            // 5. 控制总长度
-            int maxChars = 10000;
+            // 6. 控制总长度
+            int maxChars = 12000;  // 增加到12000以容纳RAG内容
             if (result.length() > maxChars) {
                 result = result.substring(0, maxChars) + "\n...(内容过长已截断)";
             }
@@ -296,7 +313,6 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
      * @return 元器件名称列表
      */
     private List<String> extractComponentNames(String content) {
-        List<String> components = new java.util.ArrayList<>();
 
         // 常见元器件模式匹配
         String[] patterns = {
@@ -324,7 +340,7 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             }
         }
 
-        components.addAll(componentSet);
+        List<String> components = new java.util.ArrayList<>(componentSet);
 
         // 限制数量，避免搜索过多
         if (components.size() > 5) {
@@ -372,12 +388,128 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             }
             try (GetObjectResponse resp = minioService.getObjectStream(objectName)) {
                 String text = PdfUtils.extractAllText(resp);
-                return text == null ? null : text.trim();
+                return text.trim();
             }
         } catch (Exception e) {
             log.warn("从URL抽取PDF正文失败，url={}，error={}", url, e.toString());
             return null;
         }
+    }
+
+    /**
+     * 从知识库检索相关电路原理知识
+     * @param pdfContent PDF分析内容
+     * @return RAG增强的知识内容，失败返回null
+     */
+    private String tryEnhanceWithKnowledgeBase(String pdfContent) {
+        try {
+            // 从PDF内容中提取关键电路术语作为查询
+            String query = extractCircuitQuery(pdfContent);
+            if (query == null || query.isBlank()) {
+                log.info("无法从PDF内容中提取电路查询关键词，跳过RAG增强");
+                return null;
+            }
+
+            // 获取可访问的知识库（使用公开知识库）
+            // 注意：PDF工作流通常不绑定特定班级，使用全局公开知识库
+            List<String> knowledgeBaseIds = getAccessiblePublicKnowledgeBases();
+
+            if (knowledgeBaseIds.isEmpty()) {
+                log.info("没有可访问的知识库，跳过RAG增强");
+                return null;
+            }
+
+            log.info("使用RAG检索知识库电路原理: 知识库数量={}, 查询关键词={}", knowledgeBaseIds.size(), query);
+
+            // 调用RAG服务检索相关电路知识
+            var ragResponse = pythonRagService.ragQuery(
+                query,
+                knowledgeBaseIds,
+                null,  // classId - PDF工作流可能没有班级上下文
+                0L,    // userId - 使用系统用户
+                3      // Top-K: 返回3个最相关的电路图
+            );
+
+            if (ragResponse == null) {
+                log.info("RAG服务返回null，跳过知识库增强");
+                return null;
+            }
+
+            // 解析Python服务响应
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> results = (List<Map<String, Object>>) ragResponse.get("results");
+
+            if (results == null || results.isEmpty()) {
+                log.info("RAG检索无结果");
+                return null;
+            }
+
+            // 格式化检索结果
+            StringBuilder ragContent = new StringBuilder();
+            int index = 1;
+            for (Map<String, Object> result : results) {
+                String caption = (String) result.get("caption");
+                Object pageNum = result.get("page_number");
+                Object score = result.get("score");
+
+                if (caption != null && !caption.isBlank()) {
+                    ragContent.append(String.format(
+                        "【相关电路%d】(相似度: %.2f, 页码: %s)\\n%s\\n\\n",
+                        index++,
+                        score != null ? ((Number) score).doubleValue() : 0.0,
+                        pageNum != null ? pageNum.toString() : "未知",
+                        caption
+                    ));
+                }
+            }
+
+            String result = ragContent.toString().trim();
+            if (result.isBlank()) {
+                return null;
+            }
+
+            // 限制RAG内容长度
+            int maxRagChars = 2000;
+            if (result.length() > maxRagChars) {
+                result = result.substring(0, maxRagChars) + "\\n...(相关电路知识过长已截断)";
+            }
+
+            log.info("RAG知识库增强成功: 检索到{}个相关电路, 内容长度={}", results.size(), result.length());
+            return result;
+
+        } catch (Exception e) {
+            log.warn("RAG知识库增强失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 从PDF内容中提取电路查询关键词
+     */
+    private String extractCircuitQuery(String pdfContent) {
+        if (pdfContent == null || pdfContent.isBlank()) {
+            return null;
+        }
+
+        // 提取前500个字符作为查询上下文
+        String queryContext = pdfContent.length() > 500
+            ? pdfContent.substring(0, 500)
+            : pdfContent;
+
+        // 移除多余空白字符
+        queryContext = queryContext.replaceAll("\\s+", " ").trim();
+
+        return queryContext;
+    }
+
+    /**
+     * 获取可访问的公开知识库列表
+     */
+    private List<String> getAccessiblePublicKnowledgeBases() {
+        // 这里可以从KnowledgeBaseMapper查询所有公开发布的知识库
+        // 为简化实现，先返回空列表（表示使用所有可用知识库）
+        // TODO: 集成KnowledgeBaseMapper查询逻辑
+        return new java.util.ArrayList<>();
     }
 
     @Override
@@ -426,8 +558,8 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
         String currentTitle = null;
         String currentDescription = null;
 
-        for (int i = 0; i < lines.length; i++) {
-            String line = lines[i].trim();
+        for (String s : lines) {
+            String line = s.trim();
 
             if (line.isEmpty()) {
                 // 如果是空行，且已有标题和描述，创建节点

@@ -47,11 +47,11 @@ drawsee:
     doubao:
       baseUrl: https://api.siliconflow.cn/v1
       apiKey: sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv
-      modelName: moonshotai/Kimi-K2-Instruct
+      modelName: moonshotai/Kimi-K2-Thinking
     deepseekV3:
       baseUrl: https://api.siliconflow.cn/v1
       apiKey: sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv
-      modelName: Pro/deepseek-ai/DeepSeek-V3.2
+      modelName: deepseek-ai/DeepSeek-V3.2
     doubaoVision:
       baseUrl: https://ark.cn-beijing.volces.com/api/v3
       apiKey: a923c210-64ac-43db-b0b9-5122b11a6aa7
@@ -64,6 +64,15 @@ drawsee:
   search:
     enabled: ${SEARCH_ENABLED:true}  # 是否启用搜索功能
     api-key: ${SEARCH_API_KEY:bce-v3/ALTAK-9uOVZ9zTecaAKTY3taFhJ/71ee329eea9a9df805e15aa310110dc13ddf8e71}  # 百度AppBuilder API Key，获取方式见文档
+  # Python微服务配置
+  python-service:
+    base-url: ${PYTHON_SERVICE_URL:http://localhost:8000}  # Python服务地址（FastAPI默认端口8000）
+    timeout: 60000  # 超时时间（毫秒）
+    enabled: ${PYTHON_SERVICE_ENABLED:true}  # 是否启用Python服务（v2.0生产就绪）
+  # 内部服务JWT配置
+  internal-jwt:
+    secret: ${INTERNAL_JWT_SECRET:your-super-secret-key-min-32-chars-change-in-production}  # 与Python共享的密钥（生产环境必须修改）
+    expiration: 3600  # Token过期时间（秒）
   rabbitmq:
     aiConfig:
       exchangeName: direct_ai_task_exchange
@@ -135,13 +144,10 @@ spring:
           # 连接池中的最小空闲连接
           min-idle: 0
 
+# RAG配置（已迁移到Python RAG微服务）
 rag:
-  weaviate:
-    endpoint: ${WEAVIATE_ENDPOINT:http://117.72.9.87:8080}
-    api-key: ${WEAVIATE_API_KEY:}
-    class-prefix: ${WEAVIATE_CLASS_PREFIX:KB}
-    chunk-size: ${WEAVIATE_CHUNK_SIZE:800}
-    chunk-overlap: ${WEAVIATE_CHUNK_OVERLAP:200}
+  chunk-size: ${RAG_CHUNK_SIZE:800}
+  chunk-overlap: ${RAG_CHUNK_OVERLAP:200}
 
 mybatis:
   #mapper配置文件

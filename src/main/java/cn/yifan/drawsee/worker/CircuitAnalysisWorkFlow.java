@@ -15,7 +15,9 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.PromptService;
+import cn.yifan.drawsee.service.base.PythonRagService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.RagQueryService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
@@ -54,6 +56,8 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
 
     private final PromptService promptService;
     private final SpiceConverter spiceConverter;
+    private final RagQueryService ragQueryService;
+    private final PythonRagService pythonRagService;
 
     public CircuitAnalysisWorkFlow(
             UserMapper userMapper,
@@ -65,11 +69,15 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
             AiTaskMapper aiTaskMapper,
             ObjectMapper objectMapper,
             PromptService promptService,
-            SpiceConverter spiceConverter
+            SpiceConverter spiceConverter,
+            RagQueryService ragQueryService,
+            PythonRagService pythonRagService
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.spiceConverter = spiceConverter;
+        this.ragQueryService = ragQueryService;
+        this.pythonRagService = pythonRagService;
     }
 
     @Override
@@ -123,18 +131,171 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         LinkedList<ChatMessage> history = workContext.getHistory();
         String model = aiTaskMessage.getModel();
-        
+
         // 解析电路设计JSON
         CircuitDesign circuitDesign = objectMapper.readValue(aiTaskMessage.getPrompt(), CircuitDesign.class);
-        
+
         // 生成SPICE网表
         String spiceNetlist = spiceConverter.generateNetlist(circuitDesign);
-        
-        // 生成分析点提示词
-        String analysisPrompt = promptService.getCircuitWarmupPrompt(circuitDesign, spiceNetlist);
-        
-        // 调用AI进行分析
-        streamAiService.circuitAnalysisChat(history, analysisPrompt, model, handler);
+
+        // 生成基础分析提示词
+        String baseAnalysisPrompt = promptService.getCircuitWarmupPrompt(circuitDesign, spiceNetlist);
+
+        // 尝试RAG增强：从知识库检索相似电路
+        String enhancedPrompt = tryEnhanceWithRag(baseAnalysisPrompt, circuitDesign, aiTaskMessage);
+
+        // 调用AI进行分析（使用增强后的提示词）
+        streamAiService.circuitAnalysisChat(history, enhancedPrompt, model, handler);
+    }
+
+    /**
+     * 尝试使用RAG增强电路分析提示词
+     *
+     * @param basePrompt 基础提示词
+     * @param circuitDesign 用户设计的电路
+     * @param aiTaskMessage 任务消息
+     * @return 增强后的提示词（失败时返回原始提示词）
+     */
+    private String tryEnhanceWithRag(String basePrompt, CircuitDesign circuitDesign, AiTaskMessage aiTaskMessage) {
+        try {
+            // 从电路设计中提取查询关键词
+            String circuitQuery = extractCircuitQueryFromDesign(circuitDesign);
+            if (circuitQuery == null || circuitQuery.isBlank()) {
+                log.info("[CircuitAnalysis] 无法从电路设计中提取查询关键词，跳过RAG增强");
+                return basePrompt;
+            }
+
+            // 获取可访问的知识库列表（类似KnowledgeWorkFlow）
+            String classId = aiTaskMessage.getClassId();
+            Long userId = aiTaskMessage.getUserId();
+
+            // 注意：这里需要获取知识库列表，暂时传空列表（让Python服务检索所有可用知识库）
+            List<String> knowledgeBaseIds = new ArrayList<>();
+
+            log.info("[CircuitAnalysis] 使用RAG检索相似电路: 查询关键词={}", circuitQuery);
+
+            // 调用Python RAG服务检索相似电路
+            var ragResponse = pythonRagService.ragQuery(
+                circuitQuery,
+                knowledgeBaseIds,
+                classId,
+                userId,
+                3  // Top-K: 返回3个最相关的电路图
+            );
+
+            if (ragResponse == null) {
+                log.info("[CircuitAnalysis] RAG服务返回null，使用原始Prompt");
+                return basePrompt;
+            }
+
+            // 解析Python服务响应
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> results = (List<Map<String, Object>>) ragResponse.get("results");
+
+            if (results == null || results.isEmpty()) {
+                log.info("[CircuitAnalysis] RAG检索无结果，使用原始Prompt");
+                return basePrompt;
+            }
+
+            // 构建RAG增强的提示词
+            StringBuilder enhancedPrompt = new StringBuilder();
+
+            // 1. RAG检索结果部分
+            enhancedPrompt.append("【知识库参考电路】\n\n");
+            int index = 1;
+            for (Map<String, Object> result : results) {
+                String caption = (String) result.get("caption");
+                Object pageNum = result.get("page_number");
+                Object score = result.get("score");
+
+                if (caption != null && !caption.isBlank()) {
+                    enhancedPrompt.append(String.format(
+                        "**参考电路%d** (相似度: %.2f, 页码: %s)\n%s\n\n",
+                        index++,
+                        score != null ? ((Number) score).doubleValue() : 0.0,
+                        pageNum != null ? pageNum.toString() : "未知",
+                        caption
+                    ));
+                }
+            }
+
+            // 2. 原始分析任务提示词
+            enhancedPrompt.append("【用户设计的电路分析任务】\n\n");
+            enhancedPrompt.append(basePrompt);
+            enhancedPrompt.append("\n\n");
+
+            // 3. RAG增强指令
+            enhancedPrompt.append("**注意**：请结合上述知识库中的参考电路知识，");
+            enhancedPrompt.append("对比用户设计的电路，提供更专业、更深入的分析和追问建议。");
+            enhancedPrompt.append("如果参考电路与用户设计电路相似，可以在预热导语中提及；");
+            enhancedPrompt.append("如果差异较大，可以在追问建议中引导用户优化设计。");
+
+            String result = enhancedPrompt.toString();
+            log.info("[CircuitAnalysis] RAG增强成功: 检索到{}个相似电路, 增强后Prompt长度={}",
+                     results.size(), result.length());
+
+            return result;
+
+        } catch (Exception e) {
+            log.warn("[CircuitAnalysis] RAG增强失败，使用原始Prompt: {}", e.getMessage());
+            return basePrompt;
+        }
+    }
+
+    /**
+     * 从电路设计中提取查询关键词
+     *
+     * @param circuitDesign 电路设计对象
+     * @return 查询关键词字符串
+     */
+    private String extractCircuitQueryFromDesign(CircuitDesign circuitDesign) {
+        if (circuitDesign == null) {
+            return null;
+        }
+
+        StringBuilder queryBuilder = new StringBuilder();
+
+        // 1. 提取电路标题/描述
+        if (circuitDesign.getMetadata() != null) {
+            String title = circuitDesign.getMetadata().getTitle();
+            String description = circuitDesign.getMetadata().getDescription();
+
+            if (title != null && !title.isBlank()) {
+                queryBuilder.append(title).append(" ");
+            }
+            if (description != null && !description.isBlank()) {
+                queryBuilder.append(description).append(" ");
+            }
+        }
+
+        // 2. 提取元器件信息（从elements列表）
+        if (circuitDesign.getElements() != null && !circuitDesign.getElements().isEmpty()) {
+            queryBuilder.append("包含元器件: ");
+            List<String> elementNames = circuitDesign.getElements().stream()
+                .filter(element -> element.getType() != null)
+                .map(element -> {
+                    String type = element.getType();
+                    // 尝试从properties中获取值
+                    if (element.getProperties() != null && element.getProperties().containsKey("value")) {
+                        Object value = element.getProperties().get("value");
+                        return value != null ? type + "(" + value + ")" : type;
+                    }
+                    return type;
+                })
+                .limit(10)  // 最多提取10个元器件
+                .collect(Collectors.toList());
+
+            queryBuilder.append(String.join(", ", elementNames));
+        }
+
+        String query = queryBuilder.toString().trim();
+
+        // 如果没有提取到任何信息，返回默认查询
+        if (query.isBlank()) {
+            query = "电路分析 通用电路设计";
+        }
+
+        return query;
     }
 
     @Override

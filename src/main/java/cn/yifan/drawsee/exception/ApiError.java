@@ -112,7 +112,10 @@ public enum ApiError {
     
     // 用户文档相关错误
     RESOURCE_NOT_FOUND(404, "资源不存在"),
-    ACCESS_DENIED(403, "访问被拒绝");
+    ACCESS_DENIED(403, "访问被拒绝"),
+
+    // 内部服务认证错误
+    UNAUTHORIZED(401, "未授权");
 
     // 枚举项的参数
     private final Integer code;

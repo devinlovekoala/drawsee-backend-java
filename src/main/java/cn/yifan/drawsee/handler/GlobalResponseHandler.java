@@ -1,6 +1,7 @@
 package cn.yifan.drawsee.handler;
 
 import cn.yifan.drawsee.pojo.Result;
+import cn.yifan.drawsee.pojo.vo.R;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
@@ -14,7 +15,7 @@ import java.io.IOException;
 
 /**
  * @FileName GlobalResponseHandler
- * @Description
+ * @Description 全局响应处理器，统一包装响应格式
  * @Author yifan
  * @date 2025-01-28 20:58
  **/
@@ -32,11 +33,16 @@ public class GlobalResponseHandler implements ResponseBodyAdvice<Object> {
     */
     @Override
     public Object beforeBodyWrite(Object body, MethodParameter returnType, MediaType selectedContentType, Class<? extends HttpMessageConverter<?>> selectedConverterType, ServerHttpRequest request, ServerHttpResponse response) {
-        // 如果是 Result，直接返回
+        // 如果是 Result，直接返回（避免双层包装）
         if (body instanceof Result) {
             return body;
         }
-        
+
+        // 如果是 R，直接返回（避免双层包装）
+        if (body instanceof R) {
+            return body;
+        }
+
         // 处理String类型的返回值，避免类型转换异常
         if (body instanceof String) {
             try {
@@ -47,7 +53,7 @@ public class GlobalResponseHandler implements ResponseBodyAdvice<Object> {
                 throw new RuntimeException("处理响应数据失败", e);
             }
         }
-        
+
         return Result.success(body);
     }
 

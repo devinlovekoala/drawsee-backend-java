@@ -84,16 +84,16 @@
         WHERE id = #{id}
     </update>
     
-    <!-- 根据名称查询 -->
+    <!-- 根据名称查询（只查询未删除的） -->
     <select id="getByName" parameterType="string" resultMap="BaseResultMap">
-        SELECT * FROM knowledge_base WHERE name = #{name}
+        SELECT * FROM knowledge_base WHERE name = #{name} AND is_deleted = 0
     </select>
     
     <!-- 根据创建者ID查询 -->
     <select id="getByCreatorId" resultMap="BaseResultMap">
-        SELECT * FROM knowledge_base 
-        WHERE creator_id = #{creatorId} 
-        AND is_deleted = #{isDeleted}
+        SELECT * FROM knowledge_base
+        WHERE creator_id = #{creatorId}
+        AND is_deleted = 0
     </select>
     
     <!-- 根据邀请码查询 -->
@@ -108,14 +108,14 @@
     
     <!-- 查询所有知识库 -->
     <select id="getAll" resultMap="BaseResultMap">
-        SELECT * FROM knowledge_base WHERE is_deleted = #{isDeleted}
+        SELECT * FROM knowledge_base WHERE is_deleted = 0
     </select>
     
     <!-- 查询用户作为成员的知识库 -->
     <select id="getByMemberId" resultMap="BaseResultMap">
-        SELECT * FROM knowledge_base 
-        WHERE JSON_CONTAINS(members, CAST(#{userId} AS JSON), '$') 
-        AND is_deleted = #{isDeleted}
+        SELECT * FROM knowledge_base
+        WHERE JSON_CONTAINS(members, CAST(#{userId} AS JSON), '$')
+        AND is_deleted = 0
     </select>
     
     <!-- 根据创建者ID和RAG启用状态查询知识库 -->
@@ -127,7 +127,7 @@
         WHERE
             creator_id = #{creatorId}
             AND rag_enabled = #{ragEnabled}
-            AND is_deleted = #{isDeleted}
+            AND is_deleted = 0
     </select>
     
     <!-- 根据成员ID和RAG启用状态查询知识库 -->
@@ -139,7 +139,7 @@
         WHERE
             JSON_CONTAINS(members, CAST(#{memberId} AS JSON), '$')
             AND rag_enabled = #{ragEnabled}
-            AND is_deleted = #{isDeleted}
+            AND is_deleted = 0
     </select>
     
     <!-- 根据班级ID查询知识库列表 -->

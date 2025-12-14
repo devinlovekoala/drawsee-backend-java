@@ -33,8 +33,6 @@ public class AiService {
     @Autowired
     private ChatLanguageModel doubaoChatLanguageModel;
     @Autowired
-    private ChatLanguageModel deepseekV3ChatLanguageModel;
-    @Autowired
     private ChatLanguageModel doubaoVisionChatLanguageModel;
     @Autowired
     private ObjectMapper objectMapper;

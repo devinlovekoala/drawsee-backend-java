@@ -1,7 +1,6 @@
 package cn.yifan.drawsee.service.business.parser;
 
-import cn.yifan.drawsee.config.WeaviateConfig;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -9,16 +8,16 @@ import java.util.List;
 
 /**
  * 简单的文本分块器，根据字符数量进行分段
+ * TODO: 迁移到Python RAG服务 - 分块逻辑应由Python服务统一处理
  */
 @Component
 public class TextChunker {
 
-    private final WeaviateConfig weaviateConfig;
+    @Value("${rag.chunk-size:800}")
+    private int chunkSize;
 
-    @Autowired
-    public TextChunker(WeaviateConfig weaviateConfig) {
-        this.weaviateConfig = weaviateConfig;
-    }
+    @Value("${rag.chunk-overlap:200}")
+    private int chunkOverlap;
 
     public List<String> chunk(String text) {
         List<String> result = new ArrayList<>();
@@ -26,13 +25,13 @@ public class TextChunker {
             return result;
         }
 
-        int chunkSize = Math.max(weaviateConfig.getChunkSize(), 200);
-        int overlap = Math.max(0, Math.min(weaviateConfig.getChunkOverlap(), chunkSize / 2));
+        int effectiveChunkSize = Math.max(chunkSize, 200);
+        int effectiveOverlap = Math.max(0, Math.min(chunkOverlap, effectiveChunkSize / 2));
 
         int start = 0;
         int length = text.length();
         while (start < length) {
-            int end = Math.min(length, start + chunkSize);
+            int end = Math.min(length, start + effectiveChunkSize);
 
             // 尝试在末尾寻找换行或句号作为分割点
             if (end < length) {
@@ -51,7 +50,7 @@ public class TextChunker {
                 break;
             }
 
-            start = Math.max(end - overlap, start + 1);
+            start = Math.max(end - effectiveOverlap, start + 1);
         }
 
         return result;

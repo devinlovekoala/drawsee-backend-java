@@ -86,16 +86,16 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
     public String createKnowledgeBase(CreateKnowledgeBaseDTO createKnowledgeBaseDTO) {
         // 验证用户是否为教师
         teacherService.validateTeacher();
-        
+
         // 检查知识库名称是否已存在
         KnowledgeBase existKnowledgeBase = knowledgeBaseMapper.getByName(createKnowledgeBaseDTO.getName());
         if (existKnowledgeBase != null) {
-            throw new ApiException(ApiError.KNOWLEDGE_BASE_HAD_EXISTED, "文件不能为空");
+            throw new ApiException(ApiError.KNOWLEDGE_BASE_HAD_EXISTED, "知识库名称已存在");
         }
-        
+
         // 生成邀请码
         String invitationCode = generateInvitationCode();
-        
+
         // 创建知识库
         KnowledgeBase knowledgeBase = new KnowledgeBase();
         knowledgeBase.setId(UUIDUtils.generateUUID());
@@ -109,9 +109,9 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         knowledgeBase.setMembers(new ArrayList<>());
         knowledgeBase.getMembers().add(StpUtil.getLoginIdAsLong());
         knowledgeBase.setIsDeleted(false);
-        
+
         knowledgeBaseMapper.insert(knowledgeBase);
-        
+
         return knowledgeBase.getId();
     }
     
@@ -126,12 +126,12 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         // 检查知识库名称是否已存在
         KnowledgeBase existKnowledgeBase = knowledgeBaseMapper.getByName(createKnowledgeBaseDTO.getName());
         if (existKnowledgeBase != null) {
-            throw new ApiException(ApiError.KNOWLEDGE_BASE_HAD_EXISTED, "文件不能为空");
+            throw new ApiException(ApiError.KNOWLEDGE_BASE_HAD_EXISTED, "知识库名称已存在");
         }
-        
+
         // 生成邀请码
         String invitationCode = generateInvitationCode();
-        
+
         // 创建知识库
         KnowledgeBase knowledgeBase = new KnowledgeBase();
         knowledgeBase.setId(UUIDUtils.generateUUID());
@@ -146,9 +146,9 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         knowledgeBase.getMembers().add(StpUtil.getLoginIdAsLong());
         knowledgeBase.setIsDeleted(false);
         knowledgeBase.setIsPublished(isPublished);
-        
+
         knowledgeBaseMapper.insert(knowledgeBase);
-        
+
         return knowledgeBase.getId();
     }
     

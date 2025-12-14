@@ -311,38 +311,114 @@ public class KnowledgeWorkFlow extends WorkFlow {
                 return false;
             }
             
-            // 使用RAG服务检索并生成增强回答
-            log.info("开始RAG检索，知识库数量: {}, 查询: {}", knowledgeBaseIds.size(), aiTaskMessage.getPrompt());
-            var ragResponse = ragQueryService.query(knowledgeBaseIds, aiTaskMessage.getPrompt(), null);
-            
+            // 使用RAG服务检索并生成增强回答（作为MCP工具）
+            log.info("调用Python RAG MCP工具进行知识检索，知识库数量: {}, 查询: {}", knowledgeBaseIds.size(), aiTaskMessage.getPrompt());
+            var ragResponse = ragQueryService.query(
+                knowledgeBaseIds,
+                aiTaskMessage.getPrompt(),
+                null,  // history - can be null for now
+                aiTaskMessage.getUserId(),
+                String.valueOf(classId)
+            );
+
             if (ragResponse != null && ragResponse.getAnswer() != null && !ragResponse.getAnswer().isEmpty()) {
                 // 将RAG增强的回答作为额外的上下文信息添加到streamNode
                 Node streamNode = workContext.getStreamNode();
                 String originalData = streamNode.getData();
-                
+
                 // 解析原始数据
                 Map<String, Object> dataMap = objectMapper.readValue(originalData, Map.class);
-                
+
                 // 添加RAG增强信息
                 dataMap.put("ragEnhanced", true);
                 dataMap.put("ragKnowledgeBaseCount", knowledgeBaseIds.size());
                 if (ragResponse.getChunks() != null) {
                     dataMap.put("ragChunkCount", ragResponse.getChunks().size());
                 }
-                
+
                 // 更新节点数据
                 streamNode.setData(objectMapper.writeValueAsString(dataMap));
-                
-                log.info("RAG增强成功，知识库数量: {}, 检索到的块数量: {}", 
-                    knowledgeBaseIds.size(), 
+
+                log.info("RAG MCP工具调用成功，知识库数量: {}, 检索到的块数量: {}",
+                    knowledgeBaseIds.size(),
                     ragResponse.getChunks() != null ? ragResponse.getChunks().size() : 0);
                 return true;
+            } else {
+                log.info("RAG MCP工具返回null或无结果，回退到纯LLM生成（无RAG增强）");
             }
             
         } catch (Exception e) {
             log.warn("RAG增强失败: {}", e.getMessage(), e);
         }
-        
+
         return false;
+    }
+
+    /**
+     * 重写streamChat方法，注入RAG检索上下文增强Prompt
+     */
+    @Override
+    public void streamChat(WorkContext workContext, dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage> handler) throws com.fasterxml.jackson.core.JsonProcessingException {
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        java.util.LinkedList<dev.langchain4j.data.message.ChatMessage> history = workContext.getHistory();
+        String originalPrompt = aiTaskMessage.getPrompt();
+
+        // 尝试RAG增强Prompt
+        String enhancedPrompt = originalPrompt;
+        try {
+            String classId = aiTaskMessage.getClassId();
+            Long userId = aiTaskMessage.getUserId();
+
+            // 获取可访问的知识库列表
+            List<String> knowledgeBaseIds;
+            if (classId != null && !classId.isEmpty()) {
+                knowledgeBaseIds = classKnowledgeService.getAccessibleKnowledgeBaseIds(Long.parseLong(classId), userId);
+            } else {
+                knowledgeBaseIds = classKnowledgeService.getAccessibleKnowledgeBaseIds(null, userId);
+            }
+
+            if (!knowledgeBaseIds.isEmpty()) {
+                log.info("使用RAG增强Prompt: 知识库数量={}, 原始问题={}", knowledgeBaseIds.size(), originalPrompt);
+
+                // 调用RAG检索
+                var ragResponse = ragQueryService.query(
+                    knowledgeBaseIds,
+                    originalPrompt,
+                    null,
+                    userId,
+                    String.valueOf(classId)
+                );
+
+                if (ragResponse != null && ragResponse.getAnswer() != null && !ragResponse.getAnswer().isEmpty()) {
+                    // 将RAG检索结果注入Prompt
+                    StringBuilder promptBuilder = new StringBuilder();
+                    promptBuilder.append("【知识库检索结果】\n");
+                    promptBuilder.append(ragResponse.getAnswer());
+                    promptBuilder.append("\n\n");
+                    promptBuilder.append("【用户问题】\n");
+                    promptBuilder.append(originalPrompt);
+                    promptBuilder.append("\n\n");
+                    promptBuilder.append("请基于上述知识库中的电路图相关知识，结合你的专业能力，准确、详细地回答用户问题。");
+                    promptBuilder.append("如果知识库中的信息与用户问题不完全匹配，请明确指出，并基于你的知识给出最佳建议。");
+
+                    enhancedPrompt = promptBuilder.toString();
+
+                    log.info("RAG Prompt增强成功: 检索到{}个相关电路图, 增强后Prompt长度={}",
+                             ragResponse.getChunks() != null ? ragResponse.getChunks().size() : 0,
+                             enhancedPrompt.length());
+                } else {
+                    log.info("RAG检索无结果，使用原始Prompt");
+                }
+            }
+        } catch (Exception e) {
+            log.warn("RAG Prompt增强失败，使用原始Prompt: {}", e.getMessage());
+        }
+
+        // 使用增强后的Prompt调用AI服务
+        if (cn.yifan.drawsee.constant.AiTaskType.GENERAL.equals(aiTaskMessage.getType())) {
+            streamAiService.answerPointChat(history, enhancedPrompt, aiTaskMessage.getModel(), handler);
+        } else {
+            streamAiService.generalChat(history, enhancedPrompt, aiTaskMessage.getModel(), handler);
+        }
     }
 }
