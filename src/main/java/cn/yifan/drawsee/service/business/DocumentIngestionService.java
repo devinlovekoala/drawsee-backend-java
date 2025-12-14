@@ -2,26 +2,16 @@ package cn.yifan.drawsee.service.business;
 
 import cn.yifan.drawsee.constant.KnowledgeDocumentStatus;
 import cn.yifan.drawsee.constant.RagIngestionStage;
-import cn.yifan.drawsee.mapper.KnowledgeDocumentChunkMapper;
 import cn.yifan.drawsee.mapper.KnowledgeBaseMapper;
 import cn.yifan.drawsee.pojo.entity.KnowledgeDocument;
-import cn.yifan.drawsee.pojo.entity.KnowledgeDocumentChunk;
 import cn.yifan.drawsee.pojo.entity.RagIngestionTask;
 import cn.yifan.drawsee.pojo.entity.KnowledgeBase;
-import cn.yifan.drawsee.service.base.MinioService;
 import cn.yifan.drawsee.service.base.PythonRagService;
-import cn.yifan.drawsee.service.business.parser.DocumentParser;
-import cn.yifan.drawsee.service.business.parser.TextChunker;
-import cn.yifan.drawsee.util.UUIDUtils;
-import io.minio.GetObjectResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -41,29 +31,10 @@ public class DocumentIngestionService {
     private KnowledgeDocumentService knowledgeDocumentService;
 
     @Autowired
-    private KnowledgeDocumentChunkMapper knowledgeDocumentChunkMapper;
-
-    @Autowired
     private RagIngestionTaskService ragIngestionTaskService;
 
     @Autowired
-    private MinioService minioService;
-
-    @Autowired
-    private DocumentParser documentParser;
-
-    @Autowired
-    private TextChunker textChunker;
-
-    @Autowired
-    private EmbeddingService embeddingService;
-
-    @Autowired
     private PythonRagService pythonRagService;
-
-    // TODO: 已废弃 - 迁移到Python RAG服务
-    // @Autowired
-    // private WeaviateVectorStore weaviateVectorStore;
 
     @Autowired
     private KnowledgeBaseMapper knowledgeBaseMapper;

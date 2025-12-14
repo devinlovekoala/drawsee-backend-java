@@ -44,7 +44,7 @@ public class InternalJwtUtil {
      */
     public String generateToken(Long userId, String classId, String knowledgeBaseId) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("user_id", userId);  
+        claims.put("user_id", userId);
         claims.put("class_id", classId);
         if (knowledgeBaseId != null) {
             claims.put("knowledge_base_id", knowledgeBaseId);

@@ -45,9 +45,6 @@ public class CourseService {
     private CourseMapper courseMapper;
     
     @Autowired
-    private TeacherService teacherService;
-    
-    @Autowired
     private UserRoleService userRoleService;
     
     @Autowired
