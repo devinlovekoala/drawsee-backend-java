@@ -131,6 +131,83 @@ public class PythonRagService {
     }
 
     /**
+     * Phase 2: 混合检索（电路图 + 文本chunks）
+     *
+     * 使用RRF算法融合电路图和文本chunks的检索结果
+     *
+     * @param query              用户查询
+     * @param knowledgeBaseIds   知识库ID列表
+     * @param topK               返回Top-K结果
+     * @param circuitWeight      电路图权重（0-1）
+     * @param textWeight         文本chunks权重（0-1）
+     * @param scoreThreshold     相似度阈值
+     * @param searchMode         检索模式: hybrid/circuit_only/text_only
+     * @return 混合检索结果
+     */
+    public Map<String, Object> hybridSearch(
+            String query,
+            java.util.List<String> knowledgeBaseIds,
+            Integer topK,
+            Double circuitWeight,
+            Double textWeight,
+            Double scoreThreshold,
+            String searchMode
+    ) {
+        String url = pythonServiceBaseUrl + "/api/v1/rag/hybrid-search";
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("query", query);
+        request.put("knowledge_base_ids", knowledgeBaseIds);
+        request.put("top_k", topK != null ? topK : 10);
+        request.put("circuit_weight", circuitWeight != null ? circuitWeight : 0.5);
+        request.put("text_weight", textWeight != null ? textWeight : 0.5);
+        request.put("score_threshold", scoreThreshold != null ? scoreThreshold : 0.6);
+        request.put("search_mode", searchMode != null ? searchMode : "hybrid");
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(
+                request,
+                createAuthHeaders(0L, null, knowledgeBaseIds != null && !knowledgeBaseIds.isEmpty() ? knowledgeBaseIds.get(0) : null)
+        );
+
+        try {
+            log.info("调用Python混合检索: 查询: {}, mode: {}, top_k: {}", query, searchMode, topK);
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    url, HttpMethod.POST, entity,
+                    new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> body = response.getBody();
+                Boolean success = (Boolean) body.get("success");
+                if (Boolean.TRUE.equals(success)) {
+                    log.info("混合检索成功: 返回{}条结果（电路图{}条，文本{}条）",
+                            body.get("total"), body.get("circuit_count"), body.get("text_count"));
+                    return body;
+                } else {
+                    log.warn("混合检索返回失败: {}", body.get("message"));
+                    return null;
+                }
+            } else {
+                log.warn("Python服务返回异常状态码: {}", response.getStatusCode());
+                return null;
+            }
+        } catch (HttpClientErrorException e) {
+            log.error("混合检索调用失败: HTTP {}", e.getStatusCode());
+            return null;
+        } catch (RestClientException e) {
+            log.error("混合检索网络异常: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Phase 2: 混合检索（便捷方法，使用默认参数）
+     */
+    public Map<String, Object> hybridSearch(String query, java.util.List<String> knowledgeBaseIds, Integer topK) {
+        return hybridSearch(query, knowledgeBaseIds, topK, 0.5, 0.5, 0.6, "hybrid");
+    }
+
+    /**
      * 触发文档入库流程（ETL流水线）
      *
      * @param documentId      文档ID
