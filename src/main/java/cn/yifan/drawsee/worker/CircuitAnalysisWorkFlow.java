@@ -1,5 +1,7 @@
 package cn.yifan.drawsee.worker;
 
+import cn.yifan.drawsee.assistant.CircuitAnalysisAssistant;
+import cn.yifan.drawsee.constant.AiModel;
 import cn.yifan.drawsee.constant.AiTaskMessageType;
 import cn.yifan.drawsee.constant.NodeSubType;
 import cn.yifan.drawsee.constant.NodeTitle;
@@ -15,13 +17,12 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.PromptService;
-import cn.yifan.drawsee.service.base.PythonRagService;
 import cn.yifan.drawsee.service.base.StreamAiService;
-import cn.yifan.drawsee.service.business.RagQueryService;
+import cn.yifan.drawsee.service.business.KnowledgeBaseService;
+import cn.yifan.drawsee.tool.AgenticRagTool;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.output.Response;
 import lombok.Getter;
@@ -31,33 +32,28 @@ import org.redisson.api.RedissonClient;
 import org.redisson.api.stream.StreamAddArgs;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * @FileName CircuitAnalysisWorkFlow
- * @Description 电路分析工作流，处理电路分析任务
- * @Author yifan
- * @date 2025-04-04 16:20
- **/
-
+ * 电路分析工作流 - Tool-based架构
+ *
+ * 架构变更：
+ * - 旧版：Python LLM生成答案，Java转发SSE流
+ * - 新版：Java LangChain4j主导对话生成，Python仅提供RAG工具
+ *
+ * @author Drawsee Team
+ */
 @Slf4j
 @Service
 public class CircuitAnalysisWorkFlow extends WorkFlow {
 
     private final PromptService promptService;
     private final SpiceConverter spiceConverter;
-    private final RagQueryService ragQueryService;
-    private final PythonRagService pythonRagService;
+    private final KnowledgeBaseService knowledgeBaseService;
+    private final AgenticRagTool agenticRagTool;
 
     public CircuitAnalysisWorkFlow(
             UserMapper userMapper,
@@ -70,30 +66,30 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
             ObjectMapper objectMapper,
             PromptService promptService,
             SpiceConverter spiceConverter,
-            RagQueryService ragQueryService,
-            PythonRagService pythonRagService
+            KnowledgeBaseService knowledgeBaseService,
+            AgenticRagTool agenticRagTool
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.spiceConverter = spiceConverter;
-        this.ragQueryService = ragQueryService;
-        this.pythonRagService = pythonRagService;
+        this.knowledgeBaseService = knowledgeBaseService;
+        this.agenticRagTool = agenticRagTool;
     }
 
     @Override
     public void createInitNodes(WorkContext workContext) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         CircuitDesign circuitDesign = objectMapper.readValue(aiTaskMessage.getPrompt(), CircuitDesign.class);
-        
-        // 创建电路画布节点（替代之前的查询节点）
-        Map<String, Object> canvasNodeData = new ConcurrentHashMap<>();
+
+        // 创建电路画布节点
+        Map<String, Object> canvasNodeData = new HashMap<>();
         canvasNodeData.put("title", NodeTitle.CIRCUIT_CANVAS);
         canvasNodeData.put("text", "电路分析请求");
         canvasNodeData.put("circuitDesign", circuitDesign);
         canvasNodeData.put("mode", aiTaskMessage.getType());
-        
+
         Node canvasNode = new Node(
-            NodeType.CIRCUIT_CANVAS,  // 使用新的节点类型
+            NodeType.CIRCUIT_CANVAS,
             objectMapper.writeValueAsString(canvasNodeData),
             objectMapper.writeValueAsString(XYPosition.origin()),
             aiTaskMessage.getParentId(),
@@ -101,18 +97,18 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
             aiTaskMessage.getConvId(),
             true
         );
-        
+
         insertAndPublishNoneStreamNode(workContext, canvasNode, canvasNodeData);
-        
-        // 创建新的电路分析节点，后续所有内容都在该节点内流式生成
-        Map<String, Object> analyzeNodeData = new ConcurrentHashMap<>();
+
+        // 创建电路分析节点
+        Map<String, Object> analyzeNodeData = new HashMap<>();
         analyzeNodeData.put("title", NodeTitle.CIRCUIT_ANALYSIS);
         analyzeNodeData.put("text", "");
         analyzeNodeData.put("subtype", NodeSubType.CIRCUIT_ANALYZE);
         analyzeNodeData.put("contextTitle", resolveDesignTitle(circuitDesign));
         analyzeNodeData.put("followUps", new ArrayList<>());
         analyzeNodeData.put("isGenerated", false);
-        
+
         Node analyzeNode = new Node(
             NodeType.CIRCUIT_ANALYZE,
             objectMapper.writeValueAsString(analyzeNodeData),
@@ -123,14 +119,12 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
             true
         );
         insertAndPublishStreamNode(workContext, analyzeNode, analyzeNodeData);
-        log.info("[CircuitAnalysis] 初始化节点完成, canvasNodeId={}, analyzeNodeId={}", canvasNode.getId(), analyzeNode.getId());
+        log.info("[CircuitAnalysis-Tool] 初始化节点完成, canvasNodeId={}, analyzeNodeId={}", canvasNode.getId(), analyzeNode.getId());
     }
 
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
-        LinkedList<ChatMessage> history = workContext.getHistory();
-        String model = aiTaskMessage.getModel();
 
         // 解析电路设计JSON
         CircuitDesign circuitDesign = objectMapper.readValue(aiTaskMessage.getPrompt(), CircuitDesign.class);
@@ -138,164 +132,113 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         // 生成SPICE网表
         String spiceNetlist = spiceConverter.generateNetlist(circuitDesign);
 
-        // 生成基础分析提示词
-        String baseAnalysisPrompt = promptService.getCircuitWarmupPrompt(circuitDesign, spiceNetlist);
+        // 获取用户可访问的知识库ID列表
+        List<String> knowledgeBaseIds = knowledgeBaseService.getUserAccessibleKnowledgeBaseIds(
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getClassId()
+        );
 
-        // 尝试RAG增强：从知识库检索相似电路
-        String enhancedPrompt = tryEnhanceWithRag(baseAnalysisPrompt, circuitDesign, aiTaskMessage);
+        // 构建系统提示词
+        String systemPrompt = buildSystemPrompt();
 
-        // 调用AI进行分析（使用增强后的提示词）
-        streamAiService.circuitAnalysisChat(history, enhancedPrompt, model, handler);
+        // 构建用户查询（包含电路信息）
+        String userQuery = buildUserQuery(circuitDesign, spiceNetlist);
+
+        log.info("[CircuitAnalysis-Tool] 开始Tool-based对话生成: circuit_elements={}, kb_count={}",
+                 circuitDesign.getElements() != null ? circuitDesign.getElements().size() : 0,
+                 knowledgeBaseIds.size());
+
+        // 使用streamAiService的toolBasedChat方法
+        streamAiService.toolBasedChat(
+            systemPrompt,
+            userQuery,
+            new Object[]{agenticRagTool},
+            AiModel.DOUBAO,  // 使用豆包模型
+            CircuitAnalysisAssistant.class,
+            handler
+        );
     }
 
     /**
-     * 尝试使用RAG增强电路分析提示词
-     *
-     * @param basePrompt 基础提示词
-     * @param circuitDesign 用户设计的电路
-     * @param aiTaskMessage 任务消息
-     * @return 增强后的提示词（失败时返回原始提示词）
+     * 构建系统提示词
      */
-    private String tryEnhanceWithRag(String basePrompt, CircuitDesign circuitDesign, AiTaskMessage aiTaskMessage) {
-        try {
-            // 从电路设计中提取查询关键词
-            String circuitQuery = extractCircuitQueryFromDesign(circuitDesign);
-            if (circuitQuery == null || circuitQuery.isBlank()) {
-                log.info("[CircuitAnalysis] 无法从电路设计中提取查询关键词，跳过RAG增强");
-                return basePrompt;
-            }
+    private String buildSystemPrompt() {
+        return """
+            你是一位专业的电路分析助教，负责帮助学生理解电路设计和工作原理。
 
-            // 获取可访问的知识库列表（类似KnowledgeWorkFlow）
-            String classId = aiTaskMessage.getClassId();
-            Long userId = aiTaskMessage.getUserId();
+            **重要规则**：
+            - 当需要查询教材、课件、电路知识库中的内容时，使用searchKnowledgeBase工具
+            - 当涉及电路理论、公式推导、元件特性时，优先调用searchKnowledgeBase工具
+            - 对于电路结构分析、拓扑分析等可以直接基于提供的网表和电路图回答
+            - 回答要准确、详细，结合理论知识和实际电路分析
 
-            // 注意：这里需要获取知识库列表，暂时传空列表（让Python服务检索所有可用知识库）
-            List<String> knowledgeBaseIds = new ArrayList<>();
+            **输出格式要求**：
+            请按照以下格式输出电路分析结果：
 
-            log.info("[CircuitAnalysis] 使用RAG检索相似电路: 查询关键词={}", circuitQuery);
+            ### 预热导语
+            [对电路的总体评价和核心特点，2-3句话]
 
-            // 调用Python RAG服务检索相似电路
-            var ragResponse = pythonRagService.ragQuery(
-                circuitQuery,
-                knowledgeBaseIds,
-                classId,
-                userId,
-                3  // Top-K: 返回3个最相关的电路图
-            );
+            ### 追问方向概览
+            - **[追问1标题]**：[简短说明，引导学生思考] _(意图: [分析/概念/计算])_
+            - **[追问2标题]**：[简短说明] _(意图: [分析/概念/计算])_
+            - **[追问3标题]**：[简短说明] _(意图: [分析/概念/计算])_
 
-            if (ragResponse == null) {
-                log.info("[CircuitAnalysis] RAG服务返回null，使用原始Prompt");
-                return basePrompt;
-            }
-
-            // 解析Python服务响应
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> results = (List<Map<String, Object>>) ragResponse.get("results");
-
-            if (results == null || results.isEmpty()) {
-                log.info("[CircuitAnalysis] RAG检索无结果，使用原始Prompt");
-                return basePrompt;
-            }
-
-            // 构建RAG增强的提示词
-            StringBuilder enhancedPrompt = new StringBuilder();
-
-            // 1. RAG检索结果部分
-            enhancedPrompt.append("【知识库参考电路】\n\n");
-            int index = 1;
-            for (Map<String, Object> result : results) {
-                String caption = (String) result.get("caption");
-                Object pageNum = result.get("page_number");
-                Object score = result.get("score");
-
-                if (caption != null && !caption.isBlank()) {
-                    enhancedPrompt.append(String.format(
-                        "**参考电路%d** (相似度: %.2f, 页码: %s)\n%s\n\n",
-                        index++,
-                        score != null ? ((Number) score).doubleValue() : 0.0,
-                        pageNum != null ? pageNum.toString() : "未知",
-                        caption
-                    ));
-                }
-            }
-
-            // 2. 原始分析任务提示词
-            enhancedPrompt.append("【用户设计的电路分析任务】\n\n");
-            enhancedPrompt.append(basePrompt);
-            enhancedPrompt.append("\n\n");
-
-            // 3. RAG增强指令
-            enhancedPrompt.append("**注意**：请结合上述知识库中的参考电路知识，");
-            enhancedPrompt.append("对比用户设计的电路，提供更专业、更深入的分析和追问建议。");
-            enhancedPrompt.append("如果参考电路与用户设计电路相似，可以在预热导语中提及；");
-            enhancedPrompt.append("如果差异较大，可以在追问建议中引导用户优化设计。");
-
-            String result = enhancedPrompt.toString();
-            log.info("[CircuitAnalysis] RAG增强成功: 检索到{}个相似电路, 增强后Prompt长度={}",
-                     results.size(), result.length());
-
-            return result;
-
-        } catch (Exception e) {
-            log.warn("[CircuitAnalysis] RAG增强失败，使用原始Prompt: {}", e.getMessage());
-            return basePrompt;
-        }
+            请基于知识库内容和你的专业知识，为学生提供准确、详细的电路分析。
+            """;
     }
 
     /**
-     * 从电路设计中提取查询关键词
-     *
-     * @param circuitDesign 电路设计对象
-     * @return 查询关键词字符串
+     * 构建用户查询（包含电路信息）
      */
-    private String extractCircuitQueryFromDesign(CircuitDesign circuitDesign) {
-        if (circuitDesign == null) {
-            return null;
-        }
+    private String buildUserQuery(CircuitDesign circuitDesign, String spiceNetlist) {
+        StringBuilder query = new StringBuilder();
 
-        StringBuilder queryBuilder = new StringBuilder();
+        query.append("## 电路分析任务\n\n");
 
-        // 1. 提取电路标题/描述
-        if (circuitDesign.getMetadata() != null) {
-            String title = circuitDesign.getMetadata().getTitle();
-            String description = circuitDesign.getMetadata().getDescription();
-
-            if (title != null && !title.isBlank()) {
-                queryBuilder.append(title).append(" ");
-            }
-            if (description != null && !description.isBlank()) {
-                queryBuilder.append(description).append(" ");
-            }
-        }
-
-        // 2. 提取元器件信息（从elements列表）
+        // 添加电路元件信息
         if (circuitDesign.getElements() != null && !circuitDesign.getElements().isEmpty()) {
-            queryBuilder.append("包含元器件: ");
-            List<String> elementNames = circuitDesign.getElements().stream()
-                .filter(element -> element.getType() != null)
-                .map(element -> {
-                    String type = element.getType();
-                    // 尝试从properties中获取值
-                    if (element.getProperties() != null && element.getProperties().containsKey("value")) {
-                        Object value = element.getProperties().get("value");
-                        return value != null ? type + "(" + value + ")" : type;
-                    }
-                    return type;
-                })
-                .limit(10)  // 最多提取10个元器件
-                .collect(Collectors.toList());
-
-            queryBuilder.append(String.join(", ", elementNames));
+            query.append("**电路元件清单**:\n");
+            circuitDesign.getElements().forEach(elem ->
+                query.append(String.format("- %s (类型: %s", elem.getId(), elem.getType()))
+                    .append(elem.getProperties() != null && elem.getProperties().containsKey("value")
+                        ? ", 值: " + elem.getProperties().get("value")
+                        : "")
+                    .append(")\n")
+            );
+            query.append("\n");
         }
 
-        String query = queryBuilder.toString().trim();
-
-        // 如果没有提取到任何信息，返回默认查询
-        if (query.isBlank()) {
-            query = "电路分析 通用电路设计";
+        // 添加电路连接信息
+        if (circuitDesign.getConnections() != null && !circuitDesign.getConnections().isEmpty()) {
+            query.append("**电路连接数量**: ").append(circuitDesign.getConnections().size()).append("\n\n");
         }
 
-        return query;
+        // 添加SPICE网表
+        if (spiceNetlist != null && !spiceNetlist.isBlank()) {
+            query.append("**SPICE网表**:\n```spice\n");
+            query.append(spiceNetlist);
+            query.append("\n```\n\n");
+        }
+
+        // 添加电路元数据
+        if (circuitDesign.getMetadata() != null) {
+            if (circuitDesign.getMetadata().getTitle() != null) {
+                query.append("**电路标题**: ").append(circuitDesign.getMetadata().getTitle()).append("\n");
+            }
+            if (circuitDesign.getMetadata().getDescription() != null) {
+                query.append("**电路描述**: ").append(circuitDesign.getMetadata().getDescription()).append("\n");
+            }
+            query.append("\n");
+        }
+
+        // 添加分析要求
+        query.append("**分析要求**:\n");
+        query.append("1. 分析电路拓扑结构和工作原理\n");
+        query.append("2. 识别电路类型和应用场景\n");
+        query.append("3. 提供3个追问方向，引导学生深入学习\n");
+        query.append("4. 如果涉及理论知识，请调用searchKnowledgeBase工具查询教材内容\n");
+
+        return query.toString();
     }
 
     @Override
@@ -304,7 +247,7 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         Node streamNode = workContext.getStreamNode();
         Map<String, Object> streamNodeData = workContext.getStreamNodeData();
         Response<AiMessage> streamResponse = workContext.getStreamResponse();
-        
+
         String responseText = streamResponse.content().text();
         CircuitWarmupResult warmupResult = parseWarmupResponse(responseText);
         String displayText = buildDisplayText(warmupResult);
@@ -312,17 +255,17 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
             .stream()
             .map(FollowUpSuggestion::toPayload)
             .collect(Collectors.toList());
-        
+
         streamNodeData.put("text", displayText);
         streamNodeData.put("followUps", followUpPayload);
         streamNodeData.put("isGenerated", true);
         streamNodeData.put("isDone", true);
-        log.info("[CircuitAnalysis] 解析完成, nodeId={}, warmupLength={}, followUps={}", 
-            streamNode.getId(), 
+        log.info("[CircuitAnalysis-Tool] 解析完成, nodeId={}, warmupLength={}, followUps={}",
+            streamNode.getId(),
             displayText.length(),
             followUpPayload.size());
-        
-        Map<String, Object> dataPayload = new ConcurrentHashMap<>();
+
+        Map<String, Object> dataPayload = new HashMap<>();
         dataPayload.put("nodeId", streamNode.getId());
         dataPayload.put("text", displayText);
         dataPayload.put("followUps", followUpPayload);
@@ -342,14 +285,14 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         streamNode.setData(objectMapper.writeValueAsString(streamNodeData));
         workContext.getNodesToUpdate().add(streamNode);
     }
-    
+
     private CircuitWarmupResult parseWarmupResponse(String responseText) {
         String normalized = Optional.ofNullable(responseText).orElse("").replace("\r", "").trim();
         String warmupSection = normalized;
         String followUpSection = "";
-        
-        final String warmupFlag = "【预热导语】";
-        final String followFlag = "【追问预判】";
+
+        final String warmupFlag = "### 预热导语";
+        final String followFlag = "### 追问方向概览";
         int warmupIndex = normalized.indexOf(warmupFlag);
         if (warmupIndex >= 0) {
             int followIndex = normalized.indexOf(followFlag, warmupIndex + warmupFlag.length());
@@ -360,15 +303,15 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
                 warmupSection = normalized.substring(warmupIndex + warmupFlag.length()).trim();
             }
         }
-        
+
         List<FollowUpSuggestion> followUps = followUpSection.isEmpty()
             ? Collections.emptyList()
             : parseFollowUpSection(followUpSection);
-        
+
         String resolvedWarmup = warmupSection.isEmpty() ? normalized : warmupSection;
         return new CircuitWarmupResult(resolvedWarmup, followUps);
     }
-    
+
     private List<FollowUpSuggestion> parseFollowUpSection(String followUpSection) {
         List<String> entries = splitFollowUpEntries(followUpSection);
         List<FollowUpSuggestion> followUps = new ArrayList<>();
@@ -380,13 +323,13 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         }
         return followUps;
     }
-    
+
     private List<String> splitFollowUpEntries(String section) {
         String[] lines = section.split("\n");
         List<String> entries = new ArrayList<>();
         StringBuilder current = new StringBuilder();
-        Pattern entryPattern = Pattern.compile("^\\d+[\\.|．、)]\\s*.*");
-        
+        Pattern entryPattern = Pattern.compile("^-\\s*\\*\\*.*");
+
         for (String rawLine : lines) {
             String line = rawLine.trim();
             if (line.isEmpty()) {
@@ -411,97 +354,52 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         }
         return entries;
     }
-    
+
     private FollowUpSuggestion buildFollowUpSuggestion(String entry, int order) {
         if (entry == null || entry.isBlank()) {
             return null;
         }
         String normalized = entry.replace("\r", "").trim();
-        normalized = normalized.replace('｜', '|');
-        normalized = normalized.replace('：', ':');
-        normalized = normalized.replaceAll("^\\d+[\\.|．、)]\\s*", "");
-        
+
+        // 解析格式：- **[标题]**：[说明] _(意图: [分析])_
         String title = null;
-        int titleStart = normalized.indexOf('[');
-        int titleEnd = normalized.indexOf(']');
-        if (titleStart >= 0 && titleEnd > titleStart) {
-            title = normalized.substring(titleStart + 1, titleEnd).trim();
-            normalized = normalized.substring(titleEnd + 1).trim();
-        }
-        if (normalized.startsWith("|")) {
-            normalized = normalized.substring(1);
-        }
-        
         String hint = null;
-        String followUp = null;
         String intent = null;
-        Double confidence = null;
-        
-        String[] segments = normalized.split("\\|");
-        for (String rawSegment : segments) {
-            String segment = rawSegment.trim();
-            if (segment.isEmpty()) {
-                continue;
-            }
-            String lowered = segment.toLowerCase();
-            if (segment.startsWith("洞见") || segment.startsWith("洞察")) {
-                hint = stripLabel(segment, segment.startsWith("洞见") ? "洞见" : "洞察");
-            } else if (segment.startsWith("追问")) {
-                followUp = stripLabel(segment, "追问");
-            } else if (segment.startsWith("意图")) {
-                intent = stripLabel(segment, "意图");
-            } else if (segment.startsWith("信心") || lowered.startsWith("confidence")) {
-                String confText = stripLabel(segment, segment.startsWith("信心") ? "信心" : "confidence");
-                confidence = parseConfidence(confText);
-            } else if (title == null && segment.startsWith("[")) {
-                int end = segment.indexOf(']');
-                if (end > 0) {
-                    title = segment.substring(1, end).trim();
-                }
+
+        // 提取标题
+        Pattern titlePattern = Pattern.compile("\\*\\*([^*]+)\\*\\*");
+        Matcher titleMatcher = titlePattern.matcher(normalized);
+        if (titleMatcher.find()) {
+            title = titleMatcher.group(1).trim();
+        }
+
+        // 提取意图
+        Pattern intentPattern = Pattern.compile("_\\(意图:\\s*([^)]+)\\)_");
+        Matcher intentMatcher = intentPattern.matcher(normalized);
+        if (intentMatcher.find()) {
+            intent = intentMatcher.group(1).trim();
+        }
+
+        // 提取说明（在标题和意图之间）
+        if (titleMatcher.find()) {
+            int titleEnd = titleMatcher.end();
+            int intentStart = intentMatcher.find() ? intentMatcher.start() : normalized.length();
+            hint = normalized.substring(titleEnd, intentStart).trim();
+            // 去除前导的：或:
+            if (hint.startsWith("：") || hint.startsWith(":")) {
+                hint = hint.substring(1).trim();
             }
         }
-        
-        if (followUp == null && hint != null) {
-            followUp = hint;
-        }
+
         if (title == null || title.isBlank()) {
             title = "追问 " + order;
         }
-        return new FollowUpSuggestion(title, hint, followUp, intent, confidence);
+
+        String followUp = hint != null && !hint.isBlank() ? hint : title;
+
+        return new FollowUpSuggestion(title, hint, followUp, intent, null);
     }
-    
-    private String stripLabel(String segment, String label) {
-        if (segment == null) {
-            return null;
-        }
-        String normalized = segment.replace("：", ":").trim();
-        String prefix = label + ":";
-        if (normalized.startsWith(prefix)) {
-            return normalized.substring(prefix.length()).trim();
-        }
-        if (normalized.toLowerCase().startsWith((label + ":").toLowerCase())) {
-            return normalized.substring(label.length() + 1).trim();
-        }
-        return normalized.replace(label, "").trim();
-    }
-    
-    private Double parseConfidence(String text) {
-        if (text == null || text.isBlank()) {
-            return null;
-        }
-        String normalized = text.replace("%", "").trim();
-        try {
-            double value = Double.parseDouble(normalized);
-            if (value > 1) {
-                value = value / 100.0;
-            }
-            return Math.max(0, Math.min(value, 1));
-        } catch (NumberFormatException e) {
-            log.warn("解析追问信心度失败: {}", text);
-            return null;
-        }
-    }
-    
+
     private String buildDisplayText(CircuitWarmupResult result) {
         StringBuilder builder = new StringBuilder();
         if (hasText(result.getWarmupText())) {
@@ -525,11 +423,11 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         String content = builder.toString().trim();
         return content.isEmpty() ? result.getWarmupText() : content;
     }
-    
+
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }
-    
+
     private String resolveDesignTitle(CircuitDesign circuitDesign) {
         return Optional.ofNullable(circuitDesign)
             .map(CircuitDesign::getMetadata)
@@ -537,19 +435,19 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
             .filter(this::hasText)
             .orElse("电路分析");
     }
-    
+
     @Getter
     private static class CircuitWarmupResult {
         private final String warmupText;
         private final List<FollowUpSuggestion> followUps;
-        
+
         CircuitWarmupResult(String warmupText, List<FollowUpSuggestion> followUps) {
             this.warmupText = warmupText;
             this.followUps = followUps;
         }
 
     }
-    
+
     @Getter
     private static class FollowUpSuggestion {
         private final String title;
@@ -557,7 +455,7 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         private final String followUp;
         private final String intent;
         private final Double confidence;
-        
+
         FollowUpSuggestion(String title, String hint, String followUp, String intent, Double confidence) {
             this.title = title;
             this.hint = hint;

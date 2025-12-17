@@ -53,9 +53,9 @@ drawsee:
       apiKey: sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv
       modelName: deepseek-ai/DeepSeek-V3.2
     doubaoVision:
-      baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      apiKey: a923c210-64ac-43db-b0b9-5122b11a6aa7
-      modelName: doubao-seed-1-6-vision-250815
+      baseUrl: https://open.bigmodel.cn/api/paas/v4
+      apiKey: cc4f64b7080447b99560e43f6df775a4.ha56EPtvmi52EmZ1
+      modelName: glm-4.6v
     embedding:
       baseUrl: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
       apiKey: ${EMBEDDING_API_KEY:sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv}

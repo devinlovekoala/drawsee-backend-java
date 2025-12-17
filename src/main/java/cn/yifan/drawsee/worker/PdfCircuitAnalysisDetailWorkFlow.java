@@ -1,5 +1,6 @@
 package cn.yifan.drawsee.worker;
 
+import cn.yifan.drawsee.assistant.CircuitAnalysisAssistant;
 import cn.yifan.drawsee.constant.AiTaskMessageType;
 import cn.yifan.drawsee.constant.NodeSubType;
 import cn.yifan.drawsee.constant.NodeType;
@@ -14,6 +15,8 @@ import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
 import cn.yifan.drawsee.service.base.PromptService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.KnowledgeBaseService;
+import cn.yifan.drawsee.tool.AgenticRagTool;
 import cn.yifan.drawsee.util.PdfUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -36,11 +39,14 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * @FileName PdfCircuitAnalysisDetailWorkFlow
- * @Description 处理PDF电路实验任务分析点详情任务的工作流
- * @Author yifan
- * @date 2025-10-08
- **/
+ * PDF电路实验任务分析点详情工作流 - Tool-based架构
+ *
+ * 架构变更：
+ * - 旧版：Python LLM生成答案，Java转发SSE流
+ * - 新版：Java LangChain4j主导对话生成，Python仅提供RAG工具
+ *
+ * @author Drawsee Team
+ */
 
 @Slf4j
 @Service
@@ -48,6 +54,8 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
 
     private final PromptService promptService;
     private final MinioService minioService;
+    private final KnowledgeBaseService knowledgeBaseService;
+    private final AgenticRagTool agenticRagTool;
 
     public PdfCircuitAnalysisDetailWorkFlow(
         UserMapper userMapper,
@@ -59,11 +67,15 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
         AiTaskMapper aiTaskMapper,
         ObjectMapper objectMapper,
         PromptService promptService,
-        MinioService minioService
+        MinioService minioService,
+        KnowledgeBaseService knowledgeBaseService,
+        AgenticRagTool agenticRagTool
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.minioService = minioService;
+        this.knowledgeBaseService = knowledgeBaseService;
+        this.agenticRagTool = agenticRagTool;
     }
 
     @Override
@@ -164,8 +176,42 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
             log.info("PDF电路分析详情工作流：未能抽取正文，回退为URL兜底");
         }
 
-        // 调用AI进行详细分析，直接使用生成好的提示词
-        streamAiService.circuitAnalysisChat(history, prompt, model, handler);
+        // 构建Agentic RAG查询（PDF分析点详情）
+        String detailQuery = String.format(
+            "根据实验任务文档，详细分析【%s】这个角度：\n\n%s",
+            angleTitle,
+            extractedText != null ? extractedText : "文档链接：" + pdfUrl
+        );
+
+        // 获取知识库列表（使用权限验证）
+        List<String> knowledgeBaseIds = knowledgeBaseService.getUserAccessibleKnowledgeBaseIds(
+            aiTaskMessage.getUserId() != null ? aiTaskMessage.getUserId() : 0L,
+            null  // PDF详情工作流通常没有班级上下文
+        );
+
+        log.info("[PdfCircuitAnalysisDetail-Tool] 开始Tool-based对话生成, angle={}", angleTitle);
+
+        // 构建系统提示词
+        String systemPrompt = """
+            你是一位专业的电路分析助教，负责帮助学生深入理解PDF实验任务的具体分析点。
+
+            **重要规则**：
+            - 当需要查询教材、课件、电路知识库中的内容时，使用searchKnowledgeBase工具
+            - 对于实验任务的具体分析点，提供详细、深入的解答
+            - 回答要准确、详细，结合理论知识和实际电路分析
+
+            请基于PDF文档内容和知识库内容，提供详细的分析点解答。
+            """;
+
+        // 使用streamAiService的toolBasedChat方法
+        streamAiService.toolBasedChat(
+            systemPrompt,
+            detailQuery,
+            new Object[]{agenticRagTool},
+            cn.yifan.drawsee.constant.AiModel.DOUBAO,  // 使用豆包模型
+            CircuitAnalysisAssistant.class,
+            handler
+        );
     }
 
     /**

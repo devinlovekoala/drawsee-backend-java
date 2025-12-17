@@ -83,6 +83,26 @@ public class AiTaskType {
      */
     public static final String PDF_CIRCUIT_ANALYSIS_DETAIL = "PDF_CIRCUIT_ANALYSIS_DETAIL";
 
+    /**
+     * Agentic RAG v2 查询
+     */
+    public static final String AGENTIC_RAG = "AGENTIC_RAG";
+
+    /**
+     * Agentic RAG v2 公式计算
+     */
+    public static final String AGENTIC_RAG_FORMULA = "AGENTIC_RAG_FORMULA";
+
+    /**
+     * Agentic RAG v2 Netlist解析
+     */
+    public static final String AGENTIC_RAG_NETLIST = "AGENTIC_RAG_NETLIST";
+
+    /**
+     * Agentic RAG v2 图片分析
+     */
+    public static final String AGENTIC_RAG_IMAGE = "AGENTIC_RAG_IMAGE";
+
     private AiTaskType() {
         // 私有构造函数，防止实例化
     }

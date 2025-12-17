@@ -1,6 +1,9 @@
 package cn.yifan.drawsee.service.base;
 
 import cn.yifan.drawsee.util.InternalJwtUtil;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.model.StreamingResponseHandler;
+import dev.langchain4j.model.output.Response;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,9 +13,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Collections;
 
 /**
  * Python电路RAG微服务调用封装
@@ -26,6 +33,9 @@ public class PythonRagService {
 
     @Autowired
     private RestTemplate restTemplate;
+
+    @Autowired
+    private WebClient.Builder webClientBuilder;
 
     @Autowired
     private InternalJwtUtil internalJwtUtil;
@@ -82,7 +92,7 @@ public class PythonRagService {
         Map<String, Object> request = new HashMap<>();
         request.put("query", query);
         request.put("knowledge_base_ids", knowledgeBaseIds);
-        request.put("class_id", classId);
+        request.put("class_id", classId != null ? classId : "");  // 将null转换为空字符串，避免Python验证错误
         request.put("top_k", topK != null ? topK : 5);
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(
@@ -205,6 +215,180 @@ public class PythonRagService {
      */
     public Map<String, Object> hybridSearch(String query, java.util.List<String> knowledgeBaseIds, Integer topK) {
         return hybridSearch(query, knowledgeBaseIds, topK, 0.5, 0.5, 0.6, "hybrid");
+    }
+
+    /**
+     * Agentic RAG v2 同步查询（专为LangChain4j Tool集成设计）
+     *
+     * 此方法调用Python Agentic RAG服务的同步接口，返回完整结果。
+     * 适用于作为LangChain4j的Tool，让Java的ChatModel在需要时调用。
+     *
+     * @param query 用户查询
+     * @param knowledgeBaseIds 知识库ID列表
+     * @param classId 班级ID
+     * @param userId 用户ID
+     * @return 检索结果Map，包含answer、channel、confidence等字段
+     */
+    public Map<String, Object> agenticQuerySync(
+        String query,
+        java.util.List<String> knowledgeBaseIds,
+        String classId,
+        Long userId
+    ) {
+        String url = pythonServiceBaseUrl + "/api/v1/rag/agentic/query-sync";
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("query", query);
+        request.put("knowledge_base_ids", knowledgeBaseIds != null ? knowledgeBaseIds : Collections.emptyList());
+        request.put("has_image", false);
+        request.put("skip_classification", true);  // 🔥 启用快速路径：跳过分类直接检索
+        request.put("context", Map.of(
+            "class_id", classId != null ? classId : "",
+            "user_id", userId != null ? userId : 0L
+        ));
+        request.put("options", new HashMap<>());
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(
+            request,
+            createAuthHeaders(userId, classId, null)
+        );
+
+        try {
+            log.info("[AgenticRAG-Sync] 同步查询（快速路径）: query='{}...', kb_count={}",
+                     query.length() > 50 ? query.substring(0, 50) : query,
+                     knowledgeBaseIds != null ? knowledgeBaseIds.size() : 0);
+
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                url,
+                HttpMethod.POST,
+                entity,
+                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> result = response.getBody();
+                log.info("[AgenticRAG-Sync] 查询成功: channel={}, answer_length={}, elapsed_time={}s",
+                         result.get("channel"),
+                         result.get("answer") != null ? ((String)result.get("answer")).length() : 0,
+                         result.get("elapsed_time"));
+                return result;
+            } else {
+                log.error("[AgenticRAG-Sync] 查询失败: status={}", response.getStatusCode());
+                return Map.of("success", false, "error", "查询失败");
+            }
+
+        } catch (Exception e) {
+            log.error("[AgenticRAG-Sync] 查询异常: {}", e.getMessage(), e);
+            return Map.of("success", false, "error", "查询异常: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Agentic RAG v2 流式查询（专为WorkFlow集成设计）
+     *
+     * 此方法调用Python Agentic RAG服务的简化流式接口，支持智能路由到6个频道：
+     * - FormulaChannel: 精确数学公式计算（SymPy）
+     * - KnowledgeChannel: 强制RAG检索知识库
+     * - NetlistChannel: SPICE网表解析
+     * - VerilogChannel: Verilog代码分析
+     * - VisionChannel: 电路图图像识别
+     * - CircuitReasoningChannel: 复杂电路推理（多步Agent）
+     *
+     * @param query 用户查询
+     * @param knowledgeBaseIds 知识库ID列表
+     * @param classId 班级ID
+     * @param userId 用户ID
+     * @param handler 流式响应处理器（LangChain4j的StreamingResponseHandler）
+     */
+    public void agenticStreamQuery(
+        String query,
+        java.util.List<String> knowledgeBaseIds,
+        String classId,
+        Long userId,
+        StreamingResponseHandler<AiMessage> handler
+    ) {
+        String url = pythonServiceBaseUrl + "/api/v1/rag/agentic/stream";
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("query", query);
+        request.put("knowledge_base_ids", knowledgeBaseIds != null ? knowledgeBaseIds : Collections.emptyList());
+        request.put("has_image", false);
+        request.put("context", Map.of(
+            "class_id", classId != null ? classId : "",
+            "user_id", userId
+        ));
+
+        WebClient webClient = webClientBuilder.build();
+
+        try {
+            log.info("[AgenticRAG] 开始流式查询: query='{}...', kb_count={}",
+                     query.length() > 50 ? query.substring(0, 50) : query,
+                     knowledgeBaseIds != null ? knowledgeBaseIds.size() : 0);
+
+            // 用于累积完整文本
+            StringBuilder accumulatedText = new StringBuilder();
+
+            webClient.post()
+                .uri(url)
+                .header("Authorization", "Bearer " + internalJwtUtil.generateToken(userId, classId, null))
+                .header("Accept", "text/event-stream")  // 明确指定接受SSE
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .retrieve()
+                .bodyToFlux(String.class)
+                .doOnNext(chunk -> {
+                    // 调试日志：记录收到的原始chunk
+                    log.info("[AgenticRAG] 收到SSE chunk: length={}, content='{}'",
+                             chunk.length(),
+                             chunk.length() > 100 ? chunk.substring(0, 100) + "..." : chunk);
+                })
+                .filter(chunk -> chunk != null && !chunk.trim().isEmpty())
+                .subscribe(
+                    // onNext: 处理每个SSE chunk
+                    chunk -> {
+                        // WebClient的bodyToFlux(String.class)会自动解析SSE格式
+                        // 已经去掉了"data: "前缀，chunk就是纯内容
+                        if ("[DONE]".equals(chunk.trim())) {
+                            // 流式结束
+                            handler.onComplete(
+                                Response.from(
+                                    AiMessage.from(accumulatedText.toString())
+                                )
+                            );
+                            log.info("[AgenticRAG] 流式查询完成: total_length={}", accumulatedText.length());
+                        } else if (!chunk.trim().isEmpty()) {
+                            // 累积文本片段（跳过空行）
+                            accumulatedText.append(chunk);
+                            // 调用handler的onNext（LangChain4j会处理流式更新）
+                            handler.onNext(chunk);
+                            log.debug("[AgenticRAG] 累积文本: chunk_length={}, total_length={}",
+                                     chunk.length(), accumulatedText.length());
+                        }
+                    },
+                    // onError: 处理错误
+                    error -> {
+                        log.error("[AgenticRAG] 流式查询失败: {}", error.getMessage(), error);
+                        handler.onError(error);
+                    },
+                    // onComplete: 流结束（如果没有收到[DONE]标记）
+                    () -> {
+                        if (accumulatedText.length() > 0) {
+                            handler.onComplete(
+                                Response.from(
+                                    AiMessage.from(accumulatedText.toString())
+                                )
+                            );
+                            log.info("[AgenticRAG] 流式查询完成（无DONE标记）: total_length={}", accumulatedText.length());
+                        } else {
+                            log.warn("[AgenticRAG] 流结束但未收到任何内容");
+                        }
+                    }
+                );
+
+        } catch (Exception e) {
+            log.error("[AgenticRAG] 流式查询异常: {}", e.getMessage(), e);
+            handler.onError(e);
+        }
     }
 
     /**

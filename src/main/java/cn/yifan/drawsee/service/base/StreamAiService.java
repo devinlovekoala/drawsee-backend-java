@@ -14,10 +14,12 @@ import org.springframework.stereotype.Service;
 import java.util.LinkedList;
 import java.util.List;
 import dev.langchain4j.data.message.ImageContent;
+import dev.langchain4j.service.AiServices;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 
 /**
  * @FileName StreamAiService
- * @Description 
+ * @Description
  * @Author yifan
  * @date 2025-03-09 23:38
  **/
@@ -225,6 +227,61 @@ public class StreamAiService {
 		} else {
 			log.info("当前模型不支持多模态，退化为文本提示，模型: {}", model);
 			deepseekV3StreamingChatLanguageModel.generate(messages, handler);
+		}
+	}
+
+	/**
+	 * Tool-based chat with Agentic RAG integration
+	 * 使用LangChain4j AiServices构建Assistant，支持Tool自动调用
+	 *
+	 * @param systemPrompt 系统提示词（定义角色和Tool调用规则）
+	 * @param userQuery 用户查询（包含完整上下文）
+	 * @param tools 要注册的Tool实例
+	 * @param model 使用的AI模型
+	 * @param handler 流式处理器
+	 */
+	public <T> void toolBasedChat(
+		String systemPrompt,
+		String userQuery,
+		Object[] tools,
+		String model,
+		Class<T> assistantInterface,
+		StreamingResponseHandler<AiMessage> handler
+	) {
+		// 选择ChatModel
+		StreamingChatLanguageModel chatModel;
+		if (model.equals(AiModel.DEEPSEEKV3)) {
+			log.info("使用DeepSeekV3模型进行Tool-based对话");
+			chatModel = deepseekV3StreamingChatLanguageModel;
+		} else {
+			log.info("使用豆包模型进行Tool-based对话");
+			chatModel = doubaoStreamingChatLanguageModel;
+		}
+
+		// 使用AiServices构建Assistant
+		T assistant = AiServices.builder(assistantInterface)
+			.streamingChatLanguageModel(chatModel)
+			.tools(tools)
+			.chatMemory(MessageWindowChatMemory.withMaxMessages(10))
+			.build();
+
+		// 组合完整查询
+		String fullQuery = systemPrompt + "\n\n" + userQuery;
+
+		// 通过反射调用chat方法（因为assistantInterface可能有不同的方法签名）
+		try {
+			java.lang.reflect.Method chatMethod = assistantInterface.getMethod("chat", String.class);
+			dev.langchain4j.service.TokenStream tokenStream =
+				(dev.langchain4j.service.TokenStream) chatMethod.invoke(assistant, fullQuery);
+
+			tokenStream
+				.onNext(handler::onNext)
+				.onComplete(handler::onComplete)
+				.onError(handler::onError)
+				.start();
+		} catch (Exception e) {
+			log.error("Tool-based chat调用失败: {}", e.getMessage(), e);
+			handler.onError(e);
 		}
 	}
 }

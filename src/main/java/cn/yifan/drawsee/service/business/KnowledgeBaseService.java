@@ -77,6 +77,9 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
     @Autowired
     private EmbeddingModelProperties embeddingModelProperties;
 
+    @Autowired
+    private UserRoleService userRoleService;
+
     /**
      * 创建知识库
      * @param createKnowledgeBaseDTO 创建知识库DTO
@@ -568,7 +571,108 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
         
         // 更新课程
         courseMapper.update(course);
-        
+
         return knowledgeBase.getId();
+    }
+
+    /**
+     * 获取用户可访问的知识库ID列表（用于Agentic RAG查询）
+     *
+     * 权限规则：
+     * 1. 管理员创建的知识库 → 全局所有用户可访问
+     * 2. 教师创建的知识库 → 仅该教师开设班级中的学生可访问
+     * 3. 用户自己创建的知识库 → 用户自己可访问
+     * 4. 用户作为成员的知识库 → 用户可访问
+     *
+     * @param userId 用户ID
+     * @param classId 班级ID（可选，如果提供则额外包含该班级的教师知识库）
+     * @return 知识库ID列表
+     */
+    public List<String> getUserAccessibleKnowledgeBaseIds(Long userId, String classId) {
+        List<String> accessibleKbIds = new ArrayList<>();
+
+        try {
+            // 1. 获取所有管理员创建的知识库（全局可用）
+            List<KnowledgeBase> allKbs = knowledgeBaseMapper.getAll(false);
+            if (allKbs != null) {
+                for (KnowledgeBase kb : allKbs) {
+                    // 检查创建者是否是管理员
+                    if (kb.getCreatorId() != null && userRoleService.isUserAdmin(kb.getCreatorId())) {
+                        accessibleKbIds.add(kb.getId());
+                        log.debug("[KnowledgeBase] 添加管理员知识库: kbId={}, creatorId={}",
+                                 kb.getId(), kb.getCreatorId());
+                    }
+                }
+            }
+
+            // 2. 获取用户创建的知识库
+            List<KnowledgeBase> userCreatedKbs = knowledgeBaseMapper.getByCreatorId(userId, false);
+            if (userCreatedKbs != null) {
+                userCreatedKbs.stream()
+                    .map(KnowledgeBase::getId)
+                    .forEach(accessibleKbIds::add);
+            }
+
+            // 3. 获取用户作为成员的知识库
+            List<KnowledgeBase> memberKbs = knowledgeBaseMapper.getByMemberId(userId, false);
+            if (memberKbs != null) {
+                memberKbs.stream()
+                    .map(KnowledgeBase::getId)
+                    .filter(id -> !accessibleKbIds.contains(id)) // 去重
+                    .forEach(accessibleKbIds::add);
+            }
+
+            // 4. 如果提供了classId，获取该班级关联的教师知识库
+            if (classId != null && !classId.isBlank()) {
+                List<KnowledgeBase> classKbs = knowledgeBaseMapper.listByClassId(Long.parseLong(classId));
+                if (classKbs != null) {
+                    classKbs.stream()
+                        .map(KnowledgeBase::getId)
+                        .filter(id -> !accessibleKbIds.contains(id)) // 去重
+                        .forEach(accessibleKbIds::add);
+                }
+            }
+
+            log.info("[KnowledgeBase] 用户{}可访问的知识库: count={}, classId={}",
+                     userId, accessibleKbIds.size(), classId);
+
+            return accessibleKbIds;
+
+        } catch (Exception e) {
+            log.error("[KnowledgeBase] 获取用户可访问知识库失败: userId={}, error={}",
+                     userId, e.getMessage(), e);
+            // 失败时返回空列表，避免影响主流程
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 获取所有管理员创建的知识库ID列表（全局公开）
+     *
+     * @return 管理员知识库ID列表
+     */
+    public List<String> getAdminKnowledgeBaseIds() {
+        List<String> adminKbIds = new ArrayList<>();
+
+        try {
+            // 获取所有知识库
+            List<KnowledgeBase> allKbs = knowledgeBaseMapper.getAll(false);
+
+            if (allKbs != null) {
+                for (KnowledgeBase kb : allKbs) {
+                    // 检查创建者是否是管理员
+                    if (kb.getCreatorId() != null && userRoleService.isUserAdmin(kb.getCreatorId())) {
+                        adminKbIds.add(kb.getId());
+                    }
+                }
+            }
+
+            log.info("[KnowledgeBase] 管理员知识库数量: {}", adminKbIds.size());
+            return adminKbIds;
+
+        } catch (Exception e) {
+            log.error("[KnowledgeBase] 获取管理员知识库失败: {}", e.getMessage(), e);
+            return new ArrayList<>();
+        }
     }
 }

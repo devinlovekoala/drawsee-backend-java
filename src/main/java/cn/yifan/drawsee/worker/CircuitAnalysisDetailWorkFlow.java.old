@@ -1,7 +1,5 @@
 package cn.yifan.drawsee.worker;
 
-import cn.yifan.drawsee.assistant.CircuitAnalysisAssistant;
-import cn.yifan.drawsee.constant.AiModel;
 import cn.yifan.drawsee.constant.AiTaskMessageType;
 import cn.yifan.drawsee.constant.AiTaskStatus;
 import cn.yifan.drawsee.constant.NodeSubType;
@@ -19,13 +17,14 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.PromptService;
+import cn.yifan.drawsee.service.base.PythonRagService;
 import cn.yifan.drawsee.service.base.StreamAiService;
 import cn.yifan.drawsee.service.business.KnowledgeBaseService;
-import cn.yifan.drawsee.tool.AgenticRagTool;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.output.Response;
 import lombok.extern.slf4j.Slf4j;
@@ -43,22 +42,20 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 电路分析追问工作流 - Tool-based架构
- *
- * 架构变更：
- * - 旧版：Python LLM生成完整答案，Java转发SSE流
- * - 新版：Java LangChain4j主导对话生成，Python仅提供RAG工具
- *
- * @author Drawsee Team
- */
+ * @FileName CircuitAnalysisDetailWorkFlow
+ * @Description 处理电路分析点详情任务的工作流
+ * @Author yifan
+ * @date 2025-04-15 14:30
+ **/
+
 @Slf4j
 @Service
 public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
 
     private final PromptService promptService;
     private final SpiceConverter spiceConverter;
+    private final PythonRagService pythonRagService;
     private final KnowledgeBaseService knowledgeBaseService;
-    private final AgenticRagTool agenticRagTool;
 
     public CircuitAnalysisDetailWorkFlow(
         UserMapper userMapper,
@@ -71,29 +68,31 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         ObjectMapper objectMapper,
         PromptService promptService,
         SpiceConverter spiceConverter,
-        KnowledgeBaseService knowledgeBaseService,
-        AgenticRagTool agenticRagTool
+        PythonRagService pythonRagService,
+        KnowledgeBaseService knowledgeBaseService
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.spiceConverter = spiceConverter;
+        this.pythonRagService = pythonRagService;
         this.knowledgeBaseService = knowledgeBaseService;
-        this.agenticRagTool = agenticRagTool;
     }
-
+    
     @Override
     public Boolean validateAndInit(WorkContext workContext) {
         Boolean isValid = super.validateAndInit(workContext);
         if (!isValid) return false;
-
+        
         Node parentNode = workContext.getParentNode();
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
-
+        
+        // 校验父节点类型是否为新的电路分析节点
         if (!parentNode.getType().equals(NodeType.CIRCUIT_ANALYZE)) {
             log.error("父节点不是电路分析节点, taskMessage: {}", aiTaskMessage);
             return false;
         }
 
+        // 预先查找电路画布节点，避免后续流程中断导致超时
         CircuitDesign circuitDesign = findCircuitDesign(workContext);
         if (circuitDesign == null) {
             log.error("未在会话中找到电路画布节点, taskMessage: {}", aiTaskMessage);
@@ -101,28 +100,34 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
             return false;
         }
         workContext.putExtraData("circuitDesign", circuitDesign);
-
+        
         return true;
     }
-
+    
+    /**
+     * 覆盖父类方法，避免创建QUERY节点
+     * 直接使用circuit-analyze节点作为详情回答的父节点
+     */
     @Override
     public void createInitNodes(WorkContext workContext) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         Long parentNodeId = aiTaskMessage.getParentId();
+        
+        // 直接创建详情回答节点，跳过创建QUERY节点
         createInitStreamNode(workContext, parentNodeId);
     }
-
+    
     @Override
     public void createInitStreamNode(WorkContext workContext, Long parentNodeId) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         Node parentNode = workContext.getParentNode();
-
+        
         TypeReference<Map<String, Object>> dataTypeRef = new TypeReference<>() {};
         Map<String, Object> parentNodeData = objectMapper.readValue(parentNode.getData(), dataTypeRef);
         String contextTitle = parentNodeData.getOrDefault("contextTitle", parentNodeData.getOrDefault("title", "电路分析")).toString();
         String contextText = parentNodeData.getOrDefault("text", "").toString();
         String followUp = aiTaskMessage.getPrompt();
-
+        
         Map<String, Object> circuitDetailNodeData = new ConcurrentHashMap<>();
         circuitDetailNodeData.put("subtype", NodeSubType.CIRCUIT_DETAIL);
         circuitDetailNodeData.put("title", NodeTitle.CIRCUIT_DETAIL);
@@ -132,7 +137,7 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         circuitDetailNodeData.put("followUp", followUp);
         circuitDetailNodeData.put("followUps", new ArrayList<>());
         circuitDetailNodeData.put("parentPointId", String.valueOf(parentNodeId));
-
+        
         Node circuitDetailNode = new Node(
             NodeType.CIRCUIT_ANALYZE,
             objectMapper.writeValueAsString(circuitDetailNodeData),
@@ -143,13 +148,15 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
             true
         );
         insertAndPublishStreamNode(workContext, circuitDetailNode, circuitDetailNodeData);
-        log.info("[CircuitAnalysisDetail-Tool] 创建追问解析节点, parentNodeId={}, detailNodeId={}", parentNodeId, circuitDetailNode.getId());
+        log.info("[CircuitAnalysisDetail] 创建追问解析节点, parentNodeId={}, detailNodeId={}", parentNodeId, circuitDetailNode.getId());
     }
-
+    
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        LinkedList<ChatMessage> history = workContext.getHistory();
         Node parentNode = workContext.getParentNode();
+        String model = aiTaskMessage.getModel();
 
         TypeReference<Map<String, Object>> dataTypeRef = new TypeReference<>() {};
         Map<String, Object> parentNodeData = objectMapper.readValue(parentNode.getData(), dataTypeRef);
@@ -157,7 +164,7 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         String contextText = parentNodeData.getOrDefault("text", "").toString();
         String followUpQuestion = aiTaskMessage.getPrompt();
 
-        // 获取电路设计数据
+        // 找到电路画布节点以获取电路设计数据
         CircuitDesign circuitDesign = (CircuitDesign) workContext.getExtraData("circuitDesign");
         if (circuitDesign == null) {
             circuitDesign = findCircuitDesign(workContext);
@@ -171,142 +178,75 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         // 生成SPICE网表
         String spiceNetlist = spiceConverter.generateNetlist(circuitDesign);
 
-        // 构建系统提示词
-        String systemPrompt = buildSystemPrompt();
-
-        // 构建用户查询（包含上下文和电路信息）
-        String userQuery = buildUserQuery(
-            followUpQuestion, contextTitle, contextText, spiceNetlist, circuitDesign
+        String detailPrompt = promptService.getCircuitAnalyzeDetailPrompt(
+            circuitDesign,
+            spiceNetlist,
+            contextTitle,
+            contextText,
+            followUpQuestion
         );
 
-        // 获取用户可访问的知识库ID列表（用于Tool调用时的权限控制）
+        // 构建Agentic RAG查询（追问详情）
+        String detailQuery = buildDetailQueryForAgenticRAG(
+            followUpQuestion, contextTitle, contextText, spiceNetlist
+        );
+
+        // 获取知识库列表（使用权限验证，包含班级上下文）
         List<String> knowledgeBaseIds = knowledgeBaseService.getUserAccessibleKnowledgeBaseIds(
             aiTaskMessage.getUserId(),
-            aiTaskMessage.getClassId()
+            aiTaskMessage.getClassId()  // 传入班级ID以获取教师知识库访问权限
         );
 
-        // 将知识库ID存入上下文，供AgenticRagTool使用
-        workContext.putExtraData("knowledgeBaseIds", knowledgeBaseIds);
-        workContext.putExtraData("userId", aiTaskMessage.getUserId());
-        if (aiTaskMessage.getClassId() != null) {
-            workContext.putExtraData("classId", aiTaskMessage.getClassId());
+        // 优先使用Agentic RAG v2进行追问详情分析，失败则降级到传统方式
+        try {
+            log.info("[CircuitAnalysisDetail] 使用Agentic RAG v2进行追问分析, question='{}'",
+                     followUpQuestion.length() > 50 ? followUpQuestion.substring(0, 50) + "..." : followUpQuestion);
+            pythonRagService.agenticStreamQuery(
+                detailQuery,
+                knowledgeBaseIds,
+                aiTaskMessage.getClassId(),
+                aiTaskMessage.getUserId(),
+                handler
+            );
+        } catch (Exception e) {
+            log.warn("[CircuitAnalysisDetail] Agentic RAG调用失败，降级到传统方式: {}", e.getMessage());
+            // 调用AI进行详细分析
+            streamAiService.circuitAnalysisChat(history, detailPrompt, model, handler);
         }
-
-        log.info("[CircuitAnalysisDetail-Tool] 开始Tool-based对话生成: question='{}...', kb_count={}",
-                 followUpQuestion.length() > 50 ? followUpQuestion.substring(0, 50) : followUpQuestion,
-                 knowledgeBaseIds.size());
-
-        // 使用streamAiService的toolBasedChat方法
-        streamAiService.toolBasedChat(
-            systemPrompt,
-            userQuery,
-            new Object[]{agenticRagTool},
-            AiModel.DOUBAO,  // 使用豆包模型
-            CircuitAnalysisAssistant.class,
-            handler
-        );
     }
 
     /**
-     * 构建系统提示词
+     * 构建用于Agentic RAG的追问查询
      */
-    private String buildSystemPrompt() {
-        return """
-            你是一位专业的电路分析助教，负责帮助学生理解电路设计和工作原理。
-
-            **重要规则**：
-            - 当需要查询教材、课件、电路知识库中的内容时，使用searchKnowledgeBase工具
-            - 当涉及电路理论、公式推导、元件特性时，优先调用searchKnowledgeBase工具
-            - 对于电路结构分析、拓扑分析等可以直接基于提供的网表和电路图回答
-            - 回答要准确、详细，结合理论知识和实际电路分析
-
-            **输出格式**：
-            - 使用清晰的Markdown格式
-            - 对关键概念加粗或标注
-            - 如果涉及公式，使用LaTeX格式
-            - 结构化你的回答（分点、分段）
-
-            请基于知识库内容和你的专业知识，为学生提供准确、详细的电路分析。
-            """;
-    }
-
-    /**
-     * 构建用户查询（包含上下文和电路信息）
-     */
-    private String buildUserQuery(
+    private String buildDetailQueryForAgenticRAG(
         String followUpQuestion,
         String contextTitle,
         String contextText,
-        String spiceNetlist,
-        CircuitDesign circuitDesign
+        String spiceNetlist
     ) {
         StringBuilder query = new StringBuilder();
 
-        query.append("## 电路分析追问\n\n");
-
-        // 添加前置上下文
+        // 添加上下文信息
+        query.append("针对电路分析的追问：\n\n");
         query.append("**前置上下文**: ").append(contextTitle).append("\n");
         if (contextText != null && !contextText.isBlank()) {
+            // 截取前200字符避免过长
             String shortContext = contextText.length() > 200
                 ? contextText.substring(0, 200) + "..."
                 : contextText;
             query.append(shortContext).append("\n\n");
         }
 
-        // 添加电路信息
-        query.append("**电路信息**:\n");
-        query.append("- 元件数量: ").append(circuitDesign.getElements() != null ? circuitDesign.getElements().size() : 0).append("\n");
-        query.append("- 连线数量: ").append(circuitDesign.getConnections() != null ? circuitDesign.getConnections().size() : 0).append("\n\n");
+        // 添加用户的追问
+        query.append("**用户追问**: ").append(followUpQuestion).append("\n\n");
 
-        // 添加SPICE网表（如果有）
+        // 如果有SPICE网表，添加到查询中
         if (spiceNetlist != null && !spiceNetlist.isBlank()) {
-            query.append("**电路网表**:\n```spice\n");
-            query.append(spiceNetlist);
-            query.append("\n```\n\n");
+            query.append("**电路网表**:\n");
+            query.append(spiceNetlist).append("\n");
         }
 
-        // 添加用户的追问
-        query.append("**学生追问**: ").append(followUpQuestion).append("\n\n");
-
-        query.append("请结合电路信息和知识库内容，详细回答学生的问题。");
-
         return query.toString();
-    }
-
-    @Override
-    public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
-        RStream<String, Object> redisStream = workContext.getRedisStream();
-        Node streamNode = workContext.getStreamNode();
-        Map<String, Object> streamNodeData = workContext.getStreamNodeData();
-        Response<AiMessage> streamResponse = workContext.getStreamResponse();
-        String detailText = streamResponse.content().text();
-
-        List<Map<String, Object>> followUpSuggestions = extractContinuationSuggestions(detailText);
-        streamNodeData.put("text", detailText);
-        streamNodeData.put("followUps", followUpSuggestions);
-        streamNodeData.put("isGenerated", true);
-        streamNodeData.put("isDone", true);
-        log.info("[CircuitAnalysisDetail-Tool] 追问生成完成, nodeId={}, followUps={}", streamNode.getId(), followUpSuggestions.size());
-
-        Map<String, Object> payload = new ConcurrentHashMap<>();
-        payload.put("nodeId", streamNode.getId());
-        payload.put("text", detailText);
-        payload.put("followUps", followUpSuggestions);
-        payload.put("isGenerated", true);
-        payload.put("isDone", true);
-        redisStream.add(StreamAddArgs.entries(
-            "type", AiTaskMessageType.DATA,
-            "data", payload
-        ));
-    }
-
-    @Override
-    public void updateStreamNode(WorkContext workContext) throws JsonProcessingException {
-        Node streamNode = workContext.getStreamNode();
-        Map<String, Object> streamNodeData = workContext.getStreamNodeData();
-        streamNode.setIsDeleted(false);
-        streamNode.setData(objectMapper.writeValueAsString(streamNodeData));
-        workContext.getNodesToUpdate().add(streamNode);
     }
 
     private List<Map<String, Object>> extractContinuationSuggestions(String responseText) {
@@ -352,7 +292,7 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         if (current.length() > 0) {
             suggestions.add(current.toString().trim());
         }
-
+        
         List<Map<String, Object>> followUps = new ArrayList<>();
         for (int i = 0; i < suggestions.size(); i++) {
             String suggestion = suggestions.get(i);
@@ -370,7 +310,7 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         }
         return followUps;
     }
-
+    
     private String normalizeSuggestionLine(String line) {
         String trimmed = line.trim();
         if (trimmed.startsWith("-") || trimmed.startsWith("*")) {
@@ -381,7 +321,7 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         }
         return trimmed.trim();
     }
-
+    
     private String ensureQuestionSentence(String text) {
         if (text == null) {
             return "";
@@ -398,23 +338,67 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         }
         return trimmed + "？";
     }
-
+    
+    @Override
+    public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
+        RStream<String, Object> redisStream = workContext.getRedisStream();
+        Node streamNode = workContext.getStreamNode();
+        Map<String, Object> streamNodeData = workContext.getStreamNodeData();
+        Response<AiMessage> streamResponse = workContext.getStreamResponse();
+        String detailText = streamResponse.content().text();
+        
+        List<Map<String, Object>> followUpSuggestions = extractContinuationSuggestions(detailText);
+        streamNodeData.put("text", detailText);
+        streamNodeData.put("followUps", followUpSuggestions);
+        streamNodeData.put("isGenerated", true);
+        streamNodeData.put("isDone", true);
+        log.info("[CircuitAnalysisDetail] 追问生成完成, nodeId={}, followUps={}", streamNode.getId(), followUpSuggestions.size());
+        
+        Map<String, Object> payload = new ConcurrentHashMap<>();
+        payload.put("nodeId", streamNode.getId());
+        payload.put("text", detailText);
+        payload.put("followUps", followUpSuggestions);
+        payload.put("isGenerated", true);
+        payload.put("isDone", true);
+        redisStream.add(StreamAddArgs.entries(
+            "type", AiTaskMessageType.DATA,
+            "data", payload
+        ));
+    }
+    
+    @Override
+    public void updateStreamNode(WorkContext workContext) throws JsonProcessingException {
+        Node streamNode = workContext.getStreamNode();
+        Map<String, Object> streamNodeData = workContext.getStreamNodeData();
+        streamNode.setIsDeleted(false);
+        streamNode.setData(objectMapper.writeValueAsString(streamNodeData));
+        workContext.getNodesToUpdate().add(streamNode);
+    }
+    
+    /**
+     * 向上回溯查找电路设计数据
+     * @param workContext 工作上下文
+     * @return 电路设计数据
+     */
     private CircuitDesign findCircuitDesign(WorkContext workContext) {
         Node parentNode = workContext.getParentNode();
         Long convId = parentNode.getConvId();
         List<Node> nodes = nodeMapper.getByConvId(convId);
         Map<Long, Node> nodeMap = nodes.stream().collect(ConcurrentHashMap::new, (map, node) -> map.put(node.getId(), node), ConcurrentHashMap::putAll);
-
+        
+        // 向上回溯查找CIRCUIT_CANVAS节点
         Node currentNode = parentNode;
         while (currentNode != null && !currentNode.getType().equals(NodeType.ROOT)) {
             Node nextNode = nodeMap.get(currentNode.getParentId());
-
+            
+            // 如果下一个节点是CIRCUIT_CANVAS节点，则获取电路设计数据
             if (nextNode != null && nextNode.getType().equals(NodeType.CIRCUIT_CANVAS)) {
                 try {
                     TypeReference<Map<String, Object>> dataTypeRef = new TypeReference<>() {};
                     Map<String, Object> canvasNodeData = objectMapper.readValue(nextNode.getData(), dataTypeRef);
                     Object circuitDesignObj = canvasNodeData.get("circuitDesign");
-
+                    
+                    // 将Object转为JSON字符串再转为CircuitDesign对象
                     String circuitDesignJson = objectMapper.writeValueAsString(circuitDesignObj);
                     return objectMapper.readValue(circuitDesignJson, CircuitDesign.class);
                 } catch (JsonProcessingException e) {
@@ -422,13 +406,16 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
                     return null;
                 }
             }
-
+            
             currentNode = nextNode;
         }
-
+        
         return null;
     }
 
+    /**
+     * 在校验失败时，向前端推送错误并标记任务失败，避免SSE一直等待
+     */
     private void publishErrorAndFail(WorkContext workContext, String message) {
         try {
             RStream<String, Object> redisStream = workContext.getRedisStream();

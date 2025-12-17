@@ -1,5 +1,6 @@
 package cn.yifan.drawsee.worker;
 
+import cn.yifan.drawsee.assistant.CircuitAnalysisAssistant;
 import cn.yifan.drawsee.constant.NodeTitle;
 import cn.yifan.drawsee.constant.AiTaskMessageType;
 import cn.yifan.drawsee.constant.NodeSubType;
@@ -15,9 +16,10 @@ import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
 import cn.yifan.drawsee.service.base.PdfMultimodalService;
 import cn.yifan.drawsee.service.base.PromptService;
-import cn.yifan.drawsee.service.base.PythonRagService;
 import cn.yifan.drawsee.service.base.StreamAiService;
 import cn.yifan.drawsee.service.base.WebSearchService;
+import cn.yifan.drawsee.service.business.KnowledgeBaseService;
+import cn.yifan.drawsee.tool.AgenticRagTool;
 import cn.yifan.drawsee.util.PdfUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,11 +42,14 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * @FileName PdfCircuitAnalysisWorkFlow
- * @Description PDF电路实验任务文档分析工作流，处理PDF电路实验任务分析任务
- * @Author yifan
- * @date 2025-10-08
- **/
+ * PDF电路实验任务文档分析工作流 - Tool-based架构
+ *
+ * 架构变更：
+ * - 旧版：Python LLM生成答案，Java转发SSE流
+ * - 新版：Java LangChain4j主导对话生成，Python仅提供RAG工具
+ *
+ * @author Drawsee Team
+ */
 
 @Slf4j
 @Service
@@ -54,7 +59,8 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
     private final MinioService minioService;
     private final PdfMultimodalService pdfMultimodalService;
     private final WebSearchService webSearchService;
-    private final PythonRagService pythonRagService;
+    private final KnowledgeBaseService knowledgeBaseService;
+    private final AgenticRagTool agenticRagTool;
 
     public PdfCircuitAnalysisWorkFlow(
             UserMapper userMapper,
@@ -69,14 +75,16 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             MinioService minioService,
             PdfMultimodalService pdfMultimodalService,
             WebSearchService webSearchService,
-            PythonRagService pythonRagService
+            KnowledgeBaseService knowledgeBaseService,
+            AgenticRagTool agenticRagTool
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.minioService = minioService;
         this.pdfMultimodalService = pdfMultimodalService;
         this.webSearchService = webSearchService;
-        this.pythonRagService = pythonRagService;
+        this.knowledgeBaseService = knowledgeBaseService;
+        this.agenticRagTool = agenticRagTool;
     }
 
     @Override
@@ -219,9 +227,36 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
         log.info("PDF电路分析工作流生成提示词完成，内容长度: {}, taskId: {}",
                  enhancedContent.length(), aiTaskMessage.getTaskId());
 
-        // 调用AI进行PDF电路实验任务分析
-        history.add(new UserMessage(prompt));
-        streamAiService.answerPointChat(history, "", model, handler);
+        // 构建Agentic RAG查询（包含PDF文档内容）
+        String pdfQuery = "根据以下PDF实验任务文档，提供分点分析：\n\n" + enhancedContent;
+
+        // 获取知识库列表
+        List<String> knowledgeBaseIds = getAccessiblePublicKnowledgeBases();
+
+        log.info("[PdfCircuitAnalysis-Tool] 开始Tool-based对话生成, taskId={}", aiTaskMessage.getTaskId());
+
+        // 构建系统提示词
+        String systemPrompt = """
+            你是一位专业的电路分析助教，负责帮助学生理解电路实验任务。
+
+            **重要规则**：
+            - 当需要查询教材、课件、电路知识库中的内容时，使用searchKnowledgeBase工具
+            - 对于PDF实验任务文档的分析，按照分点格式输出
+            - 回答要准确、详细，结合理论知识和实际电路分析
+
+            请基于PDF文档内容和知识库内容，提供详细的分点分析。
+            """;
+
+        // 使用streamAiService的toolBasedChat方法
+        streamAiService.toolBasedChat(
+            systemPrompt,
+            pdfQuery,
+            new Object[]{agenticRagTool},
+            cn.yifan.drawsee.constant.AiModel.DOUBAO,  // 使用豆包模型
+            CircuitAnalysisAssistant.class,
+            handler
+        );
+
         log.info("PDF电路分析工作流流式聊天调用完成，taskId: {}", aiTaskMessage.getTaskId());
     }
 
@@ -398,89 +433,16 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
 
     /**
      * 从知识库检索相关电路原理知识
+     *
+     * Note: Tool-based架构下，此方法已废弃
+     * RAG查询现在通过AgenticRagTool在LLM调用时自动完成
+     *
      * @param pdfContent PDF分析内容
-     * @return RAG增强的知识内容，失败返回null
+     * @return null（Tool-based架构下不再使用此方法）
      */
     private String tryEnhanceWithKnowledgeBase(String pdfContent) {
-        try {
-            // 从PDF内容中提取关键电路术语作为查询
-            String query = extractCircuitQuery(pdfContent);
-            if (query == null || query.isBlank()) {
-                log.info("无法从PDF内容中提取电路查询关键词，跳过RAG增强");
-                return null;
-            }
-
-            // 获取可访问的知识库（使用公开知识库）
-            // 注意：PDF工作流通常不绑定特定班级，使用全局公开知识库
-            List<String> knowledgeBaseIds = getAccessiblePublicKnowledgeBases();
-
-            if (knowledgeBaseIds.isEmpty()) {
-                log.info("没有可访问的知识库，跳过RAG增强");
-                return null;
-            }
-
-            log.info("使用RAG检索知识库电路原理: 知识库数量={}, 查询关键词={}", knowledgeBaseIds.size(), query);
-
-            // 调用RAG服务检索相关电路知识
-            var ragResponse = pythonRagService.ragQuery(
-                query,
-                knowledgeBaseIds,
-                null,  // classId - PDF工作流可能没有班级上下文
-                0L,    // userId - 使用系统用户
-                3      // Top-K: 返回3个最相关的电路图
-            );
-
-            if (ragResponse == null) {
-                log.info("RAG服务返回null，跳过知识库增强");
-                return null;
-            }
-
-            // 解析Python服务响应
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> results = (List<Map<String, Object>>) ragResponse.get("results");
-
-            if (results == null || results.isEmpty()) {
-                log.info("RAG检索无结果");
-                return null;
-            }
-
-            // 格式化检索结果
-            StringBuilder ragContent = new StringBuilder();
-            int index = 1;
-            for (Map<String, Object> result : results) {
-                String caption = (String) result.get("caption");
-                Object pageNum = result.get("page_number");
-                Object score = result.get("score");
-
-                if (caption != null && !caption.isBlank()) {
-                    ragContent.append(String.format(
-                        "【相关电路%d】(相似度: %.2f, 页码: %s)\\n%s\\n\\n",
-                        index++,
-                        score != null ? ((Number) score).doubleValue() : 0.0,
-                        pageNum != null ? pageNum.toString() : "未知",
-                        caption
-                    ));
-                }
-            }
-
-            String result = ragContent.toString().trim();
-            if (result.isBlank()) {
-                return null;
-            }
-
-            // 限制RAG内容长度
-            int maxRagChars = 2000;
-            if (result.length() > maxRagChars) {
-                result = result.substring(0, maxRagChars) + "\\n...(相关电路知识过长已截断)";
-            }
-
-            log.info("RAG知识库增强成功: 检索到{}个相关电路, 内容长度={}", results.size(), result.length());
-            return result;
-
-        } catch (Exception e) {
-            log.warn("RAG知识库增强失败: {}", e.getMessage());
-            return null;
-        }
+        log.info("[Tool-based] 知识库检索将通过AgenticRagTool自动完成，此方法已废弃");
+        return null;
     }
 
     /**
@@ -504,12 +466,24 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
 
     /**
      * 获取可访问的公开知识库列表
+     *
+     * 权限规则：
+     * 1. 管理员创建的知识库 → 全局所有用户可访问
+     * 2. 教师创建的知识库 → 仅该教师开设班级中的学生可访问
+     * 3. 用户自己创建的知识库 → 用户自己可访问
+     * 4. 用户作为成员的知识库 → 用户可访问
+     *
+     * @return 知识库ID列表
      */
     private List<String> getAccessiblePublicKnowledgeBases() {
-        // 这里可以从KnowledgeBaseMapper查询所有公开发布的知识库
-        // 为简化实现，先返回空列表（表示使用所有可用知识库）
-        // TODO: 集成KnowledgeBaseMapper查询逻辑
-        return new java.util.ArrayList<>();
+        try {
+            // PDF工作流通常没有班级上下文，传null作为classId
+            // 这样只返回管理员知识库 + 用户自己创建的知识库 + 用户是成员的知识库
+            return knowledgeBaseService.getUserAccessibleKnowledgeBaseIds(0L, null);
+        } catch (Exception e) {
+            log.warn("[PdfCircuitAnalysis] 获取可访问知识库失败，使用空列表: {}", e.getMessage());
+            return new java.util.ArrayList<>();
+        }
     }
 
     @Override
