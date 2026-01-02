@@ -32,7 +32,7 @@
 
     <properties>
         <java.version>21</java.version>
-        <lombok.version>1.18.20</lombok.version>
+        <lombok.version>1.18.30</lombok.version>
         <druid.version>1.2.20</druid.version>
         <sa-token.version>1.39.0</sa-token.version>
         <langchain4j.version>1.0.0-alpha1</langchain4j.version>
