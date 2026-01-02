@@ -38,7 +38,7 @@
         <langchain4j.version>1.0.0-alpha1</langchain4j.version>
         <redisson.version>3.41.0</redisson.version>
         <mybatis.version>3.0.4</mybatis.version>
-        <minio.version>8.5.17</minio.version>
+        <minio.version>8.6.0</minio.version>
         <elk.version>0.9.1</elk.version>
         <pagehelper.version>6.1.0</pagehelper.version>
         <jsqlparser.version>5.1</jsqlparser.version>
@@ -66,12 +66,12 @@
         <dependency>
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-core</artifactId>
-            <version>2.9.2</version>
+            <version>3.2.2</version>
         </dependency>
         <dependency>
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-parsers-standard-package</artifactId>
-            <version>2.9.2</version>
+            <version>3.2.2</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/commons-io/commons-io -->
         <dependency>
