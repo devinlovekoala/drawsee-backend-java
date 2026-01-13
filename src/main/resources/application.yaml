@@ -89,7 +89,7 @@ spring:
   application:
     name: drawsee-java
   profiles:
-    active: dev
+    active: prod
   mail:
     host: smtp.qq.com
     protocol: smtp
