@@ -3,6 +3,19 @@
 ## 项目概述
 Drawsee 是一个基于 Spring Boot 3 的 Web 项目，主要用于处理 AI 任务、动画渲染、知识管理等功能。项目采用 Java 17 开发，集成了多种中间件和技术栈，提供了丰富的接口模块。
 
+> 注意：本仓库现已升级以支持 Java 21，构建和测试请确保使用 Java 21 或更高版本。
+
+## 本地开发环境建议
+
+- 安装 Java 21 JDK 并将 `JAVA_HOME` 指向该 JDK，例如：
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export PATH="$JAVA_HOME/bin:$PATH"
+```
+
+- CI 已配置为使用 Java 21，见 `.github/workflows/ci-java21.yml`。
+
 ## 技术栈
 - **Spring Boot 3**: 项目的基础框架
 - **Spring MVC**: Web 请求处理
