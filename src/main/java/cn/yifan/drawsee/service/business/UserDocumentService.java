@@ -70,8 +70,9 @@ public class UserDocumentService {
             document.setTitle(title != null ? title : fileName);
             document.setDescription(description);
             document.setDocumentType(getDocumentTypeFromContentType(contentType));
-            // Do not store presigned URL as it will expire - generate it on demand
-            document.setFileUrl(null);
+            // Do not store presigned URL as it will expire - generate it on demand.
+            // Some databases still mark file_url as NOT NULL, so persist object path to satisfy the constraint.
+            document.setFileUrl(objectName);
             document.setObjectPath(objectName);
             document.setFileSize(file.getSize());
             document.setCreatedAt(new Date());

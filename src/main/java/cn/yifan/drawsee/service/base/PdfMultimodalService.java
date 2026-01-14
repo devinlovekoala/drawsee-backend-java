@@ -10,6 +10,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import cn.yifan.drawsee.parser.CircuitImageNetlistParser;
+import cn.yifan.drawsee.pojo.entity.CircuitDesign;
+import cn.yifan.drawsee.service.base.PromptService;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -36,6 +39,12 @@ public class PdfMultimodalService {
     @Autowired
     private MinioService minioService;
 
+    @Autowired
+    private PromptService promptService;
+
+    @Autowired
+    private CircuitImageNetlistParser circuitImageNetlistParser;
+
     /**
      * 多模态分析结果
      */
@@ -43,9 +52,11 @@ public class PdfMultimodalService {
         private String textContent;
         private List<String> imageAnalysis;
         private String combinedSummary;
+        private List<CircuitDesignResult> circuitDesigns;
 
         public MultimodalAnalysis() {
             this.imageAnalysis = new ArrayList<>();
+            this.circuitDesigns = new ArrayList<>();
         }
 
         public String getTextContent() { return textContent; }
@@ -54,6 +65,27 @@ public class PdfMultimodalService {
         public void setImageAnalysis(List<String> imageAnalysis) { this.imageAnalysis = imageAnalysis; }
         public String getCombinedSummary() { return combinedSummary; }
         public void setCombinedSummary(String combinedSummary) { this.combinedSummary = combinedSummary; }
+        public List<CircuitDesignResult> getCircuitDesigns() { return circuitDesigns; }
+        public void setCircuitDesigns(List<CircuitDesignResult> circuitDesigns) { this.circuitDesigns = circuitDesigns; }
+    }
+
+    /**
+     * 单页电路图解析结果
+     */
+    public static class CircuitDesignResult {
+        private int pageNo;
+        private CircuitDesign circuitDesign;
+        private String netlist;
+
+        public CircuitDesignResult(int pageNo, CircuitDesign circuitDesign, String netlist) {
+            this.pageNo = pageNo;
+            this.circuitDesign = circuitDesign;
+            this.netlist = netlist;
+        }
+
+        public int getPageNo() { return pageNo; }
+        public CircuitDesign getCircuitDesign() { return circuitDesign; }
+        public String getNetlist() { return netlist; }
     }
 
     /**
@@ -77,8 +109,8 @@ public class PdfMultimodalService {
             // 2. 选择最复杂的页面进行图片分析
             List<Integer> topPages = PdfUtils.selectTopComplexPages(
                 new ByteArrayInputStream(pdfBytes),
-                150, // DPI
-                maxImagePages
+                120, // 降低DPI以提升速度
+                Math.min(1, maxImagePages) // 仅取1页，降低耗时
             );
             log.info("选择了{}个复杂页面进行视觉分析: {}", topPages.size(), topPages);
 
@@ -93,11 +125,24 @@ public class PdfMultimodalService {
                 BufferedImage img = images.get(i);
                 int pageNo = topPages.get(i);
 
-                String imageAnalysis = analyzeImage(img, pageNo);
+                String base64Image = convertImageToBase64(img);
+
+                String imageAnalysis = analyzeImage(base64Image, pageNo);
                 if (imageAnalysis != null && !imageAnalysis.isBlank()) {
                     result.getImageAnalysis().add(
                         String.format("[第%d页图像分析]\n%s", pageNo + 1, imageAnalysis)
                     );
+                }
+
+                CircuitDesignResult designResult = extractCircuitDesign(base64Image, pageNo);
+                if (designResult != null) {
+                    result.getCircuitDesigns().add(designResult);
+                    log.info("第{}页电路图成功转为结构化设计: elements={}, connections={}",
+                             pageNo + 1,
+                             designResult.getCircuitDesign().getElements() != null
+                                 ? designResult.getCircuitDesign().getElements().size() : 0,
+                             designResult.getCircuitDesign().getConnections() != null
+                                 ? designResult.getCircuitDesign().getConnections().size() : 0);
                 }
             }
 
@@ -148,7 +193,7 @@ public class PdfMultimodalService {
             }
 
             // 限制文本长度
-            int maxChars = 8000;
+            int maxChars = 4000; // 缩短文本以降低下游生成耗时
             if (text.length() > maxChars) {
                 text = text.substring(0, maxChars) + "\n...(内容过长已截断)";
             }
@@ -163,11 +208,8 @@ public class PdfMultimodalService {
     /**
      * 使用视觉模型分析图片内容
      */
-    private String analyzeImage(BufferedImage image, int pageNo) {
+    private String analyzeImage(String base64Image, int pageNo) {
         try {
-            // 将BufferedImage转换为Base64编码
-            String base64Image = convertImageToBase64(image);
-
             // 构造视觉分析提示词
             String prompt = """
                 请分析这张来自电路实验文档的图片，识别以下内容：
@@ -195,6 +237,28 @@ public class PdfMultimodalService {
 
         } catch (Exception e) {
             log.error("分析图像失败: pageNo={}", pageNo, e);
+            return null;
+        }
+    }
+
+    /**
+     * 将电路图图片转为结构化电路设计
+     */
+    private CircuitDesignResult extractCircuitDesign(String base64Image, int pageNo) {
+        try {
+            String prompt = promptService.getCircuitImageDesignPrompt();
+            UserMessage userMessage = UserMessage.from(
+                TextContent.from(prompt),
+                ImageContent.from("data:image/png;base64," + base64Image)
+            );
+
+            Response<dev.langchain4j.data.message.AiMessage> response =
+                doubaoVisionChatLanguageModel.generate(userMessage);
+            String netlist = response.content().text();
+            CircuitDesign design = circuitImageNetlistParser.parse(netlist);
+            return new CircuitDesignResult(pageNo + 1, design, netlist);
+        } catch (Exception e) {
+            log.warn("第{}页电路图结构化失败: {}", pageNo + 1, e.getMessage());
             return null;
         }
     }

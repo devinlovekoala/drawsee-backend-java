@@ -271,6 +271,10 @@ public class WorkFlow {
 
     public void insertAndPublishNode(WorkContext workContext, Node node, Map<String, Object> nodeData) {
         RStream<String, Object> redisStream = workContext.getRedisStream();
+        // 确保初次插入即标记为未删除，避免被查询过滤掉
+        if (node.getIsDeleted() == null) {
+            node.setIsDeleted(false);
+        }
         nodeMapper.insert(node);
         NodeVO nodeVO = new NodeVO();
         BeanUtils.copyProperties(node, nodeVO);

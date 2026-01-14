@@ -77,6 +77,7 @@ public class LangchainConfig {
                 .modelName(doubao.getModelName())
                 .logRequests(false)
                 .logResponses(false)
+                .timeout(java.time.Duration.ofSeconds(180))
                 .build();
     }
 
@@ -88,6 +89,7 @@ public class LangchainConfig {
               .modelName(deepseekV3.getModelName())
               .logRequests(false)
               .logResponses(false)
+              .timeout(java.time.Duration.ofSeconds(180))
               .build();
     }
 

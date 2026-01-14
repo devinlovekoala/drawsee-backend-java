@@ -10,6 +10,7 @@ import cn.yifan.drawsee.mapper.ConversationMapper;
 import cn.yifan.drawsee.mapper.NodeMapper;
 import cn.yifan.drawsee.mapper.UserMapper;
 import cn.yifan.drawsee.pojo.XYPosition;
+import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
@@ -17,9 +18,6 @@ import cn.yifan.drawsee.service.base.MinioService;
 import cn.yifan.drawsee.service.base.PdfMultimodalService;
 import cn.yifan.drawsee.service.base.PromptService;
 import cn.yifan.drawsee.service.base.StreamAiService;
-import cn.yifan.drawsee.service.base.WebSearchService;
-import cn.yifan.drawsee.service.business.KnowledgeBaseService;
-import cn.yifan.drawsee.tool.AgenticRagTool;
 import cn.yifan.drawsee.util.PdfUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,9 +56,6 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
     private final PromptService promptService;
     private final MinioService minioService;
     private final PdfMultimodalService pdfMultimodalService;
-    private final WebSearchService webSearchService;
-    private final KnowledgeBaseService knowledgeBaseService;
-    private final AgenticRagTool agenticRagTool;
 
     public PdfCircuitAnalysisWorkFlow(
             UserMapper userMapper,
@@ -73,19 +68,19 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             ObjectMapper objectMapper,
             PromptService promptService,
             MinioService minioService,
-            PdfMultimodalService pdfMultimodalService,
-            WebSearchService webSearchService,
-            KnowledgeBaseService knowledgeBaseService,
-            AgenticRagTool agenticRagTool
+            PdfMultimodalService pdfMultimodalService
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.minioService = minioService;
         this.pdfMultimodalService = pdfMultimodalService;
-        this.webSearchService = webSearchService;
-        this.knowledgeBaseService = knowledgeBaseService;
-        this.agenticRagTool = agenticRagTool;
     }
+
+    /**
+     * PDF增强分析结果
+     */
+    private record EnhancedAnalysisResult(String content,
+                                          List<PdfMultimodalService.CircuitDesignResult> circuitDesigns) { }
 
     @Override
     public Boolean validateAndInit(WorkContext workContext) {
@@ -153,7 +148,6 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
 
         return queryNode.getId();
     }
-
     /**
      * 设置一个虚拟的流式节点，用于后续的分析点节点创建
      * 该节点不会实际插入数据库，仅用于后续处理
@@ -193,6 +187,27 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
         // 空实现，实际节点创建在setupVirtualStreamNode方法中
     }
 
+    /**
+     * 更新对话标题：优先使用PDF文件名并加上实验预习前缀，避免仅为URL
+     */
+    @Override
+    public void updateConvTitle(WorkContext workContext) {
+        Node parentNode = workContext.getParentNode();
+        if (!NodeType.ROOT.equals(parentNode.getType())) {
+            return;
+        }
+        String url = workContext.getAiTaskMessage().getPrompt();
+        String fileName = extractFileName(url);
+        String title = "电路实验预习 - " + (fileName.isBlank() ? "PDF实验文档" : fileName);
+
+        workContext.getConversation().setTitle(title);
+        conversationMapper.update(workContext.getConversation());
+        workContext.getRedisStream().add(StreamAddArgs.entries(
+            "type", cn.yifan.drawsee.constant.AiTaskMessageType.TITLE,
+            "data", title
+        ));
+    }
+
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         log.info("PDF电路分析工作流开始流式聊天，taskId: {}", workContext.getAiTaskMessage().getTaskId());
@@ -205,7 +220,11 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
         log.info("PDF电路分析工作流处理PDF URL: {}, taskId: {}", pdfUrl, aiTaskMessage.getTaskId());
 
         // 使用增强的多模态分析
-        String enhancedContent = performEnhancedPdfAnalysis(pdfUrl);
+        EnhancedAnalysisResult enhancedResult = performEnhancedPdfAnalysis(pdfUrl);
+        String enhancedContent = enhancedResult != null ? enhancedResult.content() : null;
+        if (enhancedResult != null && enhancedResult.circuitDesigns() != null) {
+            workContext.putExtraData("circuitDesigns", enhancedResult.circuitDesigns());
+        }
 
         if (enhancedContent == null || enhancedContent.isBlank()) {
             // 回退到简单文本提取
@@ -225,15 +244,12 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
         // 生成提示词
         String prompt = promptService.getPdfCircuitPointAnalysisPrompt(enhancedContent);
         log.info("PDF电路分析工作流生成提示词完成，内容长度: {}, taskId: {}",
-                 enhancedContent.length(), aiTaskMessage.getTaskId());
+                 prompt.length(), aiTaskMessage.getTaskId());
 
-        // 构建Agentic RAG查询（包含PDF文档内容）
-        String pdfQuery = "根据以下PDF实验任务文档，提供分点分析：\n\n" + enhancedContent;
+        // 构建Agentic RAG查询（直接使用分点提示词，确保输出格式）
+        String pdfQuery = prompt;
 
-        // 获取知识库列表
-        List<String> knowledgeBaseIds = getAccessiblePublicKnowledgeBases();
-
-        log.info("[PdfCircuitAnalysis-Tool] 开始Tool-based对话生成, taskId={}", aiTaskMessage.getTaskId());
+        log.info("[PdfCircuitAnalysis-Tool] 开始Tool-based对话生成(无外部RAG), taskId={}", aiTaskMessage.getTaskId());
 
         // 构建系统提示词
         String systemPrompt = """
@@ -242,6 +258,7 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             **重要规则**：
             - 当需要查询教材、课件、电路知识库中的内容时，使用searchKnowledgeBase工具
             - 对于PDF实验任务文档的分析，按照分点格式输出
+            - 必须遵守提示词中的输出格式（角度X：标题 + 对应描述），不要输出长篇报告
             - 回答要准确、详细，结合理论知识和实际电路分析
 
             请基于PDF文档内容和知识库内容，提供详细的分点分析。
@@ -251,13 +268,41 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
         streamAiService.toolBasedChat(
             systemPrompt,
             pdfQuery,
-            new Object[]{agenticRagTool},
+            new Object[] {}, // 暂停Python RAG，减少耗时
             cn.yifan.drawsee.constant.AiModel.DOUBAO,  // 使用豆包模型
             CircuitAnalysisAssistant.class,
             handler
         );
 
         log.info("PDF电路分析工作流流式聊天调用完成，taskId: {}", aiTaskMessage.getTaskId());
+    }
+
+    /**
+     * 从URL或路径中提取文件名（不包含查询参数）
+     */
+    private String extractFileName(String url) {
+        try {
+            if (url == null || url.isBlank()) {
+                return "";
+            }
+            java.net.URI uri = java.net.URI.create(url);
+            String path = uri.getPath();
+            if (path == null || path.isBlank()) {
+                return "";
+            }
+            String[] parts = path.split("/");
+            String last = parts[parts.length - 1];
+            int qIdx = last.indexOf('?');
+            if (qIdx > 0) {
+                last = last.substring(0, qIdx);
+            }
+            last = java.net.URLDecoder.decode(last, java.nio.charset.StandardCharsets.UTF_8);
+            // 去掉时间戳前缀
+            return last.replaceFirst("^\\d+_", "");
+        } catch (Exception e) {
+            log.warn("提取文件名失败: {}", e.getMessage());
+            return "";
+        }
     }
 
     /**
@@ -269,13 +314,13 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
      * @param pdfUrl PDF文档URL
      * @return 增强后的文档内容
      */
-    private String performEnhancedPdfAnalysis(String pdfUrl) {
+    private EnhancedAnalysisResult performEnhancedPdfAnalysis(String pdfUrl) {
         try {
             log.info("开始执行增强PDF分析: {}", pdfUrl);
 
             // 1. 多模态分析（文本+图片）
             PdfMultimodalService.MultimodalAnalysis analysis =
-                pdfMultimodalService.analyzePdfFromUrl(pdfUrl, 3); // 分析最复杂的3页
+                pdfMultimodalService.analyzePdfFromUrl(pdfUrl, 2); // 降低到2页，缩短电路图提取耗时
 
             if (analysis == null) {
                 log.warn("多模态分析失败，返回null");
@@ -300,29 +345,19 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
                 }
             }
 
-            // 4. 智能提取元件名称并搜索资料
-            List<String> components = extractComponentNames(enhancedContent.toString());
-            if (!components.isEmpty()) {
-                log.info("检测到{}个元器件，开始搜索资料: {}", components.size(), components);
-                Map<String, String> componentInfo = webSearchService.batchSearchComponents(components);
-
-                if (!componentInfo.isEmpty()) {
-                    enhancedContent.append("【元器件资料】\n");
-                    for (Map.Entry<String, String> entry : componentInfo.entrySet()) {
-                        enhancedContent.append(entry.getValue());
-                        enhancedContent.append("\n\n");
-                    }
-                    log.info("成功获取{}个元器件的资料", componentInfo.size());
+            // 3. 添加结构化电路设计摘要
+            if (analysis.getCircuitDesigns() != null && !analysis.getCircuitDesigns().isEmpty()) {
+                enhancedContent.append("【电路图结构化】\n");
+                for (PdfMultimodalService.CircuitDesignResult designResult : analysis.getCircuitDesigns()) {
+                    CircuitDesign design = designResult.getCircuitDesign();
+                    int elementCount = design.getElements() != null ? design.getElements().size() : 0;
+                    int connectionCount = design.getConnections() != null ? design.getConnections().size() : 0;
+                    enhancedContent.append(
+                        String.format("第%d页电路图已还原为可视化设计，元件数: %d，连线数: %d。\n",
+                                      designResult.getPageNo(), elementCount, connectionCount)
+                    );
                 }
-            }
-
-            // 5. RAG知识库增强（注入相关电路原理知识）
-            String ragKnowledge = tryEnhanceWithKnowledgeBase(enhancedContent.toString());
-            if (ragKnowledge != null && !ragKnowledge.isBlank()) {
-                enhancedContent.append("【知识库相关电路原理】\n");
-                enhancedContent.append(ragKnowledge);
-                enhancedContent.append("\n\n");
-                log.info("RAG知识库增强成功，新增内容长度: {}", ragKnowledge.length());
+                enhancedContent.append("\n");
             }
 
             String result = enhancedContent.toString();
@@ -334,7 +369,7 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             }
 
             log.info("增强PDF分析完成，最终内容长度: {}", result.length());
-            return result;
+            return new EnhancedAnalysisResult(result, analysis.getCircuitDesigns());
 
         } catch (Exception e) {
             log.error("增强PDF分析失败", e);
@@ -464,28 +499,6 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
         return queryContext;
     }
 
-    /**
-     * 获取可访问的公开知识库列表
-     *
-     * 权限规则：
-     * 1. 管理员创建的知识库 → 全局所有用户可访问
-     * 2. 教师创建的知识库 → 仅该教师开设班级中的学生可访问
-     * 3. 用户自己创建的知识库 → 用户自己可访问
-     * 4. 用户作为成员的知识库 → 用户可访问
-     *
-     * @return 知识库ID列表
-     */
-    private List<String> getAccessiblePublicKnowledgeBases() {
-        try {
-            // PDF工作流通常没有班级上下文，传null作为classId
-            // 这样只返回管理员知识库 + 用户自己创建的知识库 + 用户是成员的知识库
-            return knowledgeBaseService.getUserAccessibleKnowledgeBaseIds(0L, null);
-        } catch (Exception e) {
-            log.warn("[PdfCircuitAnalysis] 获取可访问知识库失败，使用空列表: {}", e.getMessage());
-            return new java.util.ArrayList<>();
-        }
-    }
-
     @Override
     public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
         RStream<String, Object> redisStream = workContext.getRedisStream();
@@ -505,10 +518,17 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
         } catch (Exception e) {
             log.error("解析PDF电路实验任务分析点失败: {}", responseText, e);
         }
+        try {
+            createCircuitDesignNodes(workContext, parentId);
+        } catch (Exception e) {
+            log.error("创建电路画布节点失败", e);
+        }
 
-        // 更新进度信息
+        // 更新进度信息（前端可据此触发刷新）
         Map<String, Object> data = new ConcurrentHashMap<>();
         data.put("progress", "PDF实验任务分析点生成完成");
+        data.put("angleNodeCount", workContext.getExtraData("angleNodeCount"));
+        data.put("circuitNodeCount", workContext.getExtraData("circuitNodeCount"));
         redisStream.add(StreamAddArgs.entries(
             "type", AiTaskMessageType.DATA,
             "data", data
@@ -531,6 +551,7 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
         String[] lines = responseText.split("\n");
         String currentTitle = null;
         String currentDescription = null;
+        int created = 0;
 
         for (String s : lines) {
             String line = s.trim();
@@ -539,6 +560,7 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
                 // 如果是空行，且已有标题和描述，创建节点
                 if (currentTitle != null && currentDescription != null) {
                     createPdfCircuitPointNode(workContext, parentId, aiTaskMessage, currentTitle, currentDescription);
+                    created++;
                     currentTitle = null;
                     currentDescription = null;
                 }
@@ -546,10 +568,11 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             }
 
             // 匹配"角度X：[标题]"格式
-            if (line.matches("^角度\\d+：.+")) {
+            if (line.matches("^角度\\d+：.+") || line.matches("^\\d+[\\.、：:].+")) {
                 // 如果已有标题和描述，先创建之前的节点
                 if (currentTitle != null && currentDescription != null) {
                     createPdfCircuitPointNode(workContext, parentId, aiTaskMessage, currentTitle, currentDescription);
+                    created++;
                 }
 
                 // 提取标题
@@ -560,12 +583,27 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             else if (currentTitle != null && currentDescription == null) {
                 currentDescription = line;
             }
+            // 如果已有标题和描述，且遇到非空行且不是新角度，认为是描述的续行，追加
+            else if (currentTitle != null && currentDescription != null && !line.isEmpty()) {
+                currentDescription = currentDescription + " " + line;
+            }
         }
 
         // 处理最后一个角度
         if (currentTitle != null && currentDescription != null) {
             createPdfCircuitPointNode(workContext, parentId, aiTaskMessage, currentTitle, currentDescription);
+            created++;
         }
+
+        // 兜底：如果未能解析出角度节点，创建单一概览节点，避免前端空白
+        if (created == 0 && responseText != null && !responseText.isBlank()) {
+            String fallbackTitle = "实验任务概览";
+            String fallbackDesc = responseText.length() > 1200 ? responseText.substring(0, 1200) + "..." : responseText;
+            createPdfCircuitPointNode(workContext, parentId, aiTaskMessage, fallbackTitle, fallbackDesc);
+            created++;
+        }
+
+        workContext.putExtraData("angleNodeCount", created);
     }
 
     /**
@@ -592,6 +630,54 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             insertAndPublishNoneStreamNode(workContext, pdfCircuitPointNode, pdfCircuitPointNodeData);
         } catch (Exception e) {
             log.error("创建PDF电路实验任务分析点节点失败: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 根据AI识别的电路图创建电路画布节点，供前端渲染
+     */
+    @SuppressWarnings("unchecked")
+    private void createCircuitDesignNodes(WorkContext workContext, Long parentId) throws JsonProcessingException {
+        Object rawDesigns = workContext.getExtraData("circuitDesigns");
+        if (!(rawDesigns instanceof List<?> designList) || designList.isEmpty()) {
+            return;
+        }
+
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        int offsetY = 0;
+
+        for (Object obj : designList) {
+            if (!(obj instanceof PdfMultimodalService.CircuitDesignResult designResult)) {
+                continue;
+            }
+            CircuitDesign design = designResult.getCircuitDesign();
+            if (design == null) {
+                continue;
+            }
+
+            Map<String, Object> canvasNodeData = new ConcurrentHashMap<>();
+            canvasNodeData.put("title", NodeTitle.CIRCUIT_CANVAS);
+            canvasNodeData.put("text", String.format("第%d页电路图（AI还原）", designResult.getPageNo()));
+            canvasNodeData.put("circuitDesign", design);
+            canvasNodeData.put("netlist", designResult.getNetlist());
+            canvasNodeData.put("subtype", NodeSubType.CIRCUIT_CANVAS);
+            canvasNodeData.put("mode", aiTaskMessage.getType());
+            canvasNodeData.put("source", "pdf-page-" + designResult.getPageNo());
+
+            Node canvasNode = new Node(
+                NodeType.CIRCUIT_CANVAS,
+                objectMapper.writeValueAsString(canvasNodeData),
+                objectMapper.writeValueAsString(new XYPosition(0, offsetY)),
+                parentId,
+                aiTaskMessage.getUserId(),
+                aiTaskMessage.getConvId(),
+                true
+            );
+
+            insertAndPublishNoneStreamNode(workContext, canvasNode, canvasNodeData);
+            offsetY += 240; // 简单错位，避免与分析点重叠
+            workContext.putExtraData("circuitNodeCount",
+                ((Integer) workContext.getExtraData().getOrDefault("circuitNodeCount", 0)) + 1);
         }
     }
 

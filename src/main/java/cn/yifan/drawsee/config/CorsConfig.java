@@ -17,26 +17,21 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOrigins(
-                    "http://localhost:5174",  // Vite备用端口
-                    "http://localhost:5173",  // Vite默认端口
-                    "http://localhost:6868",  // 课程服务端口
-                    "http://127.0.0.1:5174",
-                    "http://127.0.0.1:5173",
-                    "http://127.0.0.1:6868",
-                    "http://42.193.107.127:6868",
-                    "http://42.193.107.127:5174",
-                    "http://42.193.107.127:5173",
-                    "http://drawsee.cn",
-                    "https://drawsee.cn",
-                    "http://admin.drawsee.cn",
-                    "https://admin.drawsee.cn"
+                .allowedOriginPatterns(
+                        // 本地开发
+                        "http://localhost:*",
+                        "http://127.0.0.1:*",
+
+                        // 正式域名
+                        "http://drawsee.cn",
+                        "http://*.drawsee.cn"
                 )
-                .allowedHeaders("*", "Authorization", "Content-Type", "X-Requested-With")
-                .exposedHeaders("Authorization")
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("Authorization", "Content-Type", "X-Requested-With")
+                .exposedHeaders("Authorization")
                 .allowCredentials(true)
-                .maxAge(3600); // 1小时的预检请求缓存
+                .maxAge(3600);
     }
+
 
 }
