@@ -24,4 +24,13 @@ public interface RagIngestionTaskMapper {
     List<RagIngestionTask> listByDocumentId(@Param("documentId") String documentId);
 
     List<RagIngestionTask> listPendingTasks(@Param("limit") int limit);
+
+    List<RagIngestionTask> listTasks(
+        @Param("knowledgeBaseId") String knowledgeBaseId,
+        @Param("documentId") String documentId,
+        @Param("stage") String stage,
+        @Param("status") String status,
+        @Param("offset") int offset,
+        @Param("limit") int limit
+    );
 }

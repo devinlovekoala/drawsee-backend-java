@@ -28,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -125,6 +126,70 @@ public class KnowledgeDocumentController {
     }
 
     /**
+     * 批量上传文档（支持目录选择）
+     */
+    @SaCheckLogin
+    @PostMapping(value = {
+        "/knowledge-bases/{knowledgeBaseId}/documents/batch",
+        "/admin/knowledge-bases/{knowledgeBaseId}/documents/batch",
+        "/teacher/knowledge-bases/{knowledgeBaseId}/documents/batch"
+    }, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public R<List<KnowledgeDocumentUploadVO>> uploadDocumentsBatch(@PathVariable("knowledgeBaseId") String knowledgeBaseId,
+                                                                   @RequestParam("files") MultipartFile[] files) {
+        if (files == null || files.length == 0) {
+            return R.fail("文件不能为空");
+        }
+        KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(knowledgeBaseId);
+        if (knowledgeBase == null || Boolean.TRUE.equals(knowledgeBase.getIsDeleted())) {
+            return R.fail("知识库不存在");
+        }
+
+        List<KnowledgeDocumentUploadVO> results = new ArrayList<>();
+        for (MultipartFile file : files) {
+            if (file == null || file.isEmpty()) {
+                continue;
+            }
+            try {
+                String originalFileName = file.getOriginalFilename();
+                String normalizedPath = normalizeRelativePath(originalFileName);
+                String documentId = UUIDUtils.generateUUID();
+                String objectName = buildObjectName(knowledgeBaseId, documentId, normalizedPath);
+
+                String storageUrl = minioService.uploadFile(file, objectName);
+                log.info("知识库文档已上传到 MinIO: object={}, storageUrl={}", objectName, storageUrl);
+
+                KnowledgeDocument document = new KnowledgeDocument();
+                document.setId(documentId);
+                document.setKnowledgeBaseId(knowledgeBaseId);
+                document.setTitle(stripExtension(extractFileName(normalizedPath)));
+                document.setOriginalFileName(originalFileName != null ? originalFileName : normalizedPath);
+                document.setFileType(file.getContentType());
+                document.setFileSize(file.getSize());
+                document.setStatus(KnowledgeDocumentStatus.UPLOADED);
+                document.setStorageUrl(storageUrl);
+                document.setStorageObject(objectName);
+
+                RagIngestionTask task = knowledgeDocumentService.createDocument(document, StpUtil.getLoginIdAsLong());
+                documentIngestionService.ingestAsync(task.getId());
+
+                results.add(KnowledgeDocumentUploadVO.builder()
+                    .document(convertToVO(document))
+                    .taskId(task.getId())
+                    .build());
+            } catch (MinioException | IOException | NoSuchAlgorithmException | InvalidKeyException ex) {
+                log.error("批量上传文档失败: file={}", file.getOriginalFilename(), ex);
+            } catch (Exception ex) {
+                log.error("创建文档元数据失败: file={}", file.getOriginalFilename(), ex);
+            }
+        }
+
+        if (results.isEmpty()) {
+            return R.fail("批量上传失败");
+        }
+        return R.ok(results);
+    }
+
+    /**
      * 获取知识库文档列表
      */
     @SaCheckLogin
@@ -195,11 +260,15 @@ public class KnowledgeDocumentController {
     }
 
     private String buildObjectName(String knowledgeBaseId, String documentId, String originalFileName) {
+        return buildObjectNameWithRelativePath(knowledgeBaseId, documentId, normalizeRelativePath(originalFileName));
+    }
+
+    private String buildObjectNameWithRelativePath(String knowledgeBaseId, String documentId, String relativePath) {
         return MinioObjectPath.RAG_KNOWLEDGE_BASE_ROOT
             + knowledgeBaseId + "/"
             + MinioObjectPath.RAG_DOCUMENT_FOLDER
             + documentId + "/"
-            + originalFileName;
+            + relativePath;
     }
 
     private String stripExtension(String filename) {
@@ -211,6 +280,30 @@ public class KnowledgeDocumentController {
             return filename.substring(0, index);
         }
         return filename;
+    }
+
+    private String extractFileName(String path) {
+        if (!StringUtils.hasText(path)) {
+            return path;
+        }
+        String normalized = path.replace("\\", "/");
+        int index = normalized.lastIndexOf('/');
+        return index >= 0 ? normalized.substring(index + 1) : normalized;
+    }
+
+    private String normalizeRelativePath(String filename) {
+        if (!StringUtils.hasText(filename)) {
+            return "document-" + System.currentTimeMillis();
+        }
+        String normalized = filename.replace("\\", "/");
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        normalized = normalized.replace("..", "");
+        if (normalized.isBlank()) {
+            return "document-" + System.currentTimeMillis();
+        }
+        return normalized;
     }
 
     private KnowledgeDocumentVO convertToVO(KnowledgeDocument document) {

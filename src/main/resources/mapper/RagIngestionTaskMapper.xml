@@ -81,4 +81,25 @@
         LIMIT #{limit}
     </select>
 
+    <select id="listTasks" resultMap="RagIngestionTaskResultMap">
+        SELECT *
+        FROM rag_ingestion_task
+        <where>
+            <if test="knowledgeBaseId != null and knowledgeBaseId != ''">
+                AND knowledge_base_id = #{knowledgeBaseId}
+            </if>
+            <if test="documentId != null and documentId != ''">
+                AND document_id = #{documentId}
+            </if>
+            <if test="stage != null and stage != ''">
+                AND stage = #{stage}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
 </mapper>

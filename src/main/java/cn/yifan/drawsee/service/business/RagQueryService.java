@@ -155,4 +155,5 @@ public class RagQueryService {
         response.setDone(true);
         return response;
     }
+
 }

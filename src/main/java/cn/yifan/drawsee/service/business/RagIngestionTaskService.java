@@ -103,4 +103,27 @@ public class RagIngestionTaskService {
     public RagIngestionTask getById(String taskId) {
         return ragIngestionTaskMapper.getById(taskId);
     }
+
+    public List<RagIngestionTask> listTasks(String knowledgeBaseId,
+                                            String documentId,
+                                            String stage,
+                                            String status,
+                                            int offset,
+                                            int limit) {
+        return ragIngestionTaskMapper.listTasks(knowledgeBaseId, documentId, stage, status, offset, limit);
+    }
+
+    public RagIngestionTask resetForRetry(String taskId) {
+        RagIngestionTask task = ragIngestionTaskMapper.getById(taskId);
+        if (task == null) {
+            return null;
+        }
+        task.setStage(RagIngestionStage.PENDING);
+        task.setStatus(KnowledgeDocumentStatus.UPLOADED);
+        task.setProgress(0);
+        task.setErrorMessage(null);
+        task.setUpdatedAt(new Date());
+        ragIngestionTaskMapper.update(task);
+        return task;
+    }
 }

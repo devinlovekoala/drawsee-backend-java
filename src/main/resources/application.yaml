@@ -39,9 +39,9 @@ drawsee:
     username: root
     password: Funstack@3205
   minio:
-    endpoint: http://117.72.9.87:9046
-    accessKey: 1r6Dfs4muAO6JfKFnkqH
-    secretKey: ax1EHy6YBLFTDCTsRVcyxsz8JZoDaYZW29OozYTI
+    endpoint: http://115.191.37.253:9046
+    accessKey: s0j3IBszn6Xg0eNkKbj7
+    secretKey: v76MDrkFpSgfon7RhAfwqeUxarpsB2aF7QbyLuUa
     bucketName: drawsee
   models:
     doubao:
@@ -49,17 +49,17 @@ drawsee:
       apiKey: sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv
       modelName: moonshotai/Kimi-K2-Thinking
     deepseekV3:
-      baseUrl: https://api.siliconflow.cn/v1
-      apiKey: sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv
-      modelName: Pro/deepseek-ai/DeepSeek-V3.2
+      baseUrl: https://api.deepseek.com
+      apiKey: sk-b3970db2e2844d4586630f4f8afcff6b
+      modelName: deepseek-chat
     doubaoVision:
       baseUrl: https://open.bigmodel.cn/api/paas/v4
       apiKey: cc4f64b7080447b99560e43f6df775a4.ha56EPtvmi52EmZ1
       modelName: glm-4.6v
     embedding:
-      baseUrl: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
+      baseUrl: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1/embeddings}
       apiKey: ${EMBEDDING_API_KEY:sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv}
-      modelName: ${EMBEDDING_MODEL:BAAI/bge-m3}
+      modelName: ${EMBEDDING_MODEL:Qwen/Qwen3-Embedding-8B}
   # Web搜索配置（用于查询电子元器件资料）
   search:
     enabled: ${SEARCH_ENABLED:true}  # 是否启用搜索功能
@@ -69,6 +69,17 @@ drawsee:
     base-url: ${PYTHON_SERVICE_URL:http://localhost:8000}  # Python服务地址（FastAPI默认端口8000）
     timeout: 60000  # 超时时间（毫秒）
     enabled: ${PYTHON_SERVICE_ENABLED:true}  # 是否启用Python服务（v2.0生产就绪）
+  # RAG入库流程配置
+  rag-ingestion:
+    mode: ${RAG_INGESTION_MODE:JAVA}  # JAVA / PYTHON
+    batch-size: ${RAG_INGESTION_BATCH_SIZE:64}
+  # Qdrant向量库配置（由Python RAG侧使用，Java侧预留）
+  qdrant:
+    host: ${QDRANT_HOST:115.191.37.253}
+    port: ${QDRANT_PORT:6333}
+    api-key: ${QDRANT_API_KEY:}
+    https: ${QDRANT_HTTPS:false}
+    collection: ${QDRANT_COLLECTION:circuit_embeddings}
   # 内部服务JWT配置
   internal-jwt:
     secret: ${INTERNAL_JWT_SECRET:your-super-secret-key-min-32-chars-change-in-production}  # 与Python共享的密钥（生产环境必须修改）
@@ -89,7 +100,7 @@ spring:
   application:
     name: drawsee-java
   profiles:
-    active: prod
+    active: dev
   mail:
     host: smtp.qq.com
     protocol: smtp

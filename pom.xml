@@ -42,6 +42,7 @@
         <elk.version>0.9.1</elk.version>
         <pagehelper.version>6.1.0</pagehelper.version>
         <jsqlparser.version>5.1</jsqlparser.version>
+        <tika.version>2.9.2</tika.version>
         <pdfbox.version>2.0.27</pdfbox.version>
         <poi.version>5.2.3</poi.version>
     </properties>
@@ -66,12 +67,12 @@
         <dependency>
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-core</artifactId>
-            <version>3.2.2</version>
+            <version>${tika.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-parsers-standard-package</artifactId>
-            <version>3.2.2</version>
+            <version>${tika.version}</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/commons-io/commons-io -->
         <dependency>
@@ -301,7 +302,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
+                <version>3.13.0</version>
                 <configuration>
                     <release>21</release>
                     <parameters>true</parameters>
@@ -338,7 +339,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
-                <version>3.1.0</version>
+                <version>3.5.0</version>
                 <executions>
                     <execution>
                         <id>enforce-java</id>

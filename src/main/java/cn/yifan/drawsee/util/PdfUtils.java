@@ -5,7 +5,6 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,7 +26,7 @@ public class PdfUtils {
 
 	public static List<BufferedImage> renderPages(InputStream inputStream, int dpi, IntPredicate pageFilter) throws IOException {
 		byte[] bytes = toBytes(inputStream);
-		try (PDDocument document = PDDocument.load(new ByteArrayInputStream(bytes))) {
+		try (PDDocument document = PDDocument.load(bytes)) {
 			PDFRenderer renderer = new PDFRenderer(document);
 			int pageCount = document.getNumberOfPages();
 			List<BufferedImage> images = new ArrayList<>();
@@ -46,7 +45,7 @@ public class PdfUtils {
 
 	public static List<PageText> extractPageTexts(InputStream inputStream) throws IOException {
 		byte[] bytes = toBytes(inputStream);
-		try (PDDocument document = PDDocument.load(new ByteArrayInputStream(bytes))) {
+		try (PDDocument document = PDDocument.load(bytes)) {
 			int pageCount = document.getNumberOfPages();
 			List<PageText> result = new ArrayList<>(pageCount);
 			PDFTextStripper stripper = new PDFTextStripper();
@@ -70,7 +69,7 @@ public class PdfUtils {
 
 	public static List<Integer> selectTopComplexPages(InputStream inputStream, int dpi, int topK) throws IOException {
 		byte[] bytes = toBytes(inputStream);
-		try (PDDocument document = PDDocument.load(new ByteArrayInputStream(bytes))) {
+		try (PDDocument document = PDDocument.load(bytes)) {
 			PDFRenderer renderer = new PDFRenderer(document);
 			int pageCount = document.getNumberOfPages();
 			List<PageScore> scores = new ArrayList<>(pageCount);
