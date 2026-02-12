@@ -179,6 +179,7 @@ public class DocumentIngestionService {
 
             List<KnowledgeDocumentChunk> chunkEntities = new java.util.ArrayList<>();
             List<QdrantService.QdrantPoint> points = new java.util.ArrayList<>();
+            String sampleVectorId = null;
 
             for (int i = 0; i < total; i++) {
                 String chunkText = chunks.get(i);
@@ -187,6 +188,9 @@ public class DocumentIngestionService {
 
                 QdrantService.QdrantPoint point = new QdrantService.QdrantPoint();
                 String vectorId = UUIDUtils.generateUUID();
+                if (sampleVectorId == null) {
+                    sampleVectorId = vectorId;
+                }
                 point.setId(vectorId);
                 point.setVector(toDoubleList(embedding));
                 Map<String, Object> payload = new java.util.HashMap<>();
@@ -230,9 +234,24 @@ public class DocumentIngestionService {
                 knowledgeDocumentChunkMapper.insertBatch(chunkEntities);
             }
 
+            if (sampleVectorId != null) {
+                Map<String, Object> sample = qdrantService.getPointsByIds(java.util.List.of(sampleVectorId));
+                log.info("Qdrant 读取校验: documentId={}, sampleId={}, response={}",
+                    document.getId(), sampleVectorId, sample);
+            }
+
             knowledgeDocumentService.setChunkCount(document.getId(), total);
             ragIngestionTaskService.updateTask(task, RagIngestionStage.INDEXING, KnowledgeDocumentStatus.INDEXING, 90);
             knowledgeDocumentService.updateStatus(document.getId(), KnowledgeDocumentStatus.INDEXING, null);
+
+            // 验证是否真正写入 Qdrant
+            long filteredCount = extractCount(qdrantService.countPoints(document.getKnowledgeBaseId(), document.getId()));
+            long totalCount = extractCount(qdrantService.countPoints(null, null));
+            log.info("Qdrant 写入校验: documentId={}, filteredCount={}, totalCount={}",
+                document.getId(), filteredCount, totalCount);
+            if (filteredCount <= 0 && totalCount <= 0) {
+                throw new IllegalStateException("Qdrant 写入校验失败，未发现任何向量点");
+            }
 
             task.setDurationMs(System.currentTimeMillis() - start);
             ragIngestionTaskService.markCompleted(task.getId());
@@ -249,5 +268,20 @@ public class DocumentIngestionService {
             values.add(v);
         }
         return values;
+    }
+
+    @SuppressWarnings("unchecked")
+    private long extractCount(Map<String, Object> response) {
+        if (response == null) {
+            return 0L;
+        }
+        Object result = response.get("result");
+        if (result instanceof Map) {
+            Object count = ((Map<String, Object>) result).get("count");
+            if (count instanceof Number) {
+                return ((Number) count).longValue();
+            }
+        }
+        return 0L;
     }
 }
