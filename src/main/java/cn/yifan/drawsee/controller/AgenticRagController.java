@@ -7,6 +7,7 @@ import cn.yifan.drawsee.pojo.dto.agentic.AgenticQueryRequest;
 import cn.yifan.drawsee.service.base.AgenticRagService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -24,6 +25,7 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/agentic")
+@ConditionalOnProperty(prefix = "drawsee.python-service", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class AgenticRagController {
 
     @Autowired

@@ -32,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStream;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.stream.StreamAddArgs;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -72,13 +73,13 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         PromptService promptService,
         SpiceConverter spiceConverter,
         KnowledgeBaseService knowledgeBaseService,
-        AgenticRagTool agenticRagTool
+        ObjectProvider<AgenticRagTool> agenticRagToolProvider
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.spiceConverter = spiceConverter;
         this.knowledgeBaseService = knowledgeBaseService;
-        this.agenticRagTool = agenticRagTool;
+        this.agenticRagTool = agenticRagToolProvider.getIfAvailable();
     }
 
     @Override
@@ -173,6 +174,9 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
 
         // 构建系统提示词
         String systemPrompt = buildSystemPrompt();
+        if (agenticRagTool == null) {
+            systemPrompt = systemPrompt + "\n\n【注意】当前环境未启用知识库检索工具，请不要生成任何tool调用内容。";
+        }
 
         // 构建用户查询（包含上下文和电路信息）
         String userQuery = buildUserQuery(
@@ -200,7 +204,7 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         streamAiService.toolBasedChat(
             systemPrompt,
             userQuery,
-            new Object[]{agenticRagTool},
+            agenticRagTool != null ? new Object[]{agenticRagTool} : new Object[]{},
             AiModel.DOUBAO,  // 使用豆包模型
             CircuitAnalysisAssistant.class,
             handler

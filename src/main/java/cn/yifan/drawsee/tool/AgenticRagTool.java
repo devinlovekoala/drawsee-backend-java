@@ -4,6 +4,7 @@ import cn.yifan.drawsee.service.base.PythonRagService;
 import dev.langchain4j.agent.tool.Tool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.Map;
  */
 @Component
 @Slf4j
+@ConditionalOnProperty(prefix = "drawsee.python-service", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class AgenticRagTool {
 
     @Autowired

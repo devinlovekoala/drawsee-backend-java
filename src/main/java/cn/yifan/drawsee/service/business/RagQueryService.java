@@ -1,9 +1,11 @@
 package cn.yifan.drawsee.service.business;
 
+import cn.yifan.drawsee.config.RagQueryProperties;
 import cn.yifan.drawsee.pojo.vo.rag.RagChatResponseVO;
 import cn.yifan.drawsee.service.base.PythonRagService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -24,11 +26,14 @@ import java.util.Map;
 @Slf4j
 public class RagQueryService {
 
-    private final PythonRagService pythonRagService;
+    private final ObjectProvider<PythonRagService> pythonRagServiceProvider;
+    private final RagQueryProperties ragQueryProperties;
 
     @Autowired
-    public RagQueryService(PythonRagService pythonRagService) {
-        this.pythonRagService = pythonRagService;
+    public RagQueryService(ObjectProvider<PythonRagService> pythonRagServiceProvider,
+                           RagQueryProperties ragQueryProperties) {
+        this.pythonRagServiceProvider = pythonRagServiceProvider;
+        this.ragQueryProperties = ragQueryProperties;
     }
 
     /**
@@ -42,6 +47,18 @@ public class RagQueryService {
      * @return RAG响应，失败时返回null（调用方应回退到纯LLM生成）
      */
     public RagChatResponseVO query(List<String> knowledgeBaseIds, String query, List<String> history, Long userId, String classId) {
+        String mode = ragQueryProperties != null ? ragQueryProperties.getMode() : "JAVA";
+        if (mode == null || !mode.equalsIgnoreCase("PYTHON")) {
+            log.debug("RAG检索模式为Java（或未开启），跳过Python RAG调用");
+            return null;
+        }
+
+        PythonRagService pythonRagService = pythonRagServiceProvider.getIfAvailable();
+        if (pythonRagService == null) {
+            log.warn("Python RAG服务未启用，返回null由调用方回退到纯LLM生成");
+            return null;
+        }
+
         // 检查Python RAG服务是否可用
         if (!pythonRagService.isServiceAvailable()) {
             log.warn("Python RAG服务不可用，返回null由调用方回退到纯LLM生成");
@@ -52,12 +69,15 @@ public class RagQueryService {
             log.info("使用Python RAG MCP服务进行混合检索: 用户{}, 问题: {}, 知识库: {}", userId, query, knowledgeBaseIds);
 
             // 调用Python RAG混合检索（向量+结构化数据）
+            int topK = ragQueryProperties != null && ragQueryProperties.getTopK() != null
+                ? ragQueryProperties.getTopK()
+                : 5;
             Map<String, Object> pythonResponse = pythonRagService.ragQuery(
                 query,
                 knowledgeBaseIds,
                 classId,
                 userId,
-                5  // Top-K
+                topK
             );
 
             if (pythonResponse == null) {

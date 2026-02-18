@@ -16,8 +16,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.apache.catalina.connector.ClientAbortException;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -162,8 +164,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IOException.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public R<String> handleIOException(IOException e) {
+        if (isClientAbort(e)) {
+            log.warn("客户端连接已断开，忽略IO异常: {}", e.getMessage());
+            return null;
+        }
         log.error("IO异常: {}", e.getMessage(), e);
         return R.error("IO操作异常");
+    }
+
+    /**
+     * SSE/流式连接断开处理
+     */
+    @ExceptionHandler({AsyncRequestNotUsableException.class, ClientAbortException.class})
+    @ResponseStatus(HttpStatus.OK)
+    public void handleClientAbort(Exception e) {
+        log.warn("客户端连接断开: {}", e.getMessage());
     }
 
     /**
@@ -196,5 +211,17 @@ public class GlobalExceptionHandler {
                 Result.error(statusCode, message),
                 httpStatus
         );
+    }
+
+    private boolean isClientAbort(IOException e) {
+        if (e instanceof ClientAbortException) {
+            return true;
+        }
+        Throwable cause = e.getCause();
+        if (cause instanceof ClientAbortException) {
+            return true;
+        }
+        String message = e.getMessage();
+        return message != null && (message.contains("断开的管道") || message.contains("Broken pipe"));
     }
 }

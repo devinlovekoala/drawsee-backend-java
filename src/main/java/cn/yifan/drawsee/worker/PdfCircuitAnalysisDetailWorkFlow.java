@@ -30,6 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.RStream;
 import org.redisson.api.stream.StreamAddArgs;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -69,13 +70,13 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
         PromptService promptService,
         MinioService minioService,
         KnowledgeBaseService knowledgeBaseService,
-        AgenticRagTool agenticRagTool
+        ObjectProvider<AgenticRagTool> agenticRagToolProvider
     ) {
         super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
         this.promptService = promptService;
         this.minioService = minioService;
         this.knowledgeBaseService = knowledgeBaseService;
-        this.agenticRagTool = agenticRagTool;
+        this.agenticRagTool = agenticRagToolProvider.getIfAvailable();
     }
 
     @Override
@@ -202,12 +203,15 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
 
             请基于PDF文档内容和知识库内容，提供详细的分析点解答。
             """;
+        if (agenticRagTool == null) {
+            systemPrompt = systemPrompt + "\n\n【注意】当前环境未启用知识库检索工具，请不要生成任何tool调用内容。";
+        }
 
         // 使用streamAiService的toolBasedChat方法
         streamAiService.toolBasedChat(
             systemPrompt,
             detailQuery,
-            new Object[]{agenticRagTool},
+            agenticRagTool != null ? new Object[]{agenticRagTool} : new Object[]{},
             cn.yifan.drawsee.constant.AiModel.DOUBAO,  // 使用豆包模型
             CircuitAnalysisAssistant.class,
             handler

@@ -66,13 +66,17 @@ drawsee:
     api-key: ${SEARCH_API_KEY:bce-v3/ALTAK-9uOVZ9zTecaAKTY3taFhJ/71ee329eea9a9df805e15aa310110dc13ddf8e71}  # 百度AppBuilder API Key，获取方式见文档
   # Python微服务配置
   python-service:
-    base-url: ${PYTHON_SERVICE_URL:http://localhost:8000}  # Python服务地址（FastAPI默认端口8000）
+    base-url: http://localhost:8000  # Python服务地址（FastAPI默认端口8000）
     timeout: 60000  # 超时时间（毫秒）
-    enabled: ${PYTHON_SERVICE_ENABLED:true}  # 是否启用Python服务（v2.0生产就绪）
+    enabled: false  # 是否启用Python服务（v2.0生产就绪）
   # RAG入库流程配置
   rag-ingestion:
-    mode: ${RAG_INGESTION_MODE:JAVA}  # JAVA / PYTHON
-    batch-size: ${RAG_INGESTION_BATCH_SIZE:64}
+    mode: JAVA  # JAVA / PYTHON
+    batch-size: 64
+  # RAG检索流程配置
+  rag-query:
+    mode: JAVA  # JAVA / PYTHON
+    top-k: 5
   # Qdrant向量库配置（由Python RAG侧使用，Java侧预留）
   qdrant:
     host: ${QDRANT_HOST:115.191.37.253}
@@ -89,7 +93,7 @@ drawsee:
       exchangeName: direct_ai_task_exchange
       queueName: direct_ai_task_queue
       routingKey: ai_task
-      queueCount: 3
+      queueCount: 5
     animationConfig:
       exchangeName: direct_animation_task_exchange
       queueName: direct_animation_task_queue
@@ -100,7 +104,7 @@ spring:
   application:
     name: drawsee-java
   profiles:
-    active: dev
+    active: prod
   mail:
     host: smtp.qq.com
     protocol: smtp
@@ -130,7 +134,7 @@ spring:
       location: ${java.io.tmpdir}
       resolve-lazily: false
   rabbitmq:
-    host: 117.72.9.87
+    host: 115.191.37.253
     port: 5678
   datasource:
     druid:
@@ -140,7 +144,7 @@ spring:
       password: ${drawsee.mysql.password}
   data:
     redis:
-      host: 117.72.9.87
+      host: 115.191.37.253
       port: 6278
       # 连接超时时间
       timeout: 10s

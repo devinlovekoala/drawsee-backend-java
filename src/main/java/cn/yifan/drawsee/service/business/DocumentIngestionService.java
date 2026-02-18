@@ -16,6 +16,7 @@ import cn.yifan.drawsee.service.business.parser.TextChunker;
 import cn.yifan.drawsee.util.UUIDUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -42,7 +43,7 @@ public class DocumentIngestionService {
     private RagIngestionTaskService ragIngestionTaskService;
 
     @Autowired
-    private PythonRagService pythonRagService;
+    private ObjectProvider<PythonRagService> pythonRagServiceProvider;
 
     @Autowired
     private KnowledgeBaseMapper knowledgeBaseMapper;
@@ -113,6 +114,10 @@ public class DocumentIngestionService {
     }
 
     private void ingestWithPython(RagIngestionTask task, KnowledgeDocument document) {
+        PythonRagService pythonRagService = pythonRagServiceProvider.getIfAvailable();
+        if (pythonRagService == null) {
+            throw new IllegalStateException("Python RAG 服务未启用");
+        }
         if (!pythonRagService.isServiceAvailable()) {
             throw new IllegalStateException("Python RAG 服务不可用");
         }
