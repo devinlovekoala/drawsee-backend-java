@@ -15,9 +15,12 @@ import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
 import cn.yifan.drawsee.service.base.PromptService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.ContextBudgetManager;
 import cn.yifan.drawsee.service.business.KnowledgeBaseService;
+import cn.yifan.drawsee.service.business.RagEnhancementService;
 import cn.yifan.drawsee.tool.AgenticRagTool;
 import cn.yifan.drawsee.util.PdfUtils;
+import cn.yifan.drawsee.pojo.vo.rag.RagChatResponseVO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -57,6 +60,7 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
     private final MinioService minioService;
     private final KnowledgeBaseService knowledgeBaseService;
     private final AgenticRagTool agenticRagTool;
+    private final RagEnhancementService ragEnhancementService;
 
     public PdfCircuitAnalysisDetailWorkFlow(
         UserMapper userMapper,
@@ -70,13 +74,16 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
         PromptService promptService,
         MinioService minioService,
         KnowledgeBaseService knowledgeBaseService,
-        ObjectProvider<AgenticRagTool> agenticRagToolProvider
+        ObjectProvider<AgenticRagTool> agenticRagToolProvider,
+        ContextBudgetManager contextBudgetManager,
+        RagEnhancementService ragEnhancementService
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper, contextBudgetManager);
         this.promptService = promptService;
         this.minioService = minioService;
         this.knowledgeBaseService = knowledgeBaseService;
         this.agenticRagTool = agenticRagToolProvider.getIfAvailable();
+        this.ragEnhancementService = ragEnhancementService;
     }
 
     @Override
@@ -144,7 +151,6 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
-        LinkedList<ChatMessage> history = workContext.getHistory();
         Node parentNode = workContext.getParentNode();
         String model = aiTaskMessage.getModel();
 
@@ -177,6 +183,11 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
             log.info("PDF电路分析详情工作流：未能抽取正文，回退为URL兜底");
         }
 
+        LinkedList<ChatMessage> history = applyHistoryBudget(
+            workContext,
+            planContextBudget(workContext, prompt)
+        );
+
         // 构建Agentic RAG查询（PDF分析点详情）
         String detailQuery = String.format(
             "根据实验任务文档，详细分析【%s】这个角度：\n\n%s",
@@ -189,6 +200,16 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
             aiTaskMessage.getUserId() != null ? aiTaskMessage.getUserId() : 0L,
             null  // PDF详情工作流通常没有班级上下文
         );
+        RagChatResponseVO ragResponse = ragEnhancementService.queryWithTimeout(
+            knowledgeBaseIds,
+            detailQuery,
+            history,
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getClassId()
+        );
+        if (ragResponse != null && ragResponse.getAnswer() != null && !ragResponse.getAnswer().isBlank()) {
+            detailQuery = "【知识库检索结果】\n" + ragResponse.getAnswer() + "\n\n" + detailQuery;
+        }
 
         log.info("[PdfCircuitAnalysisDetail-Tool] 开始Tool-based对话生成, angle={}", angleTitle);
 
@@ -212,7 +233,7 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
             systemPrompt,
             detailQuery,
             agenticRagTool != null ? new Object[]{agenticRagTool} : new Object[]{},
-            cn.yifan.drawsee.constant.AiModel.DOUBAO,  // 使用豆包模型
+            aiTaskMessage.getModel(),
             CircuitAnalysisAssistant.class,
             handler
         );

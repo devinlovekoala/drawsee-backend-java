@@ -22,6 +22,7 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.ContextBudgetManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -70,9 +71,10 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
             KnowledgeResourceMapper knowledgeResourceMapper,
             ClassMemberMapper classMemberMapper,
             CourseMapper courseMapper,
-            ClassMapper classMapper
+            ClassMapper classMapper,
+            ContextBudgetManager contextBudgetManager
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper, contextBudgetManager);
         this.knowledgeBaseMapper = knowledgeBaseMapper;
         this.knowledgeMapper = knowledgeMapper;
         this.knowledgeResourceMapper = knowledgeResourceMapper;
@@ -126,7 +128,10 @@ public class KnowledgeDetailWorkFlow extends WorkFlow {
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         Node parentNode = workContext.getParentNode();
-        LinkedList<ChatMessage> history = workContext.getHistory();
+        LinkedList<ChatMessage> history = applyHistoryBudget(
+            workContext,
+            planContextBudget(workContext, workContext.getAiTaskMessage().getPrompt())
+        );
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         String model = aiTaskMessage.getModel();
         

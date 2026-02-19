@@ -3,6 +3,7 @@ package cn.yifan.drawsee.service.business;
 import cn.yifan.drawsee.config.RagQueryProperties;
 import cn.yifan.drawsee.pojo.vo.rag.RagChatResponseVO;
 import cn.yifan.drawsee.service.base.PythonRagService;
+import cn.yifan.drawsee.util.TokenEstimator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
@@ -47,6 +48,17 @@ public class RagQueryService {
      * @return RAG响应，失败时返回null（调用方应回退到纯LLM生成）
      */
     public RagChatResponseVO query(List<String> knowledgeBaseIds, String query, List<String> history, Long userId, String classId) {
+        return queryWithBudget(knowledgeBaseIds, query, history, userId, classId, null);
+    }
+
+    public RagChatResponseVO queryWithBudget(
+        List<String> knowledgeBaseIds,
+        String query,
+        List<String> history,
+        Long userId,
+        String classId,
+        RagQueryBudget budget
+    ) {
         String mode = ragQueryProperties != null ? ragQueryProperties.getMode() : "JAVA";
         if (mode == null || !mode.equalsIgnoreCase("PYTHON")) {
             log.debug("RAG检索模式为Java（或未开启），跳过Python RAG调用");
@@ -69,9 +81,7 @@ public class RagQueryService {
             log.info("使用Python RAG MCP服务进行混合检索: 用户{}, 问题: {}, 知识库: {}", userId, query, knowledgeBaseIds);
 
             // 调用Python RAG混合检索（向量+结构化数据）
-            int topK = ragQueryProperties != null && ragQueryProperties.getTopK() != null
-                ? ragQueryProperties.getTopK()
-                : 5;
+            int topK = resolveTopK(budget);
             Map<String, Object> pythonResponse = pythonRagService.ragQuery(
                 query,
                 knowledgeBaseIds,
@@ -86,7 +96,7 @@ public class RagQueryService {
             }
 
             // 转换Python服务响应为RagChatResponseVO
-            return convertPythonResponseToVO(pythonResponse);
+            return convertPythonResponseToVO(pythonResponse, budget);
 
         } catch (Exception e) {
             log.warn("Python RAG服务调用异常，返回null: {}", e.getMessage());
@@ -117,8 +127,14 @@ public class RagQueryService {
      *   "total": 3
      * }
      */
-    private RagChatResponseVO convertPythonResponseToVO(Map<String, Object> pythonResponse) {
+    private RagChatResponseVO convertPythonResponseToVO(Map<String, Object> pythonResponse, RagQueryBudget budget) {
         RagChatResponseVO response = new RagChatResponseVO();
+        int maxChunksInContext = budget != null ? budget.getMaxChunksInContext() : getPositiveOrDefault(
+            ragQueryProperties != null ? ragQueryProperties.getMaxChunksInContext() : null,
+            4
+        );
+        int contextMaxTokens = budget != null ? budget.getContextMaxTokens() : resolveDefaultRetrievalTokens();
+        int chunkMaxTokens = budget != null ? budget.getChunkMaxTokens() : 600;
 
         // 提取检索结果
         @SuppressWarnings("unchecked")
@@ -129,6 +145,8 @@ public class RagQueryService {
             List<Map<String, Object>> chunks = new ArrayList<>();
             StringBuilder combinedContext = new StringBuilder();
 
+            int contextIndex = 0;
+            int usedTokens = 0;
             for (Map<String, Object> result : results) {
                 // 构造知识块
                 Map<String, Object> chunk = new HashMap<>();
@@ -150,14 +168,37 @@ public class RagQueryService {
                 // 组装上下文（用于LLM生成）
                 String caption = (String) result.get("caption");
                 Object pageNum = result.get("page_number");
+                if (contextIndex < maxChunksInContext && usedTokens < contextMaxTokens) {
+                    Double score = result.get("score") instanceof Number
+                        ? ((Number) result.get("score")).doubleValue()
+                        : null;
+                    String scoreText = score != null ? String.format("%.2f", score) : "-";
+                    String pageText = pageNum != null ? pageNum.toString() : "-";
+                    String compactCaption = TokenEstimator.trimToTokenBudget(
+                        TokenEstimator.normalizeWhitespace(caption),
+                        chunkMaxTokens
+                    );
+                    String contextLine = String.format(
+                        "图%d p%s s%s: %s\n",
+                        contextIndex + 1,
+                        pageText,
+                        scoreText,
+                        compactCaption
+                    );
 
-                combinedContext.append(String.format(
-                    "【电路图 %d】(页码: %s, 相似度: %.2f)\n%s\n\n",
-                    chunks.size(),
-                    pageNum,
-                    ((Number) result.get("score")).doubleValue(),
-                    caption
-                ));
+                    int lineTokens = TokenEstimator.estimateTokens(contextLine);
+                    if (usedTokens + lineTokens > contextMaxTokens) {
+                        int remainingTokens = Math.max(contextMaxTokens - usedTokens, 0);
+                        if (remainingTokens > 0) {
+                            combinedContext.append(TokenEstimator.trimToTokenBudget(contextLine, remainingTokens));
+                        }
+                        break;
+                    }
+
+                    combinedContext.append(contextLine);
+                    usedTokens += lineTokens;
+                    contextIndex++;
+                }
             }
 
             response.setChunks(chunks);
@@ -174,6 +215,42 @@ public class RagQueryService {
 
         response.setDone(true);
         return response;
+    }
+
+    private int resolveTopK(RagQueryBudget budget) {
+        if (budget != null && budget.getTopK() > 0) {
+            return budget.getTopK();
+        }
+        return ragQueryProperties != null && ragQueryProperties.getTopK() != null
+            ? ragQueryProperties.getTopK()
+            : 5;
+    }
+
+    private int resolveDefaultRetrievalTokens() {
+        if (ragQueryProperties == null) {
+            return 2000;
+        }
+        int maxContextTokens = getPositiveOrDefault(ragQueryProperties.getMaxContextTokens(), 160000);
+        double safeRatio = getRatioOrDefault(ragQueryProperties.getSafeInputRatio(), 0.65);
+        int reservedOutput = getPositiveOrDefault(ragQueryProperties.getReservedOutputTokens(), 8000);
+        int safeInputTokens = Math.min((int) Math.floor(maxContextTokens * safeRatio), maxContextTokens - reservedOutput);
+        double retrievalRatio = getRatioOrDefault(ragQueryProperties.getRetrievalRatio(), 0.45);
+        int retrievalTokens = (int) Math.floor(safeInputTokens * retrievalRatio);
+        return Math.max(retrievalTokens, 0);
+    }
+
+    private int getPositiveOrDefault(Integer value, int defaultValue) {
+        if (value == null || value <= 0) {
+            return defaultValue;
+        }
+        return value;
+    }
+
+    private double getRatioOrDefault(Double value, double defaultValue) {
+        if (value == null || value <= 0) {
+            return defaultValue;
+        }
+        return value;
     }
 
 }

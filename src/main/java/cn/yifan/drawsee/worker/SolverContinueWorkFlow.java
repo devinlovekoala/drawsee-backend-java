@@ -13,6 +13,7 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.ContextBudgetManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
@@ -46,9 +47,10 @@ public class SolverContinueWorkFlow extends WorkFlow {
         NodeMapper nodeMapper,
         ConversationMapper conversationMapper,
         AiTaskMapper aiTaskMapper,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        ContextBudgetManager contextBudgetManager
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper, contextBudgetManager);
     }
 
     // TODO 补充校验逻辑
@@ -76,6 +78,7 @@ public class SolverContinueWorkFlow extends WorkFlow {
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        applyHistoryBudget(workContext, planContextBudget(workContext, aiTaskMessage.getPrompt()));
         String model = aiTaskMessage.getModel();
         streamAiService.solverContinueChat(workContext.getHistory(), model, handler);
     }

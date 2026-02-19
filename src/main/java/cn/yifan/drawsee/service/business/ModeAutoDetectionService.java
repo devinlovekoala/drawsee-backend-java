@@ -19,7 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ModeAutoDetectionService {
 
     @Autowired
-    private ChatLanguageModel doubaoChatLanguageModel;
+    private ChatLanguageModel deepseekV3ChatLanguageModel;
     
     @Autowired
     private PromptService promptService;
@@ -46,7 +46,7 @@ public class ModeAutoDetectionService {
             
             // 使用PromptService获取模式检测提示词
             String detectionPrompt = promptService.getModeDetectionPrompt(prompt);
-            String detectedType = doubaoChatLanguageModel.chat(detectionPrompt).trim();
+            String detectedType = deepseekV3ChatLanguageModel.chat(detectionPrompt).trim();
             
             // 验证返回的类型是否有效
             if (isValidTaskType(detectedType)) {

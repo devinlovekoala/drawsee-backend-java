@@ -18,6 +18,10 @@ import cn.yifan.drawsee.service.base.MinioService;
 import cn.yifan.drawsee.service.base.PdfMultimodalService;
 import cn.yifan.drawsee.service.base.PromptService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.ContextBudgetManager;
+import cn.yifan.drawsee.service.business.ClassKnowledgeService;
+import cn.yifan.drawsee.service.business.RagEnhancementService;
+import cn.yifan.drawsee.pojo.vo.rag.RagChatResponseVO;
 import cn.yifan.drawsee.util.PdfUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -56,6 +60,8 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
     private final PromptService promptService;
     private final MinioService minioService;
     private final PdfMultimodalService pdfMultimodalService;
+    private final ClassKnowledgeService classKnowledgeService;
+    private final RagEnhancementService ragEnhancementService;
 
     public PdfCircuitAnalysisWorkFlow(
             UserMapper userMapper,
@@ -68,12 +74,17 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             ObjectMapper objectMapper,
             PromptService promptService,
             MinioService minioService,
-            PdfMultimodalService pdfMultimodalService
+            PdfMultimodalService pdfMultimodalService,
+            ContextBudgetManager contextBudgetManager,
+            ClassKnowledgeService classKnowledgeService,
+            RagEnhancementService ragEnhancementService
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper, contextBudgetManager);
         this.promptService = promptService;
         this.minioService = minioService;
         this.pdfMultimodalService = pdfMultimodalService;
+        this.classKnowledgeService = classKnowledgeService;
+        this.ragEnhancementService = ragEnhancementService;
     }
 
     /**
@@ -248,6 +259,28 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
 
         // 构建Agentic RAG查询（直接使用分点提示词，确保输出格式）
         String pdfQuery = prompt;
+        List<String> knowledgeBaseIds;
+        if (aiTaskMessage.getClassId() != null && !aiTaskMessage.getClassId().isBlank()) {
+            knowledgeBaseIds = classKnowledgeService.getAccessibleKnowledgeBaseIds(
+                Long.parseLong(aiTaskMessage.getClassId()),
+                aiTaskMessage.getUserId()
+            );
+        } else {
+            knowledgeBaseIds = classKnowledgeService.getAccessibleKnowledgeBaseIds(
+                null,
+                aiTaskMessage.getUserId()
+            );
+        }
+        RagChatResponseVO ragResponse = ragEnhancementService.queryWithTimeout(
+            knowledgeBaseIds,
+            pdfQuery,
+            workContext.getHistory(),
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getClassId()
+        );
+        if (ragResponse != null && ragResponse.getAnswer() != null && !ragResponse.getAnswer().isBlank()) {
+            pdfQuery = "【知识库检索结果】\n" + ragResponse.getAnswer() + "\n\n" + pdfQuery;
+        }
 
         log.info("[PdfCircuitAnalysis-Tool] 开始Tool-based对话生成(无外部RAG), taskId={}", aiTaskMessage.getTaskId());
 
@@ -269,7 +302,7 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
             systemPrompt,
             pdfQuery,
             new Object[] {}, // 暂停Python RAG，减少耗时
-            cn.yifan.drawsee.constant.AiModel.DOUBAO,  // 使用豆包模型
+            aiTaskMessage.getModel(),
             CircuitAnalysisAssistant.class,
             handler
         );

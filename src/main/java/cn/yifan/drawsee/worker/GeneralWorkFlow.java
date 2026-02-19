@@ -10,6 +10,10 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.ContextBudgetManager;
+import cn.yifan.drawsee.service.business.ClassKnowledgeService;
+import cn.yifan.drawsee.service.business.RagEnhancementService;
+import cn.yifan.drawsee.pojo.vo.rag.RagChatResponseVO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
@@ -21,6 +25,7 @@ import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -35,6 +40,9 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class GeneralWorkFlow extends WorkFlow {
 
+    private final ClassKnowledgeService classKnowledgeService;
+    private final RagEnhancementService ragEnhancementService;
+
     public GeneralWorkFlow(
         UserMapper userMapper,
         AiService aiService,
@@ -43,9 +51,14 @@ public class GeneralWorkFlow extends WorkFlow {
         NodeMapper nodeMapper,
         ConversationMapper conversationMapper,
         AiTaskMapper aiTaskMapper,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        ContextBudgetManager contextBudgetManager,
+        ClassKnowledgeService classKnowledgeService,
+        RagEnhancementService ragEnhancementService
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper, contextBudgetManager);
+        this.classKnowledgeService = classKnowledgeService;
+        this.ragEnhancementService = ragEnhancementService;
     }
     
     /**
@@ -146,10 +159,39 @@ public class GeneralWorkFlow extends WorkFlow {
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
-        LinkedList<ChatMessage> history = workContext.getHistory();
-        
+        LinkedList<ChatMessage> history = applyHistoryBudget(
+            workContext,
+            planContextBudget(workContext, aiTaskMessage.getPrompt())
+        );
+
+        String enhancedPrompt = aiTaskMessage.getPrompt();
+        RagChatResponseVO ragResponse = tryRagEnhance(workContext, history);
+        if (ragResponse != null && ragResponse.getAnswer() != null && !ragResponse.getAnswer().isBlank()) {
+            enhancedPrompt = "【知识库检索结果】\n" + ragResponse.getAnswer()
+                + "\n\n【用户问题】\n" + aiTaskMessage.getPrompt();
+        }
+
         // 直接调用角度生成方法，不修改任何节点数据
-        streamAiService.answerPointChat(history, aiTaskMessage.getPrompt(), aiTaskMessage.getModel(), handler);
+        streamAiService.answerPointChat(history, enhancedPrompt, aiTaskMessage.getModel(), handler);
+    }
+
+    private RagChatResponseVO tryRagEnhance(WorkContext workContext, List<ChatMessage> history) {
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        Long userId = aiTaskMessage.getUserId();
+        String classId = aiTaskMessage.getClassId();
+        List<String> knowledgeBaseIds = classId != null && !classId.isEmpty()
+            ? classKnowledgeService.getAccessibleKnowledgeBaseIds(Long.parseLong(classId), userId)
+            : classKnowledgeService.getAccessibleKnowledgeBaseIds(null, userId);
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            return null;
+        }
+        return ragEnhancementService.queryWithTimeout(
+            knowledgeBaseIds,
+            aiTaskMessage.getPrompt(),
+            history,
+            userId,
+            String.valueOf(classId)
+        );
     }
     
     /**

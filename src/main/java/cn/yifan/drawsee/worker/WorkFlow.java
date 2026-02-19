@@ -15,6 +15,8 @@ import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.pojo.vo.NodeVO;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.ContextBudgetManager;
+import cn.yifan.drawsee.service.business.ContextBudgetPlan;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -56,6 +58,7 @@ public class WorkFlow {
     protected final StreamAiService streamAiService;
     protected final RedissonClient redissonClient;
     protected final ObjectMapper objectMapper;
+    protected final ContextBudgetManager contextBudgetManager;
 
     public WorkFlow(
         UserMapper userMapper,
@@ -65,7 +68,8 @@ public class WorkFlow {
         NodeMapper nodeMapper,
         ConversationMapper conversationMapper,
         AiTaskMapper aiTaskMapper,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        ContextBudgetManager contextBudgetManager
     ) {
         this.userMapper = userMapper;
         this.aiService = aiService;
@@ -75,6 +79,7 @@ public class WorkFlow {
         this.conversationMapper = conversationMapper;
         this.aiTaskMapper = aiTaskMapper;
         this.objectMapper = objectMapper;
+        this.contextBudgetManager = contextBudgetManager;
     }
 
     public final void execute(WorkContext workContext) {
@@ -211,6 +216,10 @@ public class WorkFlow {
         User user = userMapper.getById(aiTaskMessage.getUserId());
         if (user == null) {
             log.error("用户不存在, taskMessage: {}", aiTaskMessage);
+            return false;
+        }
+        if (aiTaskMessage.getModel() == null || aiTaskMessage.getModel().isBlank()) {
+            log.error("模型未指定, taskMessage: {}", aiTaskMessage);
             return false;
         }
         Conversation conversation = conversationMapper.getById(aiTaskMessage.getConvId());
@@ -365,7 +374,8 @@ public class WorkFlow {
 
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
-        LinkedList<ChatMessage> history = workContext.getHistory();
+        ContextBudgetPlan budgetPlan = planContextBudget(workContext, aiTaskMessage.getPrompt());
+        LinkedList<ChatMessage> history = applyHistoryBudget(workContext, budgetPlan);
         
         // 如果是通用对话类型，则使用answerPointChat方法生成回答角度
         if (AiTaskType.GENERAL.equals(aiTaskMessage.getType())) {
@@ -457,6 +467,23 @@ public class WorkFlow {
         } catch (Exception e) {
             log.error("解析回答角度失败: {}", responseText, e);
         }
+    }
+
+    protected ContextBudgetPlan planContextBudget(WorkContext workContext, String prompt) {
+        return contextBudgetManager.plan(prompt, workContext.getHistory());
+    }
+
+    protected LinkedList<ChatMessage> applyHistoryBudget(WorkContext workContext, ContextBudgetPlan plan) {
+        LinkedList<ChatMessage> history = workContext.getHistory();
+        ContextBudgetManager.HistoryCompressionResult compressionResult =
+            contextBudgetManager.compressHistoryIfNeeded(history, plan);
+        if (compressionResult.isCompressed()) {
+            history = new LinkedList<>(compressionResult.getHistory());
+            workContext.setHistory(history);
+            log.info("对话历史触发压缩: history_tokens={}, history_budget={}",
+                     plan.getHistoryTokens(), plan.getHistoryBudgetTokens());
+        }
+        return history;
     }
 
     /**

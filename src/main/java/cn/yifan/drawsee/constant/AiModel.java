@@ -9,10 +9,10 @@ package cn.yifan.drawsee.constant;
 
 public class AiModel {
 
-    public static final String DOUBAO = "doubao";
+    public static final String QWEN = "qwen";
 
     public static final String DEEPSEEKV3 = "deepseekV3";
 
-    public static final String DOUBAOVISION = "doubaoVision";
+    public static final String QWENVISION = "qwenVision";
 
 }

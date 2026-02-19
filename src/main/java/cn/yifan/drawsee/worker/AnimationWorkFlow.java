@@ -16,6 +16,7 @@ import cn.yifan.drawsee.pojo.rabbit.LinkedQueue;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.PromptService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.ContextBudgetManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -71,9 +72,10 @@ public class AnimationWorkFlow extends WorkFlow {
         PromptService promptService,
         ChatLanguageModel deepseekV3ChatLanguageModel,
         List<LinkedQueue> animationTaskQueues,
-        RabbitTemplate rabbitTemplate
+        RabbitTemplate rabbitTemplate,
+        ContextBudgetManager contextBudgetManager
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper, contextBudgetManager);
         this.promptService = promptService;
         this.deepseekV3ChatLanguageModel = deepseekV3ChatLanguageModel;
         this.animationTaskQueues = animationTaskQueues;
@@ -89,7 +91,10 @@ public class AnimationWorkFlow extends WorkFlow {
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
-        LinkedList<ChatMessage> history = workContext.getHistory();
+        LinkedList<ChatMessage> history = applyHistoryBudget(
+            workContext,
+            planContextBudget(workContext, aiTaskMessage.getPrompt())
+        );
         String model = aiTaskMessage.getModel();
         streamAiService.animationChat(history, aiTaskMessage.getPrompt(), model, handler);
     }

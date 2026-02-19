@@ -12,6 +12,7 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.ContextBudgetManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.ai4j.openai4j.chat.AssistantMessage;
@@ -50,9 +51,10 @@ public class PlannerWorkFlow extends WorkFlow {
         NodeMapper nodeMapper,
         ConversationMapper conversationMapper,
         AiTaskMapper aiTaskMapper,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        ContextBudgetManager contextBudgetManager
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper, contextBudgetManager);
     }
 
     @Override
@@ -82,8 +84,11 @@ public class PlannerWorkFlow extends WorkFlow {
 
     @Override
     public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
-        LinkedList<ChatMessage> history = workContext.getHistory();
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        LinkedList<ChatMessage> history = applyHistoryBudget(
+            workContext,
+            planContextBudget(workContext, aiTaskMessage.getPrompt())
+        );
         String model = aiTaskMessage.getModel();
         streamAiService.plannerFirstChat(history, model, handler);
     }

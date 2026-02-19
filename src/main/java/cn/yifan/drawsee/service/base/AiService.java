@@ -31,9 +31,9 @@ public class AiService {
     @Autowired
     private PromptService promptService;
     @Autowired
-    private ChatLanguageModel doubaoChatLanguageModel;
+    private ChatLanguageModel deepseekV3ChatLanguageModel;
     @Autowired
-    private ChatLanguageModel doubaoVisionChatLanguageModel;
+    private ChatLanguageModel qwenVisionChatLanguageModel;
     @Autowired
     private ObjectMapper objectMapper;
     @Autowired
@@ -41,12 +41,12 @@ public class AiService {
 
     public String getConvTitle(String question) {
         String prompt = promptService.getConvTitlePrompt(question);
-        return doubaoChatLanguageModel.chat(prompt);
+        return deepseekV3ChatLanguageModel.chat(prompt);
     }
 
     public List<String> getRelatedKnowledgePoints(List<String> knowledgePoints, String question, AtomicLong tokens) {
         String prompt = promptService.getRelatedKnowledgePointsPrompt(knowledgePoints, question);
-        Response<AiMessage> response = doubaoChatLanguageModel.generate(UserMessage.from(prompt));
+        Response<AiMessage> response = deepseekV3ChatLanguageModel.generate(UserMessage.from(prompt));
         tokens.addAndGet(response.tokenUsage().totalTokenCount());
         TypeReference<List<String>> typeReference = new TypeReference<>() {};
         try {
@@ -59,7 +59,7 @@ public class AiService {
     }
 
     /**
-     * 使用doubaoVision识别图片中的文本
+     * 使用Qwen Vision识别图片中的文本
      * @param imageUrl 图片的URL地址
      * @return 识别出的文本内容
      */
@@ -69,8 +69,8 @@ public class AiService {
                 TextContent.from(imageTextPrompt),
                 ImageContent.from(imageUrl)
         );
-        // 使用doubaoVision模型进行识别
-        Response<AiMessage> response = doubaoVisionChatLanguageModel.generate(userMessage);
+        // 使用Qwen Vision模型进行识别
+        Response<AiMessage> response = qwenVisionChatLanguageModel.generate(userMessage);
         return response.content().text();
     }
 
@@ -85,7 +85,7 @@ public class AiService {
             TextContent.from(prompt),
             ImageContent.from(imageUrl)
         );
-        Response<AiMessage> response = doubaoVisionChatLanguageModel.generate(userMessage);
+        Response<AiMessage> response = qwenVisionChatLanguageModel.generate(userMessage);
         String raw = response.content().text();
         try {
             return circuitImageNetlistParser.parse(raw);
@@ -97,7 +97,7 @@ public class AiService {
 
     public List<String> getSolveWays(String question) throws JsonProcessingException {
         String prompt = promptService.getSolveWaysPrompt(question);
-        String result = doubaoChatLanguageModel.chat(prompt);
+        String result = deepseekV3ChatLanguageModel.chat(prompt);
         TypeReference<List<String>> typeReference = new TypeReference<>() {};
         return objectMapper.readValue(result, typeReference);
     }
@@ -105,7 +105,7 @@ public class AiService {
     public List<String> getPlannerSplit(LinkedList<ChatMessage> history, AtomicLong tokens) throws JsonProcessingException {
         String prompt = promptService.getPlannerSplitPrompt();
         history.addLast(new UserMessage(prompt));
-        Response<AiMessage> response = doubaoChatLanguageModel.generate(history);
+        Response<AiMessage> response = deepseekV3ChatLanguageModel.generate(history);
         tokens.addAndGet(response.tokenUsage().totalTokenCount());
         TypeReference<List<String>> typeReference = new TypeReference<>() {};
         return objectMapper.readValue(response.content().text(), typeReference);

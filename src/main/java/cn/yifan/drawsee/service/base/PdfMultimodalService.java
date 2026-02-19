@@ -34,7 +34,7 @@ import java.util.List;
 public class PdfMultimodalService {
 
     @Autowired
-    private ChatLanguageModel doubaoVisionChatLanguageModel;
+    private ChatLanguageModel qwenVisionChatLanguageModel;
 
     @Autowired
     private MinioService minioService;
@@ -228,7 +228,7 @@ public class PdfMultimodalService {
             );
 
             Response<dev.langchain4j.data.message.AiMessage> response =
-                doubaoVisionChatLanguageModel.generate(userMessage);
+                qwenVisionChatLanguageModel.generate(userMessage);
 
             String analysis = response.content().text();
             log.info("第{}页图像分析完成，长度: {}", pageNo + 1, analysis.length());
@@ -253,7 +253,7 @@ public class PdfMultimodalService {
             );
 
             Response<dev.langchain4j.data.message.AiMessage> response =
-                doubaoVisionChatLanguageModel.generate(userMessage);
+                qwenVisionChatLanguageModel.generate(userMessage);
             String netlist = response.content().text();
             CircuitDesign design = circuitImageNetlistParser.parse(netlist);
             return new CircuitDesignResult(pageNo + 1, design, netlist);

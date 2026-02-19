@@ -20,8 +20,11 @@ import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.PromptService;
 import cn.yifan.drawsee.service.base.StreamAiService;
+import cn.yifan.drawsee.service.business.ContextBudgetManager;
 import cn.yifan.drawsee.service.business.KnowledgeBaseService;
+import cn.yifan.drawsee.service.business.RagEnhancementService;
 import cn.yifan.drawsee.tool.AgenticRagTool;
+import cn.yifan.drawsee.pojo.vo.rag.RagChatResponseVO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -59,6 +62,7 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
     private final SpiceConverter spiceConverter;
     private final KnowledgeBaseService knowledgeBaseService;
     private final AgenticRagTool agenticRagTool;
+    private final RagEnhancementService ragEnhancementService;
 
     public CircuitAnalysisDetailWorkFlow(
         UserMapper userMapper,
@@ -72,13 +76,16 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         PromptService promptService,
         SpiceConverter spiceConverter,
         KnowledgeBaseService knowledgeBaseService,
-        ObjectProvider<AgenticRagTool> agenticRagToolProvider
+        ObjectProvider<AgenticRagTool> agenticRagToolProvider,
+        ContextBudgetManager contextBudgetManager,
+        RagEnhancementService ragEnhancementService
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper, contextBudgetManager);
         this.promptService = promptService;
         this.spiceConverter = spiceConverter;
         this.knowledgeBaseService = knowledgeBaseService;
         this.agenticRagTool = agenticRagToolProvider.getIfAvailable();
+        this.ragEnhancementService = ragEnhancementService;
     }
 
     @Override
@@ -188,6 +195,17 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
             aiTaskMessage.getClassId()
         );
 
+        RagChatResponseVO ragResponse = ragEnhancementService.queryWithTimeout(
+            knowledgeBaseIds,
+            followUpQuestion,
+            workContext.getHistory(),
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getClassId()
+        );
+        if (ragResponse != null && ragResponse.getAnswer() != null && !ragResponse.getAnswer().isBlank()) {
+            userQuery = "【知识库检索结果】\n" + ragResponse.getAnswer() + "\n\n" + userQuery;
+        }
+
         // 将知识库ID存入上下文，供AgenticRagTool使用
         workContext.putExtraData("knowledgeBaseIds", knowledgeBaseIds);
         workContext.putExtraData("userId", aiTaskMessage.getUserId());
@@ -204,7 +222,7 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
             systemPrompt,
             userQuery,
             agenticRagTool != null ? new Object[]{agenticRagTool} : new Object[]{},
-            AiModel.DOUBAO,  // 使用豆包模型
+            aiTaskMessage.getModel(),
             CircuitAnalysisAssistant.class,
             handler
         );

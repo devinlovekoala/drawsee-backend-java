@@ -16,10 +16,10 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Python电路RAG微服务调用封装
@@ -327,6 +327,7 @@ public class PythonRagService {
 
             // 用于累积完整文本
             StringBuilder accumulatedText = new StringBuilder();
+            AtomicBoolean completed = new AtomicBoolean(false);
 
             webClient.post()
                 .uri(url)
@@ -337,10 +338,11 @@ public class PythonRagService {
                 .retrieve()
                 .bodyToFlux(String.class)
                 .doOnNext(chunk -> {
-                    // 调试日志：记录收到的原始chunk
-                    log.info("[AgenticRAG] 收到SSE chunk: length={}, content='{}'",
-                             chunk.length(),
-                             chunk.length() > 100 ? chunk.substring(0, 100) + "..." : chunk);
+                    if (log.isDebugEnabled()) {
+                        log.debug("[AgenticRAG] 收到SSE chunk: length={}, content='{}'",
+                                  chunk.length(),
+                                  chunk.length() > 100 ? chunk.substring(0, 100) + "..." : chunk);
+                    }
                 })
                 .filter(chunk -> chunk != null && !chunk.trim().isEmpty())
                 .subscribe(
@@ -350,19 +352,23 @@ public class PythonRagService {
                         // 已经去掉了"data: "前缀，chunk就是纯内容
                         if ("[DONE]".equals(chunk.trim())) {
                             // 流式结束
-                            handler.onComplete(
-                                Response.from(
-                                    AiMessage.from(accumulatedText.toString())
-                                )
-                            );
-                            log.info("[AgenticRAG] 流式查询完成: total_length={}", accumulatedText.length());
+                            if (completed.compareAndSet(false, true)) {
+                                handler.onComplete(
+                                    Response.from(
+                                        AiMessage.from(accumulatedText.toString())
+                                    )
+                                );
+                                log.info("[AgenticRAG] 流式查询完成: total_length={}", accumulatedText.length());
+                            }
                         } else if (!chunk.trim().isEmpty()) {
                             // 累积文本片段（跳过空行）
                             accumulatedText.append(chunk);
                             // 调用handler的onNext（LangChain4j会处理流式更新）
                             handler.onNext(chunk);
-                            log.debug("[AgenticRAG] 累积文本: chunk_length={}, total_length={}",
-                                     chunk.length(), accumulatedText.length());
+                            if (log.isDebugEnabled()) {
+                                log.debug("[AgenticRAG] 累积文本: chunk_length={}, total_length={}",
+                                          chunk.length(), accumulatedText.length());
+                            }
                         }
                     },
                     // onError: 处理错误
@@ -372,15 +378,17 @@ public class PythonRagService {
                     },
                     // onComplete: 流结束（如果没有收到[DONE]标记）
                     () -> {
-                        if (accumulatedText.length() > 0) {
-                            handler.onComplete(
-                                Response.from(
-                                    AiMessage.from(accumulatedText.toString())
-                                )
-                            );
-                            log.info("[AgenticRAG] 流式查询完成（无DONE标记）: total_length={}", accumulatedText.length());
-                        } else {
-                            log.warn("[AgenticRAG] 流结束但未收到任何内容");
+                        if (completed.compareAndSet(false, true)) {
+                            if (accumulatedText.length() > 0) {
+                                handler.onComplete(
+                                    Response.from(
+                                        AiMessage.from(accumulatedText.toString())
+                                    )
+                                );
+                                log.info("[AgenticRAG] 流式查询完成（无DONE标记）: total_length={}", accumulatedText.length());
+                            } else {
+                                log.warn("[AgenticRAG] 流结束但未收到任何内容");
+                            }
                         }
                     }
                 );

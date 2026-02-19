@@ -20,7 +20,10 @@ import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.StreamAiService;
 import cn.yifan.drawsee.service.business.ClassKnowledgeService;
-import cn.yifan.drawsee.service.business.RagQueryService;
+import cn.yifan.drawsee.service.business.ContextBudgetManager;
+import cn.yifan.drawsee.service.business.ContextBudgetPlan;
+import cn.yifan.drawsee.service.business.RagEnhancementService;
+import cn.yifan.drawsee.service.business.RagEnhancementService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -51,7 +54,8 @@ public class KnowledgeWorkFlow extends WorkFlow {
     private final KnowledgeMapper knowledgeMapper;
     private final ClassMapper classMapper;
     private final ClassKnowledgeService classKnowledgeService;
-    private final RagQueryService ragQueryService;
+    private final ContextBudgetManager contextBudgetManager;
+    private final RagEnhancementService ragEnhancementService;
 
     public KnowledgeWorkFlow(
         UserMapper userMapper,
@@ -67,15 +71,17 @@ public class KnowledgeWorkFlow extends WorkFlow {
         KnowledgeMapper knowledgeMapper,
         ClassMapper classMapper,
         ClassKnowledgeService classKnowledgeService,
-        RagQueryService ragQueryService
+        ContextBudgetManager contextBudgetManager,
+        RagEnhancementService ragEnhancementService
     ) {
-        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper);
+        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper, contextBudgetManager);
         this.courseMapper = courseMapper;
         this.knowledgeBaseMapper = knowledgeBaseMapper;
         this.knowledgeMapper = knowledgeMapper;
         this.classMapper = classMapper;
         this.classKnowledgeService = classKnowledgeService;
-        this.ragQueryService = ragQueryService;
+        this.contextBudgetManager = contextBudgetManager;
+        this.ragEnhancementService = ragEnhancementService;
         
         // 全局默认知识点列表 - 这里将保留用于通用模式
         refreshGlobalKnowledgePoints();
@@ -310,13 +316,14 @@ public class KnowledgeWorkFlow extends WorkFlow {
                 log.info("用户 {} 在班级 {} 中没有可访问的知识库，跳过RAG增强", userId, classId);
                 return false;
             }
-            
+
+            ContextBudgetPlan budgetPlan = contextBudgetManager.plan(aiTaskMessage.getPrompt(), workContext.getHistory());
             // 使用RAG服务检索并生成增强回答（作为MCP工具）
             log.info("调用Python RAG MCP工具进行知识检索，知识库数量: {}, 查询: {}", knowledgeBaseIds.size(), aiTaskMessage.getPrompt());
-            var ragResponse = ragQueryService.query(
+            var ragResponse = ragEnhancementService.queryWithTimeout(
                 knowledgeBaseIds,
                 aiTaskMessage.getPrompt(),
-                null,  // history - can be null for now
+                workContext.getHistory(),
                 aiTaskMessage.getUserId(),
                 String.valueOf(classId)
             );
@@ -362,7 +369,8 @@ public class KnowledgeWorkFlow extends WorkFlow {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         java.util.LinkedList<dev.langchain4j.data.message.ChatMessage> history = workContext.getHistory();
         String originalPrompt = aiTaskMessage.getPrompt();
-
+        ContextBudgetPlan budgetPlan = planContextBudget(workContext, originalPrompt);
+        history = new java.util.LinkedList<>(applyHistoryBudget(workContext, budgetPlan));
         // 尝试RAG增强Prompt
         String enhancedPrompt = originalPrompt;
         try {
@@ -381,10 +389,10 @@ public class KnowledgeWorkFlow extends WorkFlow {
                 log.info("使用RAG增强Prompt: 知识库数量={}, 原始问题={}", knowledgeBaseIds.size(), originalPrompt);
 
                 // 调用RAG检索
-                var ragResponse = ragQueryService.query(
+                var ragResponse = ragEnhancementService.queryWithTimeout(
                     knowledgeBaseIds,
                     originalPrompt,
-                    null,
+                    history,
                     userId,
                     String.valueOf(classId)
                 );
@@ -421,4 +429,5 @@ public class KnowledgeWorkFlow extends WorkFlow {
             streamAiService.generalChat(history, enhancedPrompt, aiTaskMessage.getModel(), handler);
         }
     }
+
 }

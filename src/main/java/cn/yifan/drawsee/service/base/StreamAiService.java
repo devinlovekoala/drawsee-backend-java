@@ -31,11 +31,11 @@ public class StreamAiService {
     @Autowired
     private PromptService promptService;
     @Autowired
-    private StreamingChatLanguageModel doubaoStreamingChatLanguageModel;
+    private StreamingChatLanguageModel qwenStreamingChatLanguageModel;
     @Autowired
     private StreamingChatLanguageModel deepseekV3StreamingChatLanguageModel;
     @Autowired
-    private StreamingChatLanguageModel doubaoVisionStreamingChatLanguageModel;
+    private StreamingChatLanguageModel qwenVisionStreamingChatLanguageModel;
 
     public void generalChat(List<ChatMessage> history, String question, String model, StreamingResponseHandler<AiMessage> handler) {
         LinkedList<ChatMessage> messages = new LinkedList<>(history);
@@ -43,13 +43,7 @@ public class StreamAiService {
         messages.addFirst(new SystemMessage(systemPrompt));
         messages.addLast(new UserMessage(question));
 
-        if (model.equals(AiModel.DEEPSEEKV3)) {
-            log.info("使用DeepSeekV3模型");
-            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-        } else {
-            log.info("使用豆包模型");
-            doubaoStreamingChatLanguageModel.generate(messages, handler);
-        }
+        resolveTextModel(model).generate(messages, handler);
     }
 
     /**
@@ -64,13 +58,7 @@ public class StreamAiService {
         String prompt = promptService.getAnswerPointPrompt(question);
         messages.add(new UserMessage(prompt));
         
-        if (model.equals(AiModel.DEEPSEEKV3)) {
-            log.info("使用DeepSeekV3模型生成回答角度");
-            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-        } else {
-            log.info("使用豆包模型生成回答角度");
-            doubaoStreamingChatLanguageModel.generate(messages, handler);
-        }
+        resolveTextModel(model).generate(messages, handler);
     }
 
     /**
@@ -89,13 +77,7 @@ public class StreamAiService {
         String prompt = promptService.getAnswerDetailPrompt(question, angle);
         messages.add(new UserMessage(prompt));
         
-        if (model.equals(AiModel.DEEPSEEKV3)) {
-            log.info("使用DeepSeekV3模型生成详细回答，角度: {}", angle);
-            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-        } else {
-            log.info("使用豆包模型生成详细回答，角度: {}", angle);
-            doubaoStreamingChatLanguageModel.generate(messages, handler);
-        }
+        resolveTextModel(model).generate(messages, handler);
     }
 
     public void knowledgeDetailChat(List<ChatMessage> history, String knowledgePoint, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -103,13 +85,7 @@ public class StreamAiService {
         String prompt = promptService.getKnowledgeDetailChatPrompt(knowledgePoint);
         messages.add(new UserMessage(prompt));
         
-        if (model.equals(AiModel.DEEPSEEKV3)) {
-            log.info("使用DeepSeekV3模型");
-            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-        } else {
-            log.info("使用豆包模型");
-            doubaoStreamingChatLanguageModel.generate(messages, handler);
-        }
+        resolveTextModel(model).generate(messages, handler);
     }
 
     public void animationChat(List<ChatMessage> history, String question, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -117,13 +93,7 @@ public class StreamAiService {
         String prompt = promptService.getAnimationChatPrompt(question);
         messages.addLast(new UserMessage(prompt));
         
-        if (model.equals(AiModel.DEEPSEEKV3)) {
-            log.info("使用DeepSeekV3模型");
-            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-        } else {
-            log.info("使用豆包模型");
-            doubaoStreamingChatLanguageModel.generate(messages, handler);
-        }
+        resolveTextModel(model).generate(messages, handler);
     }
 
     public void solverFirstChat(List<ChatMessage> history, String question, String method, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -131,13 +101,7 @@ public class StreamAiService {
         String prompt = promptService.getSolverFirstChatPrompt(question, method);
         messages.addLast(new UserMessage(prompt));
         
-        if (model.equals(AiModel.DEEPSEEKV3)) {
-            log.info("使用DeepSeekV3模型");
-            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-        } else {
-            log.info("使用豆包模型");
-            doubaoStreamingChatLanguageModel.generate(messages, handler);
-        }
+        resolveTextModel(model).generate(messages, handler);
     }
 
     public void solverContinueChat(List<ChatMessage> history, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -145,13 +109,7 @@ public class StreamAiService {
         String prompt = promptService.getSolverContinueChatPrompt();
         messages.addLast(new UserMessage(prompt));
         
-        if (model.equals(AiModel.DEEPSEEKV3)) {
-            log.info("使用DeepSeekV3模型");
-            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-        } else {
-            log.info("使用豆包模型");
-            doubaoStreamingChatLanguageModel.generate(messages, handler);
-        }
+        resolveTextModel(model).generate(messages, handler);
     }
 
     public void solverSummaryChat(List<ChatMessage> history, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -159,13 +117,7 @@ public class StreamAiService {
         String prompt = promptService.getSolverSummaryChatPrompt();
         messages.addLast(new UserMessage(prompt));
         
-        if (model.equals(AiModel.DEEPSEEKV3)) {
-            log.info("使用DeepSeekV3模型");
-            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-        } else {
-            log.info("使用豆包模型");
-            doubaoStreamingChatLanguageModel.generate(messages, handler);
-        }
+        resolveTextModel(model).generate(messages, handler);
     }
 
     public void plannerFirstChat(List<ChatMessage> history, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -173,13 +125,7 @@ public class StreamAiService {
         String prompt = promptService.getPlannerFirstPrompt();
         messages.addLast(new UserMessage(prompt));
         
-        if (model.equals(AiModel.DEEPSEEKV3)) {
-            log.info("使用DeepSeekV3模型");
-            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-        } else {
-            log.info("使用豆包模型");
-            doubaoStreamingChatLanguageModel.generate(messages, handler);
-        }
+        resolveTextModel(model).generate(messages, handler);
     }
 
     public void htmlMakerChat(List<ChatMessage> history, String question, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -187,26 +133,14 @@ public class StreamAiService {
         String prompt = promptService.getHtmlMakerChatPrompt(question);
         messages.addLast(new UserMessage(prompt));
         
-        if (model.equals(AiModel.DEEPSEEKV3)) {
-            log.info("使用DeepSeekV3模型");
-            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-        } else {
-            log.info("使用豆包模型");
-            doubaoStreamingChatLanguageModel.generate(messages, handler);
-        }
+        resolveTextModel(model).generate(messages, handler);
     }
 
     public void circuitAnalysisChat(LinkedList<ChatMessage> history, String prompt, String model, StreamingResponseHandler<AiMessage> handler) {
         LinkedList<ChatMessage> messages = new LinkedList<>(history);
         messages.add(new UserMessage(prompt));
 
-        if (model.equals(AiModel.DEEPSEEKV3)) {
-            log.info("使用DeepSeekV3模型");
-            deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-        } else {
-            log.info("使用豆包模型");
-            doubaoStreamingChatLanguageModel.generate(messages, handler);
-        }
+        resolveTextModel(model).generate(messages, handler);
     }
 
     public void visionChat(List<ChatMessage> history, List<String> imageUrls, String instruction, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -221,13 +155,11 @@ public class StreamAiService {
 		}
 		messages.addLast(UserMessage.from(instruction, imageContents.toArray(new ImageContent[0])));
 
-		if (AiModel.DOUBAOVISION.equals(model)) {
-			log.info("使用豆包Vision模型，图片数: {}", maxImages);
-			doubaoVisionStreamingChatLanguageModel.generate(messages, handler);
-		} else {
-			log.info("当前模型不支持多模态，退化为文本提示，模型: {}", model);
-			deepseekV3StreamingChatLanguageModel.generate(messages, handler);
-		}
+        if (!AiModel.QWENVISION.equals(model)) {
+            throw new IllegalArgumentException("未配置可用的视觉模型: " + model);
+        }
+        log.info("使用千问Vision模型，图片数: {}", maxImages);
+        qwenVisionStreamingChatLanguageModel.generate(messages, handler);
 	}
 
 	/**
@@ -250,13 +182,7 @@ public class StreamAiService {
 	) {
 		// 选择ChatModel
 		StreamingChatLanguageModel chatModel;
-		if (model.equals(AiModel.DEEPSEEKV3)) {
-			log.info("使用DeepSeekV3模型进行Tool-based对话");
-			chatModel = deepseekV3StreamingChatLanguageModel;
-		} else {
-			log.info("使用豆包模型进行Tool-based对话");
-			chatModel = doubaoStreamingChatLanguageModel;
-		}
+		chatModel = resolveTextModel(model);
 
 		// 使用AiServices构建Assistant
 		T assistant = AiServices.builder(assistantInterface)
@@ -284,4 +210,16 @@ public class StreamAiService {
 			handler.onError(e);
 		}
 	}
+
+    private StreamingChatLanguageModel resolveTextModel(String model) {
+        if (AiModel.QWEN.equals(model)) {
+            log.info("使用千问模型");
+            return qwenStreamingChatLanguageModel;
+        }
+        if (AiModel.DEEPSEEKV3.equals(model)) {
+            log.info("使用DeepSeekV3模型");
+            return deepseekV3StreamingChatLanguageModel;
+        }
+        throw new IllegalArgumentException("未配置可用的文本模型: " + model);
+    }
 }

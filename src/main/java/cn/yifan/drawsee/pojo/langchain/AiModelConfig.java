@@ -18,4 +18,6 @@ public class AiModelConfig {
 
     private String modelName;
 
+    private Double temperature;
+
 }
