@@ -15,7 +15,6 @@ import cn.yifan.drawsee.service.base.StreamAiService;
 import cn.yifan.drawsee.service.business.ContextBudgetManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -24,7 +23,6 @@ import dev.langchain4j.model.output.Response;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.util.LinkedList;
 import java.util.List;

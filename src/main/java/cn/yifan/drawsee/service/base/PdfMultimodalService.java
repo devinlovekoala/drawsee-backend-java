@@ -4,7 +4,8 @@ import cn.yifan.drawsee.util.PdfUtils;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.output.Response;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,7 +35,7 @@ import java.util.List;
 public class PdfMultimodalService {
 
     @Autowired
-    private ChatLanguageModel qwenVisionChatLanguageModel;
+    private ChatModel qwenVisionChatLanguageModel;
 
     @Autowired
     private MinioService minioService;
@@ -228,7 +229,7 @@ public class PdfMultimodalService {
             );
 
             Response<dev.langchain4j.data.message.AiMessage> response =
-                qwenVisionChatLanguageModel.generate(userMessage);
+                toResponse(qwenVisionChatLanguageModel.chat(userMessage));
 
             String analysis = response.content().text();
             log.info("第{}页图像分析完成，长度: {}", pageNo + 1, analysis.length());
@@ -253,7 +254,7 @@ public class PdfMultimodalService {
             );
 
             Response<dev.langchain4j.data.message.AiMessage> response =
-                qwenVisionChatLanguageModel.generate(userMessage);
+                toResponse(qwenVisionChatLanguageModel.chat(userMessage));
             String netlist = response.content().text();
             CircuitDesign design = circuitImageNetlistParser.parse(netlist);
             return new CircuitDesignResult(pageNo + 1, design, netlist);
@@ -261,6 +262,14 @@ public class PdfMultimodalService {
             log.warn("第{}页电路图结构化失败: {}", pageNo + 1, e.getMessage());
             return null;
         }
+    }
+
+    private Response<dev.langchain4j.data.message.AiMessage> toResponse(ChatResponse response) {
+        return Response.from(
+            response.aiMessage(),
+            response.tokenUsage(),
+            response.finishReason()
+        );
     }
 
     /**

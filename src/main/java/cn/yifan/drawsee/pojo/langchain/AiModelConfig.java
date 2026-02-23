@@ -2,6 +2,8 @@ package cn.yifan.drawsee.pojo.langchain;
 
 import lombok.Data;
 
+import java.util.Map;
+
 /**
  * @FileName ModelConfig
  * @Description
@@ -19,5 +21,10 @@ public class AiModelConfig {
     private String modelName;
 
     private Double temperature;
+
+    /**
+     * 透传到 OpenAI 兼容接口的自定义参数（extra_body）
+     */
+    private Map<String, Object> customParameters;
 
 }

@@ -24,7 +24,8 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.output.Response;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStream;
@@ -56,7 +57,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class AnimationWorkFlow extends WorkFlow {
 
     private final PromptService promptService;
-    private final ChatLanguageModel deepseekV3ChatLanguageModel;
+    private final ChatModel deepseekV3ChatLanguageModel;
     private final List<LinkedQueue> animationTaskQueues;
     private final RabbitTemplate rabbitTemplate;
 
@@ -70,7 +71,7 @@ public class AnimationWorkFlow extends WorkFlow {
         AiTaskMapper aiTaskMapper,
         ObjectMapper objectMapper,
         PromptService promptService,
-        ChatLanguageModel deepseekV3ChatLanguageModel,
+        ChatModel deepseekV3ChatLanguageModel,
         List<LinkedQueue> animationTaskQueues,
         RabbitTemplate rabbitTemplate,
         ContextBudgetManager contextBudgetManager
@@ -134,7 +135,7 @@ public class AnimationWorkFlow extends WorkFlow {
             String question = aiTaskMessage.getPrompt();
             log.info("开始为问题生成动画分镜: {}", question);
             String animationShotTextListPrompt = promptService.getAnimationShotTextListPrompt(question);
-            Response<AiMessage> animationShotTextListResponse = deepseekV3ChatLanguageModel.generate(UserMessage.from(animationShotTextListPrompt));
+            Response<AiMessage> animationShotTextListResponse = toResponse(deepseekV3ChatLanguageModel.chat(UserMessage.from(animationShotTextListPrompt)));
             tokens.addAndGet(animationShotTextListResponse.tokenUsage().totalTokenCount());
             String animationShotTextListResult = animationShotTextListResponse.content().text();
             
@@ -207,7 +208,7 @@ public class AnimationWorkFlow extends WorkFlow {
                     try {
                         log.info("开始生成第{}个分镜的代码", index);
                         String animationShotCodePrompt = promptService.getAnimationShotCodePrompt(shotDescription, shotScript);
-                        Response<AiMessage> animationShotCodeResponse = deepseekV3ChatLanguageModel.generate(UserMessage.from(animationShotCodePrompt));
+                        Response<AiMessage> animationShotCodeResponse = toResponse(deepseekV3ChatLanguageModel.chat(UserMessage.from(animationShotCodePrompt)));
                         tokens.addAndGet(animationShotCodeResponse.tokenUsage().totalTokenCount());
                         String animationShotCodeResult = animationShotCodeResponse.content().text();
                         
@@ -302,7 +303,7 @@ public class AnimationWorkFlow extends WorkFlow {
             ));
 
             String animationShotMergeCodePrompt = promptService.getAnimationShotMergeCodePrompt(animationShotInfoList.toString());
-            Response<AiMessage> animationShotMergeCodeResponse = deepseekV3ChatLanguageModel.generate(UserMessage.from(animationShotMergeCodePrompt));
+            Response<AiMessage> animationShotMergeCodeResponse = toResponse(deepseekV3ChatLanguageModel.chat(UserMessage.from(animationShotMergeCodePrompt)));
             tokens.addAndGet(animationShotMergeCodeResponse.tokenUsage().totalTokenCount());
             String animationShotMergeCodeResult = animationShotMergeCodeResponse.content().text();
 
@@ -752,5 +753,13 @@ public class AnimationWorkFlow extends WorkFlow {
         Random random = new Random();
         int randomIndex = random.nextInt(animationTaskQueues.size());
         return animationTaskQueues.get(randomIndex);
+    }
+
+    private Response<AiMessage> toResponse(ChatResponse response) {
+        return Response.from(
+            response.aiMessage(),
+            response.tokenUsage(),
+            response.finishReason()
+        );
     }
 }

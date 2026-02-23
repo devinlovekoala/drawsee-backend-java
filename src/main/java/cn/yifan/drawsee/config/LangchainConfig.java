@@ -1,8 +1,9 @@
 package cn.yifan.drawsee.config;
 
 import cn.yifan.drawsee.pojo.langchain.AiModelConfig;
-import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.chat.StreamingChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
+import dev.langchain4j.model.openai.OpenAiChatRequestParameters;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import lombok.Data;
@@ -33,11 +34,12 @@ public class LangchainConfig {
     private AiModelConfig compress;
 
     @Bean("qwenChatLanguageModel")
-    public ChatLanguageModel qwenChatLanguageModel() {
+    public ChatModel qwenChatLanguageModel() {
         return OpenAiChatModel.builder()
                 .baseUrl(qwen.getBaseUrl())
                 .apiKey(qwen.getApiKey())
                 .modelName(qwen.getModelName())
+                .defaultRequestParameters(resolveRequestParameters(qwen))
                 .timeout(Duration.ofDays(7))
                 .temperature(resolveTemperature(qwen, 0.7))
                 .logRequests(false)
@@ -46,11 +48,12 @@ public class LangchainConfig {
     }
 
     @Bean("deepseekV3ChatLanguageModel")
-    public ChatLanguageModel deepseekV3ChatLanguageModel() {
+    public ChatModel deepseekV3ChatLanguageModel() {
         return OpenAiChatModel.builder()
                 .baseUrl(deepseekV3.getBaseUrl())
                 .apiKey(deepseekV3.getApiKey())
                 .modelName(deepseekV3.getModelName())
+                .defaultRequestParameters(resolveRequestParameters(deepseekV3))
                 .timeout(Duration.ofDays(7))
                 .maxTokens(8192)
                 .temperature(0.7)
@@ -60,11 +63,12 @@ public class LangchainConfig {
     }
 
     @Bean("qwenVisionChatLanguageModel")
-    public ChatLanguageModel qwenVisionChatLanguageModel() {
+    public ChatModel qwenVisionChatLanguageModel() {
         return OpenAiChatModel.builder()
                 .baseUrl(qwenVision.getBaseUrl())
                 .apiKey(qwenVision.getApiKey())
                 .modelName(qwenVision.getModelName())
+                .defaultRequestParameters(resolveRequestParameters(qwenVision))
                 .timeout(Duration.ofDays(7))
                 .temperature(resolveTemperature(qwenVision, 0.1))
                 .logRequests(false)
@@ -73,11 +77,12 @@ public class LangchainConfig {
     }
 
     @Bean("qwenStreamingChatLanguageModel")
-    public StreamingChatLanguageModel qwenStreamingChatLanguageModel() {
+    public StreamingChatModel qwenStreamingChatLanguageModel() {
         return OpenAiStreamingChatModel.builder()
                 .baseUrl(qwen.getBaseUrl())
                 .apiKey(qwen.getApiKey())
                 .modelName(qwen.getModelName())
+                .defaultRequestParameters(resolveRequestParameters(qwen))
                 .temperature(resolveTemperature(qwen, 0.7))
                 .logRequests(false)
                 .logResponses(false)
@@ -86,11 +91,12 @@ public class LangchainConfig {
     }
 
     @Bean("deepseekV3StreamingChatLanguageModel")
-    public StreamingChatLanguageModel deepseekV3StreamingChatLanguageModel() {
+    public StreamingChatModel deepseekV3StreamingChatLanguageModel() {
         return OpenAiStreamingChatModel.builder()
               .baseUrl(deepseekV3.getBaseUrl())
               .apiKey(deepseekV3.getApiKey())
               .modelName(deepseekV3.getModelName())
+              .defaultRequestParameters(resolveRequestParameters(deepseekV3))
               .temperature(0.7)
               .logRequests(false)
               .logResponses(false)
@@ -99,11 +105,12 @@ public class LangchainConfig {
     }
 
     @Bean("qwenVisionStreamingChatLanguageModel")
-    public StreamingChatLanguageModel qwenVisionStreamingChatLanguageModel() {
+    public StreamingChatModel qwenVisionStreamingChatLanguageModel() {
         return OpenAiStreamingChatModel.builder()
                 .baseUrl(qwenVision.getBaseUrl())
                 .apiKey(qwenVision.getApiKey())
                 .modelName(qwenVision.getModelName())
+                .defaultRequestParameters(resolveRequestParameters(qwenVision))
                 .temperature(resolveTemperature(qwenVision, 0.1))
                 .logRequests(false)
                 .logResponses(false)
@@ -115,6 +122,15 @@ public class LangchainConfig {
             return defaultValue;
         }
         return config.getTemperature();
+    }
+
+    private OpenAiChatRequestParameters resolveRequestParameters(AiModelConfig config) {
+        if (config == null || config.getCustomParameters() == null || config.getCustomParameters().isEmpty()) {
+            return OpenAiChatRequestParameters.builder().build();
+        }
+        return OpenAiChatRequestParameters.builder()
+            .customParameters(config.getCustomParameters())
+            .build();
     }
 
 }

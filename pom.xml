@@ -35,7 +35,7 @@
         <lombok.version>1.18.30</lombok.version>
         <druid.version>1.2.20</druid.version>
         <sa-token.version>1.39.0</sa-token.version>
-        <langchain4j.version>1.0.0-alpha1</langchain4j.version>
+        <langchain4j.version>1.11.0</langchain4j.version>
         <redisson.version>3.41.0</redisson.version>
         <mybatis.version>3.0.4</mybatis.version>
         <minio.version>8.6.0</minio.version>
@@ -201,55 +201,13 @@
         <!-- langchain4j -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
-            <version>${langchain4j.version}</version>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>1.11.0</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-spring-boot-starter</artifactId>
-            <version>${langchain4j.version}</version>
-        </dependency>
-        <!-- elk -->
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.core</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.graph</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.alg.mrtree</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.graph.json</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.graph.json.text</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.graph.json.text.ide</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>plugins</artifactId>
-            <version>${elk.version}</version>
-            <type>pom</type>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.alg.common</artifactId>
-            <version>${elk.version}</version>
+            <artifactId>langchain4j</artifactId>
+            <version>1.11.0</version>
         </dependency>
 
         <!-- JWT for internal service communication -->
@@ -269,13 +227,6 @@
             <artifactId>jjwt-jackson</artifactId>
             <version>0.11.5</version>
             <scope>runtime</scope>
-        </dependency>
-
-        <!-- test -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.mybatis.spring.boot</groupId>
@@ -302,9 +253,8 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+                <version>3.8.1</version>
                 <configuration>
-                    <release>21</release>
                     <parameters>true</parameters>
                     <compilerArgs>
                         <arg>-parameters</arg>
@@ -314,11 +264,6 @@
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
                             <version>${lombok.version}</version>
-                        </path>
-                        <path>
-                            <groupId>org.springframework.boot</groupId>
-                            <artifactId>spring-boot-configuration-processor</artifactId>
-                            <version>${project.parent.version}</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
@@ -336,77 +281,6 @@
                     </excludes>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-enforcer-plugin</artifactId>
-                <version>3.5.0</version>
-                <executions>
-                    <execution>
-                        <id>enforce-java</id>
-                        <goals>
-                            <goal>enforce</goal>
-                        </goals>
-                        <configuration>
-                            <rules>
-                                <requireJavaVersion>
-                                    <version>[21,)</version>
-                                </requireJavaVersion>
-                            </rules>
-                            <fail>true</fail>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <profile>
-            <id>security-scan</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.owasp</groupId>
-                        <artifactId>dependency-check-maven</artifactId>
-                        <version>9.1.0</version>
-                        <executions>
-                            <execution>
-                                <id>dependency-check</id>
-                                <phase>verify</phase>
-                                <goals>
-                                    <goal>check</goal>
-                                </goals>
-                                <configuration>
-                                    <formats>HTML,JSON</formats>
-                                    <failOnCVSS>11</failOnCVSS>
-                                    <skipProvidedScope>true</skipProvidedScope>
-                                    <skipTestScope>true</skipTestScope>
-                                    <prettyPrint>true</prettyPrint>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>com.github.spotbugs</groupId>
-                        <artifactId>spotbugs-maven-plugin</artifactId>
-                        <version>4.8.6.2</version>
-                        <configuration>
-                            <effort>Min</effort>
-                            <threshold>Medium</threshold>
-                            <failOnError>false</failOnError>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <phase>verify</phase>
-                                <goals>
-                                    <goal>spotbugs</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
- 
 </project>

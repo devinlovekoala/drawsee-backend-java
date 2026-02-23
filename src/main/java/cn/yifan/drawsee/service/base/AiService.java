@@ -7,7 +7,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.langchain4j.data.message.*;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.output.Response;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,9 +32,9 @@ public class AiService {
     @Autowired
     private PromptService promptService;
     @Autowired
-    private ChatLanguageModel deepseekV3ChatLanguageModel;
+    private ChatModel deepseekV3ChatLanguageModel;
     @Autowired
-    private ChatLanguageModel qwenVisionChatLanguageModel;
+    private ChatModel qwenVisionChatLanguageModel;
     @Autowired
     private ObjectMapper objectMapper;
     @Autowired
@@ -46,7 +47,7 @@ public class AiService {
 
     public List<String> getRelatedKnowledgePoints(List<String> knowledgePoints, String question, AtomicLong tokens) {
         String prompt = promptService.getRelatedKnowledgePointsPrompt(knowledgePoints, question);
-        Response<AiMessage> response = deepseekV3ChatLanguageModel.generate(UserMessage.from(prompt));
+        Response<AiMessage> response = toResponse(deepseekV3ChatLanguageModel.chat(UserMessage.from(prompt)));
         tokens.addAndGet(response.tokenUsage().totalTokenCount());
         TypeReference<List<String>> typeReference = new TypeReference<>() {};
         try {
@@ -70,7 +71,7 @@ public class AiService {
                 ImageContent.from(imageUrl)
         );
         // 使用Qwen Vision模型进行识别
-        Response<AiMessage> response = qwenVisionChatLanguageModel.generate(userMessage);
+        Response<AiMessage> response = toResponse(qwenVisionChatLanguageModel.chat(userMessage));
         return response.content().text();
     }
 
@@ -85,7 +86,7 @@ public class AiService {
             TextContent.from(prompt),
             ImageContent.from(imageUrl)
         );
-        Response<AiMessage> response = qwenVisionChatLanguageModel.generate(userMessage);
+        Response<AiMessage> response = toResponse(qwenVisionChatLanguageModel.chat(userMessage));
         String raw = response.content().text();
         try {
             return circuitImageNetlistParser.parse(raw);
@@ -105,10 +106,18 @@ public class AiService {
     public List<String> getPlannerSplit(LinkedList<ChatMessage> history, AtomicLong tokens) throws JsonProcessingException {
         String prompt = promptService.getPlannerSplitPrompt();
         history.addLast(new UserMessage(prompt));
-        Response<AiMessage> response = deepseekV3ChatLanguageModel.generate(history);
+        Response<AiMessage> response = toResponse(deepseekV3ChatLanguageModel.chat(history));
         tokens.addAndGet(response.tokenUsage().totalTokenCount());
         TypeReference<List<String>> typeReference = new TypeReference<>() {};
         return objectMapper.readValue(response.content().text(), typeReference);
+    }
+
+    private Response<AiMessage> toResponse(ChatResponse response) {
+        return Response.from(
+            response.aiMessage(),
+            response.tokenUsage(),
+            response.finishReason()
+        );
     }
 
 }

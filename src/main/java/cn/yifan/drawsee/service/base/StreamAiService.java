@@ -6,7 +6,10 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
-import dev.langchain4j.model.chat.StreamingChatLanguageModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
+import dev.langchain4j.model.output.Response;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -31,11 +34,11 @@ public class StreamAiService {
     @Autowired
     private PromptService promptService;
     @Autowired
-    private StreamingChatLanguageModel qwenStreamingChatLanguageModel;
+    private StreamingChatModel qwenStreamingChatLanguageModel;
     @Autowired
-    private StreamingChatLanguageModel deepseekV3StreamingChatLanguageModel;
+    private StreamingChatModel deepseekV3StreamingChatLanguageModel;
     @Autowired
-    private StreamingChatLanguageModel qwenVisionStreamingChatLanguageModel;
+    private StreamingChatModel qwenVisionStreamingChatLanguageModel;
 
     public void generalChat(List<ChatMessage> history, String question, String model, StreamingResponseHandler<AiMessage> handler) {
         LinkedList<ChatMessage> messages = new LinkedList<>(history);
@@ -43,7 +46,7 @@ public class StreamAiService {
         messages.addFirst(new SystemMessage(systemPrompt));
         messages.addLast(new UserMessage(question));
 
-        resolveTextModel(model).generate(messages, handler);
+        resolveTextModel(model).chat(messages, buildStreamingHandler(handler));
     }
 
     /**
@@ -58,7 +61,7 @@ public class StreamAiService {
         String prompt = promptService.getAnswerPointPrompt(question);
         messages.add(new UserMessage(prompt));
         
-        resolveTextModel(model).generate(messages, handler);
+        resolveTextModel(model).chat(messages, buildStreamingHandler(handler));
     }
 
     /**
@@ -77,7 +80,7 @@ public class StreamAiService {
         String prompt = promptService.getAnswerDetailPrompt(question, angle);
         messages.add(new UserMessage(prompt));
         
-        resolveTextModel(model).generate(messages, handler);
+        resolveTextModel(model).chat(messages, buildStreamingHandler(handler));
     }
 
     public void knowledgeDetailChat(List<ChatMessage> history, String knowledgePoint, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -85,7 +88,7 @@ public class StreamAiService {
         String prompt = promptService.getKnowledgeDetailChatPrompt(knowledgePoint);
         messages.add(new UserMessage(prompt));
         
-        resolveTextModel(model).generate(messages, handler);
+        resolveTextModel(model).chat(messages, buildStreamingHandler(handler));
     }
 
     public void animationChat(List<ChatMessage> history, String question, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -93,7 +96,7 @@ public class StreamAiService {
         String prompt = promptService.getAnimationChatPrompt(question);
         messages.addLast(new UserMessage(prompt));
         
-        resolveTextModel(model).generate(messages, handler);
+        resolveTextModel(model).chat(messages, buildStreamingHandler(handler));
     }
 
     public void solverFirstChat(List<ChatMessage> history, String question, String method, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -101,7 +104,7 @@ public class StreamAiService {
         String prompt = promptService.getSolverFirstChatPrompt(question, method);
         messages.addLast(new UserMessage(prompt));
         
-        resolveTextModel(model).generate(messages, handler);
+        resolveTextModel(model).chat(messages, buildStreamingHandler(handler));
     }
 
     public void solverContinueChat(List<ChatMessage> history, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -109,7 +112,7 @@ public class StreamAiService {
         String prompt = promptService.getSolverContinueChatPrompt();
         messages.addLast(new UserMessage(prompt));
         
-        resolveTextModel(model).generate(messages, handler);
+        resolveTextModel(model).chat(messages, buildStreamingHandler(handler));
     }
 
     public void solverSummaryChat(List<ChatMessage> history, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -117,7 +120,7 @@ public class StreamAiService {
         String prompt = promptService.getSolverSummaryChatPrompt();
         messages.addLast(new UserMessage(prompt));
         
-        resolveTextModel(model).generate(messages, handler);
+        resolveTextModel(model).chat(messages, buildStreamingHandler(handler));
     }
 
     public void plannerFirstChat(List<ChatMessage> history, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -125,7 +128,7 @@ public class StreamAiService {
         String prompt = promptService.getPlannerFirstPrompt();
         messages.addLast(new UserMessage(prompt));
         
-        resolveTextModel(model).generate(messages, handler);
+        resolveTextModel(model).chat(messages, buildStreamingHandler(handler));
     }
 
     public void htmlMakerChat(List<ChatMessage> history, String question, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -133,14 +136,14 @@ public class StreamAiService {
         String prompt = promptService.getHtmlMakerChatPrompt(question);
         messages.addLast(new UserMessage(prompt));
         
-        resolveTextModel(model).generate(messages, handler);
+        resolveTextModel(model).chat(messages, buildStreamingHandler(handler));
     }
 
     public void circuitAnalysisChat(LinkedList<ChatMessage> history, String prompt, String model, StreamingResponseHandler<AiMessage> handler) {
         LinkedList<ChatMessage> messages = new LinkedList<>(history);
         messages.add(new UserMessage(prompt));
 
-        resolveTextModel(model).generate(messages, handler);
+        resolveTextModel(model).chat(messages, buildStreamingHandler(handler));
     }
 
     public void visionChat(List<ChatMessage> history, List<String> imageUrls, String instruction, String model, StreamingResponseHandler<AiMessage> handler) {
@@ -153,13 +156,13 @@ public class StreamAiService {
 		for (int j = 0; j < maxImages; j++) {
 			imageContents.add(ImageContent.from(imageUrls.get(j)));
 		}
-		messages.addLast(UserMessage.from(instruction, imageContents.toArray(new ImageContent[0])));
+        messages.addLast(UserMessage.from(instruction, imageContents.toArray(new ImageContent[0])));
 
         if (!AiModel.QWENVISION.equals(model)) {
             throw new IllegalArgumentException("未配置可用的视觉模型: " + model);
         }
         log.info("使用千问Vision模型，图片数: {}", maxImages);
-        qwenVisionStreamingChatLanguageModel.generate(messages, handler);
+        qwenVisionStreamingChatLanguageModel.chat(messages, buildStreamingHandler(handler));
 	}
 
 	/**
@@ -181,12 +184,12 @@ public class StreamAiService {
 		StreamingResponseHandler<AiMessage> handler
 	) {
 		// 选择ChatModel
-		StreamingChatLanguageModel chatModel;
+		StreamingChatModel chatModel;
 		chatModel = resolveTextModel(model);
 
 		// 使用AiServices构建Assistant
 		T assistant = AiServices.builder(assistantInterface)
-			.streamingChatLanguageModel(chatModel)
+			.streamingChatModel(chatModel)
 			.tools(tools)
 			.chatMemory(MessageWindowChatMemory.withMaxMessages(10))
 			.build();
@@ -201,8 +204,15 @@ public class StreamAiService {
 				(dev.langchain4j.service.TokenStream) chatMethod.invoke(assistant, fullQuery);
 
 			tokenStream
-				.onNext(handler::onNext)
-				.onComplete(handler::onComplete)
+				.onPartialResponse(handler::onNext)
+				.onCompleteResponse(response -> {
+                    Response<AiMessage> wrapped = Response.from(
+                        response.aiMessage(),
+                        response.tokenUsage(),
+                        response.finishReason()
+                    );
+                    handler.onComplete(wrapped);
+                })
 				.onError(handler::onError)
 				.start();
 		} catch (Exception e) {
@@ -211,7 +221,7 @@ public class StreamAiService {
 		}
 	}
 
-    private StreamingChatLanguageModel resolveTextModel(String model) {
+    private StreamingChatModel resolveTextModel(String model) {
         if (AiModel.QWEN.equals(model)) {
             log.info("使用千问模型");
             return qwenStreamingChatLanguageModel;
@@ -222,4 +232,29 @@ public class StreamAiService {
         }
         throw new IllegalArgumentException("未配置可用的文本模型: " + model);
     }
+
+    private StreamingChatResponseHandler buildStreamingHandler(StreamingResponseHandler<AiMessage> handler) {
+        return new StreamingChatResponseHandler() {
+            @Override
+            public void onPartialResponse(String partialResponse) {
+                handler.onNext(partialResponse);
+            }
+
+            @Override
+            public void onCompleteResponse(ChatResponse response) {
+                Response<AiMessage> wrapped = Response.from(
+                    response.aiMessage(),
+                    response.tokenUsage(),
+                    response.finishReason()
+                );
+                handler.onComplete(wrapped);
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                handler.onError(error);
+            }
+        };
+    }
+
 }

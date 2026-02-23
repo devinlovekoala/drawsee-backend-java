@@ -6,6 +6,7 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.message.TextContent;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -153,7 +154,19 @@ public class ContextBudgetManager {
 
     private String extractMessageText(ChatMessage message) {
         if (message instanceof UserMessage userMessage) {
-            return userMessage.text();
+            if (userMessage.hasSingleText()) {
+                return userMessage.singleText();
+            }
+            StringBuilder builder = new StringBuilder();
+            for (var content : userMessage.contents()) {
+                if (content instanceof TextContent textContent) {
+                    if (!builder.isEmpty()) {
+                        builder.append('\n');
+                    }
+                    builder.append(textContent.text());
+                }
+            }
+            return builder.toString();
         }
         if (message instanceof AiMessage aiMessage) {
             return aiMessage.text();

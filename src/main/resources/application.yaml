@@ -45,19 +45,25 @@ drawsee:
     bucketName: drawsee
   models:
     qwen:
-      baseUrl: https://api.siliconflow.cn/v1
-      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
-      modelName: Pro/deepseek-ai/DeepSeek-V3.2
+      baseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+      apiKey: sk-1f046e48086e4f1d88f9dc031b4cbe0a
+      modelName: qwen3.5-plus
       temperature: 0.7
+      customParameters:
+        enable_thinking: false
     deepseekV3:
       baseUrl: https://api.siliconflow.cn/v1
       apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
       modelName: Pro/deepseek-ai/DeepSeek-V3.2
+      customParameters:
+        enable_thinking: false
     qwenVision:
       baseUrl: https://open.bigmodel.cn/api/paas/v4
       apiKey: cc4f64b7080447b99560e43f6df775a4.ha56EPtvmi52EmZ1
       modelName: glm-4.6v
       temperature: 0.1
+      customParameters:
+        enable_thinking: false
     compress:
       baseUrl: https://api.siliconflow.cn/v1
       apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
