@@ -66,6 +66,28 @@ CREATE TABLE `conversation`  (
 ) ENGINE = InnoDB AUTO_INCREMENT = 132 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '会话表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
+-- Table structure for conversation_share
+-- ----------------------------
+DROP TABLE IF EXISTS `conversation_share`;
+CREATE TABLE `conversation_share`  (
+  `id` int UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '分享ID',
+  `conv_id` int UNSIGNED NOT NULL COMMENT '会话ID',
+  `user_id` int UNSIGNED NOT NULL COMMENT '分享创建者用户ID',
+  `class_id` int UNSIGNED NULL DEFAULT NULL COMMENT '班级ID（可选）',
+  `share_token` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '分享token',
+  `allow_continue` tinyint(1) NULL DEFAULT 1 COMMENT '是否允许继续会话',
+  `view_count` int UNSIGNED NULL DEFAULT 0 COMMENT '浏览次数',
+  `created_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) COMMENT '创建时间',
+  `updated_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) ON UPDATE CURRENT_TIMESTAMP(0) COMMENT '更新时间',
+  `is_deleted` tinyint(1) NULL DEFAULT 0 COMMENT '逻辑删除标记',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_conversation_share_token`(`share_token`) USING BTREE,
+  INDEX `idx_conversation_share_conv_id`(`conv_id`) USING BTREE,
+  INDEX `idx_conversation_share_user_id`(`user_id`) USING BTREE,
+  INDEX `idx_conversation_share_class_id`(`class_id`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '会话分享表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
 -- Table structure for invitation_code
 -- ----------------------------
 DROP TABLE IF EXISTS `invitation_code`;

@@ -38,6 +38,10 @@ public enum ApiError {
 
     // conversation
     CONVERSATION_NOT_EXISTED(404, "会话不存在"),
+    
+    // conversation share
+    SHARE_NOT_EXISTED(404, "分享不存在"),
+    SHARE_NOT_ALLOWED(403, "分享不允许继续"),
 
     // knowledge
     KNOWLEDGE_HAD_EXISTED(409, "同名称知识点已存在"),

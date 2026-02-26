@@ -2,10 +2,12 @@ package cn.yifan.drawsee.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.yifan.drawsee.pojo.dto.CreateAiTaskDTO;
+import cn.yifan.drawsee.pojo.dto.CreateConversationShareDTO;
 import cn.yifan.drawsee.pojo.dto.UpdateNodeDTO;
 import cn.yifan.drawsee.pojo.dto.UpdateNodesDTO;
 import cn.yifan.drawsee.pojo.vo.*;
 import cn.yifan.drawsee.service.business.FlowService;
+import cn.yifan.drawsee.service.business.ConversationShareService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
@@ -29,6 +31,8 @@ public class FlowController {
 
     @Autowired
     private FlowService flowService;
+    @Autowired
+    private ConversationShareService conversationShareService;
 
     @GetMapping("/conversations")
     public List<ConversationVO> getConversations() {
@@ -38,6 +42,11 @@ public class FlowController {
     @DeleteMapping("/conversations/{convId}")
     public void deleteConversation(@PathVariable Long convId) {
         flowService.deleteConversation(convId);
+    }
+
+    @PostMapping("/conversations/{convId}/share")
+    public ConversationShareVO createConversationShare(@PathVariable Long convId, @RequestBody(required = false) CreateConversationShareDTO dto) {
+        return conversationShareService.createShare(convId, dto);
     }
 
     @GetMapping("/nodes")
