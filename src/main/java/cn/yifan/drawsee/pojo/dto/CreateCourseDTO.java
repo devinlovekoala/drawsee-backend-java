@@ -28,9 +28,7 @@ public class CreateCourseDTO implements Serializable {
 
     private String description;
     
-    @NotBlank(message = "课程代码不能为空")
     private String code;
     
-    @NotBlank(message = "课程科目不能为空")
     private String subject;
 }

@@ -86,12 +86,22 @@ public class CourseService {
         
         // 创建课程
         Course course = new Course();
-        course.setId(UUIDUtils.generateUUID());
+        String courseId = UUIDUtils.generateUUID();
+        course.setId(courseId);
         course.setName(createCourseDTO.getName());
-        course.setCode(createCourseDTO.getCode());
+        String courseCode = createCourseDTO.getCode();
+        if (courseCode != null) {
+            courseCode = courseCode.trim();
+        }
+        // 如果code为空，使用课程ID的前8位作为默认值
+        course.setCode((courseCode == null || courseCode.isBlank()) ? courseId.substring(0, 8) : courseCode);
         course.setClassCode(classCode);
         course.setDescription(createCourseDTO.getDescription());
-        course.setSubject(createCourseDTO.getSubject());
+        String subject = createCourseDTO.getSubject();
+        if (subject != null) {
+            subject = subject.trim();
+        }
+        course.setSubject((subject == null || subject.isBlank()) ? null : subject);
         course.setTopics(new ArrayList<>());
         course.setCreatorId(userId);
         course.setCreatorRole(userRole);
@@ -287,8 +297,16 @@ public class CourseService {
         // 更新课程信息
         course.setName(updateCourseDTO.getName());
         course.setDescription(updateCourseDTO.getDescription());
-        course.setSubject(updateCourseDTO.getSubject());
-        course.setCode(updateCourseDTO.getCode());
+        String subject = updateCourseDTO.getSubject();
+        if (subject != null) {
+            subject = subject.trim();
+        }
+        course.setSubject((subject == null || subject.isBlank()) ? null : subject);
+        String courseCode = updateCourseDTO.getCode();
+        if (courseCode != null) {
+            courseCode = courseCode.trim();
+        }
+        course.setCode((courseCode == null || courseCode.isBlank()) ? null : courseCode);
         course.setUpdatedAt(new Date());
 
         courseMapper.update(course);

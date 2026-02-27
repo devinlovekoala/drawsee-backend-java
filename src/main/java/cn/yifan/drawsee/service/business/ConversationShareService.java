@@ -20,6 +20,7 @@ import cn.yifan.drawsee.pojo.entity.ConversationShare;
 import cn.yifan.drawsee.pojo.entity.Course;
 import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.entity.User;
+import cn.yifan.drawsee.pojo.vo.ClassStudentVO;
 import cn.yifan.drawsee.pojo.vo.*;
 import cn.yifan.drawsee.util.UUIDUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -271,6 +272,36 @@ public class ConversationShareService {
             return null;
         }
         return clazz.getId();
+    }
+
+    public List<ClassStudentVO> listClassStudentsByCourseOrClass(String classIdOrCourseId) {
+        Long classId = resolveClassId(classIdOrCourseId);
+        if (classId == null) {
+            return new ArrayList<>();
+        }
+        Long userId = StpUtil.getLoginIdAsLong();
+        String role = userRoleService.getCurrentUserRole();
+        if (!UserRole.ADMIN.equals(role)) {
+            Class clazz = classMapper.getById(classId);
+            if (clazz == null || Boolean.TRUE.equals(clazz.getIsDeleted())) {
+                throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
+            }
+            if (!userId.equals(clazz.getTeacherId())) {
+                throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
+            }
+        }
+
+        List<ClassMember> members = classMemberMapper.getByClassId(classId);
+        List<ClassStudentVO> students = new ArrayList<>();
+        for (ClassMember member : members) {
+            User user = userMapper.getById(member.getUserId());
+            ClassStudentVO vo = new ClassStudentVO();
+            vo.setUserId(member.getUserId());
+            vo.setUsername(user != null ? user.getUsername() : null);
+            vo.setJoinedAt(member.getJoinedAt());
+            students.add(vo);
+        }
+        return students;
     }
 
     private void validateClassAccess(Long userId, Long classId) {
