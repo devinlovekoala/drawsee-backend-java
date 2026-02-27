@@ -37,6 +37,23 @@
         ORDER BY created_at DESC
     </select>
 
+    <select id="listByUserIdsWithoutClassId"
+            resultType="cn.yifan.drawsee.pojo.entity.ConversationShare"
+    >
+        SELECT id, conv_id as convId, user_id as userId, class_id as classId,
+               share_token as shareToken, allow_continue as allowContinue, view_count as viewCount,
+               created_at as createdAt, updated_at as updatedAt, is_deleted as isDeleted
+        FROM conversation_share
+        WHERE class_id IS NULL AND is_deleted = 0
+        <if test="userIds != null and userIds.size() > 0">
+            AND user_id IN
+            <foreach collection="userIds" item="uid" open="(" separator="," close=")">
+                #{uid}
+            </foreach>
+        </if>
+        ORDER BY created_at DESC
+    </select>
+
     <insert id="insert"
             parameterType="cn.yifan.drawsee.pojo.entity.ConversationShare"
             useGeneratedKeys="true"
@@ -51,6 +68,9 @@
     >
         UPDATE conversation_share
         <set>
+            <if test="classId != null">
+                class_id = #{classId},
+            </if>
             <if test="allowContinue != null">
                 allow_continue = #{allowContinue},
             </if>

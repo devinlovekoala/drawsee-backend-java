@@ -11,7 +11,11 @@ import cn.yifan.drawsee.pojo.dto.PaginationParams;
 import cn.yifan.drawsee.pojo.dto.UpdateCourseDTO;
 import cn.yifan.drawsee.pojo.dto.CreateKnowledgeBaseDTO;
 import cn.yifan.drawsee.pojo.entity.Course;
+import cn.yifan.drawsee.pojo.entity.Class;
+import cn.yifan.drawsee.pojo.entity.ClassMember;
 import cn.yifan.drawsee.pojo.vo.*;
+import cn.yifan.drawsee.mapper.ClassMapper;
+import cn.yifan.drawsee.mapper.ClassMemberMapper;
 import cn.yifan.drawsee.mapper.CourseMapper;
 import cn.yifan.drawsee.mapper.KnowledgeBaseMapper;
 import cn.yifan.drawsee.util.UUIDUtils;
@@ -55,6 +59,12 @@ public class CourseService {
     
     @Autowired
     private KnowledgeBaseService knowledgeBaseService;
+
+    @Autowired
+    private ClassMapper classMapper;
+
+    @Autowired
+    private ClassMemberMapper classMemberMapper;
 
     /**
      * 创建课程
@@ -113,6 +123,9 @@ public class CourseService {
         
         courseMapper.insert(course);
         log.info("课程创建成功: courseId={}, name={}, classCode={}", course.getId(), course.getName(), course.getClassCode());
+
+        // 同步班级表与班级成员（教师）
+        ensureClassAndMember(course, userId);
         
         // 如果创建者是教师，为其生成班级邀请码
         if (UserRole.TEACHER.equals(userRole)) {
@@ -149,6 +162,9 @@ public class CourseService {
         // 加入课程
         courseMapper.addStudent(course.getId(), userId);
         log.info("用户成功加入课程: userId={}, courseId={}", userId, course.getId());
+
+        // 同步班级成员关系
+        ensureClassAndMember(course, userId);
         
         return course.getId();
     }
@@ -212,6 +228,35 @@ public class CourseService {
         }
         
         return classCode;
+    }
+
+    private void ensureClassAndMember(Course course, Long userId) {
+        if (course == null || userId == null) {
+            return;
+        }
+        String classCode = course.getClassCode();
+        if (classCode == null || classCode.isBlank()) {
+            return;
+        }
+
+        Class clazz = classMapper.getByClassCode(classCode);
+        if (clazz == null) {
+            clazz = new Class(course.getName(), course.getDescription(), classCode, course.getCreatorId());
+            classMapper.insert(clazz);
+        }
+
+        if (clazz.getId() == null) {
+            return;
+        }
+
+        ClassMember existing = classMemberMapper.getByClassIdAndUserId(clazz.getId(), userId);
+        if (existing == null) {
+            ClassMember member = new ClassMember(clazz.getId(), userId);
+            classMemberMapper.insert(member);
+        } else if (Boolean.TRUE.equals(existing.getIsDeleted())) {
+            existing.setIsDeleted(false);
+            classMemberMapper.update(existing);
+        }
     }
     
     /**

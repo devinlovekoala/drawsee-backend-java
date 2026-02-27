@@ -22,6 +22,8 @@ public interface ConversationShareMapper {
 
     List<ConversationShare> listByClassId(@Param("classId") Long classId);
 
+    List<ConversationShare> listByUserIdsWithoutClassId(@Param("userIds") List<Long> userIds);
+
     void insert(ConversationShare conversationShare);
 
     void update(ConversationShare conversationShare);

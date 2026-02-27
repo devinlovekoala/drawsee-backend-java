@@ -242,6 +242,41 @@ public class ConversationShareService {
         if (classId == null) {
             return new ArrayList<>();
         }
+        List<ConversationSharePostVO> posts = listClassShares(classId);
+        if (!posts.isEmpty()) {
+            return posts;
+        }
+
+        // 兼容历史数据：分享记录未设置class_id，尝试按课程成员回填
+        Class clazz = classMapper.getById(classId);
+        if (clazz == null || clazz.getClassCode() == null) {
+            return posts;
+        }
+        Course course = courseMapper.getByClassCode(clazz.getClassCode());
+        if (course == null || course.getStudentIds() == null || course.getStudentIds().isEmpty()) {
+            return posts;
+        }
+
+        List<Long> userIds = new ArrayList<>();
+        for (Object obj : course.getStudentIds()) {
+            if (obj == null) {
+                continue;
+            }
+            try {
+                userIds.add(Long.parseLong(String.valueOf(obj)));
+            } catch (NumberFormatException ignore) {
+                // skip invalid
+            }
+        }
+        if (userIds.isEmpty()) {
+            return posts;
+        }
+
+        List<ConversationShare> shares = conversationShareMapper.listByUserIdsWithoutClassId(userIds);
+        for (ConversationShare share : shares) {
+            share.setClassId(classId);
+            conversationShareMapper.update(share);
+        }
         return listClassShares(classId);
     }
 
@@ -291,7 +326,32 @@ public class ConversationShareService {
             }
         }
 
+        Class clazz = classMapper.getById(classId);
         List<ClassMember> members = classMemberMapper.getByClassId(classId);
+        if ((members == null || members.isEmpty()) && clazz != null && clazz.getClassCode() != null) {
+            Course course = courseMapper.getByClassCode(clazz.getClassCode());
+            if (course != null && course.getStudentIds() != null) {
+                for (Object studentIdObj : course.getStudentIds()) {
+                    if (studentIdObj == null) {
+                        continue;
+                    }
+                    Long studentId;
+                    try {
+                        studentId = Long.parseLong(String.valueOf(studentIdObj));
+                    } catch (NumberFormatException ignore) {
+                        continue;
+                    }
+                    ClassMember existing = classMemberMapper.getByClassIdAndUserId(classId, studentId);
+                    if (existing == null) {
+                        classMemberMapper.insert(new ClassMember(classId, studentId));
+                    } else if (Boolean.TRUE.equals(existing.getIsDeleted())) {
+                        existing.setIsDeleted(false);
+                        classMemberMapper.update(existing);
+                    }
+                }
+                members = classMemberMapper.getByClassId(classId);
+            }
+        }
         List<ClassStudentVO> students = new ArrayList<>();
         for (ClassMember member : members) {
             User user = userMapper.getById(member.getUserId());

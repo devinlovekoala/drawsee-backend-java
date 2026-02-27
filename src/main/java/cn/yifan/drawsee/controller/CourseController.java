@@ -5,12 +5,18 @@ import cn.yifan.drawsee.pojo.Result;
 import cn.yifan.drawsee.pojo.dto.*;
 import cn.yifan.drawsee.pojo.vo.*;
 import cn.yifan.drawsee.service.business.CourseService;
+import cn.yifan.drawsee.service.business.CourseResourceService;
 import cn.yifan.drawsee.service.business.KnowledgeBaseService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Date;
+import java.util.TimeZone;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 
 /**
  * @FileName CourseController
@@ -29,6 +35,9 @@ public class CourseController {
     
     @Autowired
     private KnowledgeBaseService knowledgeBaseService;
+
+    @Autowired
+    private CourseResourceService courseResourceService;
 
     /**
      * 获取系统课程列表（可访问的课程）
@@ -121,6 +130,74 @@ public class CourseController {
     public Result<CourseProgressVO> getCourseProgress(@PathVariable("id") String id) {
         CourseProgressVO progress = courseService.getCourseProgress(id);
         return Result.success(progress);
+    }
+
+    /**
+     * 获取课程资源（课件 / 任务 / 参考电路图）
+     */
+    @GetMapping("/{id}/resources")
+    public Result<List<CourseResourceVO>> getCourseResources(
+            @PathVariable("id") String id,
+            @RequestParam(required = false) String type) {
+        return Result.success(courseResourceService.listResources(id, type));
+    }
+
+    /**
+     * 创建课程资源（教师/管理员）
+     */
+    @PostMapping("/{id}/resources")
+    public Result<Long> createCourseResource(
+            @PathVariable("id") String id,
+            @RequestBody @Valid CreateCourseResourceDTO dto) {
+        return Result.success(courseResourceService.createResource(id, dto));
+    }
+
+    /**
+     * 上传课程资源（教师/管理员）
+     */
+    @PostMapping(value = "/{id}/resources/upload", consumes = "multipart/form-data")
+    public Result<Long> uploadCourseResource(
+            @PathVariable("id") String id,
+            @RequestParam("file") MultipartFile file,
+            @ModelAttribute CreateCourseResourceDTO dto,
+            @RequestParam(required = false) String dueAt) {
+        if (dueAt != null && !dueAt.isBlank()) {
+            Date parsed = parseDate(dueAt);
+            if (parsed != null) {
+                dto.setDueAt(parsed);
+            }
+        }
+        return Result.success(courseResourceService.uploadResource(id, dto, file));
+    }
+
+    /**
+     * 删除课程资源（教师/管理员）
+     */
+    @DeleteMapping("/{id}/resources/{resourceId}")
+    public Result<Boolean> deleteCourseResource(
+            @PathVariable("id") String id,
+            @PathVariable("resourceId") Long resourceId) {
+        return Result.success(courseResourceService.deleteResource(id, resourceId));
+    }
+
+    private Date parseDate(String input) {
+        if (input == null || input.isBlank()) {
+            return null;
+        }
+        String value = input.trim();
+        try {
+            // 支持前端 datetime-local: yyyy-MM-dd'T'HH:mm
+            if (value.contains("T")) {
+                SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm");
+                return fmt.parse(value);
+            }
+            // ISO时间
+            SimpleDateFormat iso = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSX");
+            iso.setTimeZone(TimeZone.getTimeZone("UTC"));
+            return iso.parse(value);
+        } catch (ParseException ignore) {
+            return null;
+        }
     }
 
     /**
