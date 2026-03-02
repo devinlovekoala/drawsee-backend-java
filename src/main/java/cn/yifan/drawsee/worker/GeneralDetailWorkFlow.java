@@ -8,6 +8,7 @@ import cn.yifan.drawsee.mapper.ConversationMapper;
 import cn.yifan.drawsee.mapper.NodeMapper;
 import cn.yifan.drawsee.mapper.UserMapper;
 import cn.yifan.drawsee.pojo.XYPosition;
+import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
@@ -28,7 +29,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -161,6 +164,19 @@ public class GeneralDetailWorkFlow extends WorkFlow {
             handler
         );
     }
+
+    @Override
+    public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
+        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+        if (!isCircuitGenerationIntent(aiTaskMessage.getPrompt())) {
+            return;
+        }
+        try {
+            createGeneratedCircuitNodes(workContext, aiTaskMessage);
+        } catch (Exception e) {
+            log.warn("文本生成电路节点失败，降级为纯文本详情。taskId={}, reason={}", aiTaskMessage.getTaskId(), e.getMessage());
+        }
+    }
     
     /**
      * 向上回溯查找原始问题
@@ -213,5 +229,93 @@ public class GeneralDetailWorkFlow extends WorkFlow {
             userId,
             String.valueOf(classId)
         );
+    }
+
+    private boolean isCircuitGenerationIntent(String prompt) {
+        if (prompt == null || prompt.isBlank()) {
+            return false;
+        }
+        String normalized = prompt.toLowerCase(Locale.ROOT);
+        boolean hasCircuitKeyword = normalized.contains("电路")
+            || normalized.contains("circuit")
+            || normalized.contains("原理图")
+            || normalized.contains("电路图");
+        boolean hasGenerateAction = normalized.contains("生成")
+            || normalized.contains("画")
+            || normalized.contains("绘制")
+            || normalized.contains("设计")
+            || normalized.contains("build")
+            || normalized.contains("create");
+        return hasCircuitKeyword && hasGenerateAction;
+    }
+
+    private void createGeneratedCircuitNodes(WorkContext workContext, AiTaskMessage aiTaskMessage) throws JsonProcessingException {
+        Node detailNode = workContext.getStreamNode();
+        if (detailNode == null || detailNode.getId() == null) {
+            return;
+        }
+
+        CircuitDesign design = aiService.generateCircuitDesignFromText(aiTaskMessage.getPrompt(), aiTaskMessage.getModel());
+        if (design == null || design.getElements() == null || design.getElements().isEmpty()) {
+            return;
+        }
+
+        String title = design.getMetadata() != null && design.getMetadata().getTitle() != null
+            ? design.getMetadata().getTitle()
+            : NodeTitle.CIRCUIT_CANVAS;
+
+        Map<String, Object> canvasNodeData = new ConcurrentHashMap<>();
+        canvasNodeData.put("title", title);
+        canvasNodeData.put("text", "已根据你的描述自动生成可编辑电路图");
+        canvasNodeData.put("subtype", NodeSubType.CIRCUIT_CANVAS);
+        canvasNodeData.put("circuitDesign", design);
+        canvasNodeData.put("mode", aiTaskMessage.getModel());
+
+        Node canvasNode = new Node(
+            NodeType.CIRCUIT_CANVAS,
+            objectMapper.writeValueAsString(canvasNodeData),
+            objectMapper.writeValueAsString(new XYPosition(420, 0)),
+            detailNode.getId(),
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            true
+        );
+        insertAndPublishNoneStreamNode(workContext, canvasNode, canvasNodeData);
+
+        Map<String, Object> analyzeNodeData = new ConcurrentHashMap<>();
+        analyzeNodeData.put("title", NodeTitle.CIRCUIT_ANALYSIS);
+        analyzeNodeData.put("text", "电路图已生成。你可以继续追问“这个电路如何工作”或“如何优化参数”。");
+        analyzeNodeData.put("subtype", NodeSubType.CIRCUIT_ANALYZE);
+        analyzeNodeData.put("contextTitle", title);
+        analyzeNodeData.put("contextText", aiTaskMessage.getPrompt());
+        analyzeNodeData.put("parentPointId", String.valueOf(canvasNode.getId()));
+        analyzeNodeData.put("followUps", buildDefaultCircuitFollowUps());
+
+        Node analyzeNode = new Node(
+            NodeType.CIRCUIT_ANALYZE,
+            objectMapper.writeValueAsString(analyzeNodeData),
+            objectMapper.writeValueAsString(new XYPosition(420, 0)),
+            canvasNode.getId(),
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            true
+        );
+        insertAndPublishNoneStreamNode(workContext, analyzeNode, analyzeNodeData);
+    }
+
+    private List<Map<String, Object>> buildDefaultCircuitFollowUps() {
+        List<Map<String, Object>> followUps = new ArrayList<>();
+        followUps.add(createFollowUp("工作原理", "请解释该电路各元件的作用与工作流程"));
+        followUps.add(createFollowUp("关键参数", "该电路的关键参数如何选取，为什么"));
+        followUps.add(createFollowUp("优化建议", "这个电路有哪些可落地的优化方向"));
+        return followUps;
+    }
+
+    private Map<String, Object> createFollowUp(String title, String followUp) {
+        Map<String, Object> item = new ConcurrentHashMap<>();
+        item.put("title", title);
+        item.put("followUp", followUp);
+        item.put("intent", "circuit-followup");
+        return item;
     }
 }

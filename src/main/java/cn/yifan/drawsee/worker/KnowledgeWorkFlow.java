@@ -1,6 +1,7 @@
 package cn.yifan.drawsee.worker;
 
 import cn.yifan.drawsee.constant.NodeTitle;
+import cn.yifan.drawsee.constant.NodeSubType;
 import cn.yifan.drawsee.constant.NodeType;
 import cn.yifan.drawsee.constant.RedisKey;
 import cn.yifan.drawsee.mapper.AiTaskMapper;
@@ -13,6 +14,7 @@ import cn.yifan.drawsee.mapper.NodeMapper;
 import cn.yifan.drawsee.mapper.UserMapper;
 import cn.yifan.drawsee.pojo.XYPosition;
 import cn.yifan.drawsee.pojo.entity.Course;
+import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import cn.yifan.drawsee.pojo.entity.Knowledge;
 import cn.yifan.drawsee.pojo.entity.KnowledgeBase;
 import cn.yifan.drawsee.pojo.entity.Node;
@@ -36,6 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -108,6 +111,16 @@ public class KnowledgeWorkFlow extends WorkFlow {
     public void createOtherNodesOrUpdateNodeData(WorkContext workContext) throws JsonProcessingException {
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
         Node streamNode = workContext.getStreamNode();
+
+        // 统一体验：在知识流中也支持“生成电路图”意图，直接产出电路节点
+        if (isCircuitGenerationIntent(aiTaskMessage.getPrompt())) {
+            try {
+                createGeneratedCircuitNodes(workContext, streamNode, aiTaskMessage);
+                return;
+            } catch (Exception e) {
+                log.warn("知识流文本生成电路失败，回退到知识点分支: taskId={}, reason={}", aiTaskMessage.getTaskId(), e.getMessage());
+            }
+        }
         
         // 首先尝试使用RAG增强AI回答
         boolean ragSuccess = tryEnhanceWithRag(workContext);
@@ -163,6 +176,76 @@ public class KnowledgeWorkFlow extends WorkFlow {
             );
             insertAndPublishNoneStreamNode(workContext, knowledgeHeadNode, knowledgeHeadNodeData);
         }
+    }
+
+    private boolean isCircuitGenerationIntent(String prompt) {
+        if (prompt == null || prompt.isBlank()) {
+            return false;
+        }
+        String normalized = prompt.toLowerCase(Locale.ROOT);
+        boolean hasCircuitKeyword = normalized.contains("电路")
+            || normalized.contains("circuit")
+            || normalized.contains("原理图")
+            || normalized.contains("电路图");
+        boolean hasDesignAction = normalized.contains("设计")
+            || normalized.contains("生成")
+            || normalized.contains("画")
+            || normalized.contains("绘制")
+            || normalized.contains("搭建")
+            || normalized.contains("build")
+            || normalized.contains("create");
+        return hasCircuitKeyword && hasDesignAction;
+    }
+
+    private void createGeneratedCircuitNodes(WorkContext workContext, Node streamNode, AiTaskMessage aiTaskMessage) throws JsonProcessingException {
+        if (streamNode == null) {
+            return;
+        }
+        CircuitDesign design = aiService.generateCircuitDesignFromText(aiTaskMessage.getPrompt(), aiTaskMessage.getModel());
+        if (design == null || design.getElements() == null || design.getElements().isEmpty()) {
+            return;
+        }
+
+        String title = design.getMetadata() != null && design.getMetadata().getTitle() != null
+            ? design.getMetadata().getTitle()
+            : NodeTitle.CIRCUIT_CANVAS;
+
+        Map<String, Object> canvasNodeData = new ConcurrentHashMap<>();
+        canvasNodeData.put("title", title);
+        canvasNodeData.put("text", "已根据你的问题自动生成可编辑电路图");
+        canvasNodeData.put("subtype", NodeSubType.CIRCUIT_CANVAS);
+        canvasNodeData.put("circuitDesign", design);
+        canvasNodeData.put("mode", aiTaskMessage.getModel());
+
+        Node canvasNode = new Node(
+            NodeType.CIRCUIT_CANVAS,
+            objectMapper.writeValueAsString(canvasNodeData),
+            objectMapper.writeValueAsString(XYPosition.origin()),
+            streamNode.getId(),
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            true
+        );
+        insertAndPublishNoneStreamNode(workContext, canvasNode, canvasNodeData);
+
+        Map<String, Object> analyzeNodeData = new ConcurrentHashMap<>();
+        analyzeNodeData.put("title", NodeTitle.CIRCUIT_ANALYSIS);
+        analyzeNodeData.put("text", "电路图已生成，可继续追问工作原理、参数选择与优化建议。");
+        analyzeNodeData.put("subtype", NodeSubType.CIRCUIT_ANALYZE);
+        analyzeNodeData.put("contextTitle", title);
+        analyzeNodeData.put("contextText", aiTaskMessage.getPrompt());
+        analyzeNodeData.put("parentPointId", String.valueOf(canvasNode.getId()));
+
+        Node analyzeNode = new Node(
+            NodeType.CIRCUIT_ANALYZE,
+            objectMapper.writeValueAsString(analyzeNodeData),
+            objectMapper.writeValueAsString(XYPosition.origin()),
+            canvasNode.getId(),
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            true
+        );
+        insertAndPublishNoneStreamNode(workContext, analyzeNode, analyzeNodeData);
     }
     
     /**

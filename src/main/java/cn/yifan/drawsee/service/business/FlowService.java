@@ -220,6 +220,8 @@ public class FlowService {
             createAiTaskDTO.setType(detectedType);
             log.info("任务类型自动识别结果: {} -> {}", AiTaskType.GENERAL, detectedType);
         }
+        // 兼容历史前端/旧任务类型：知识问答统一并入通用模式
+        normalizeLegacyKnowledgeTaskType(createAiTaskDTO);
 
         // 如果没有convId，创建一个conversation以及第一个 node
         Conversation conversation = null;
@@ -302,6 +304,13 @@ public class FlowService {
 
         // 返回任务ID和convId
         return new CreateAiTaskVO(aiTask.getId(), conversationVO);
+    }
+
+    private void normalizeLegacyKnowledgeTaskType(CreateAiTaskDTO createAiTaskDTO) {
+        if (AiTaskType.KNOWLEDGE.equals(createAiTaskDTO.getType())) {
+            log.info("兼容映射任务类型: KNOWLEDGE -> GENERAL");
+            createAiTaskDTO.setType(AiTaskType.GENERAL);
+        }
     }
 
     @Async

@@ -85,6 +85,12 @@ public interface PromptService {
 
     @PromptResource(fromResource = "/prompt/mode-detection.txt")
     String getModeDetectionPrompt(@PromptParam("prompt") String prompt);
+
+    /**
+     * 根据用户自然语言需求生成可解析的电路网表（COMP/WIRE）
+     */
+    @PromptResource(fromResource = "/prompt/circuit-design-from-text.txt")
+    String getCircuitDesignFromTextPrompt(@PromptParam("requirement") String requirement);
     /**
      * 获取电路分析预热提示词模板
      * 生成电路简介与推荐追问

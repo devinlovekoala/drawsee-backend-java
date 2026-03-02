@@ -1,11 +1,14 @@
 package cn.yifan.drawsee.worker;
 
 import cn.yifan.drawsee.constant.NodeTitle;
+import cn.yifan.drawsee.constant.NodeSubType;
+import cn.yifan.drawsee.constant.NodeType;
 import cn.yifan.drawsee.mapper.AiTaskMapper;
 import cn.yifan.drawsee.mapper.ConversationMapper;
 import cn.yifan.drawsee.mapper.NodeMapper;
 import cn.yifan.drawsee.mapper.UserMapper;
 import cn.yifan.drawsee.pojo.XYPosition;
+import cn.yifan.drawsee.pojo.entity.CircuitDesign;
 import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.service.base.AiService;
@@ -26,6 +29,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -212,6 +216,10 @@ public class GeneralWorkFlow extends WorkFlow {
         try {
             // 尝试解析回答角度，与原方法类似，但修改角度节点的父节点
             processAnswerAngles(workContext, responseText, parentId);
+            // 首轮即支持：用户要求“生成/设计电路图”时直接创建可编辑电路节点
+            if (isCircuitGenerationIntent(aiTaskMessage.getPrompt())) {
+                createGeneratedCircuitNodes(workContext, parentId, aiTaskMessage);
+            }
         } catch (Exception e) {
             log.error("解析回答角度失败: {}", responseText, e);
         }
@@ -290,6 +298,73 @@ public class GeneralWorkFlow extends WorkFlow {
         } catch (Exception e) {
             log.error("创建回答角度节点失败: {}", e.getMessage(), e);
         }
+    }
+
+    private boolean isCircuitGenerationIntent(String prompt) {
+        if (prompt == null || prompt.isBlank()) {
+            return false;
+        }
+        String normalized = prompt.toLowerCase(Locale.ROOT);
+        boolean hasCircuitKeyword = normalized.contains("电路")
+            || normalized.contains("circuit")
+            || normalized.contains("原理图")
+            || normalized.contains("电路图");
+        boolean hasDesignAction = normalized.contains("生成")
+            || normalized.contains("设计")
+            || normalized.contains("画")
+            || normalized.contains("绘制")
+            || normalized.contains("搭建")
+            || normalized.contains("build")
+            || normalized.contains("create");
+        return hasCircuitKeyword && hasDesignAction;
+    }
+
+    private void createGeneratedCircuitNodes(WorkContext workContext, Long parentId, AiTaskMessage aiTaskMessage) throws JsonProcessingException {
+        CircuitDesign design = aiService.generateCircuitDesignFromText(aiTaskMessage.getPrompt(), aiTaskMessage.getModel());
+        if (design == null || design.getElements() == null || design.getElements().isEmpty()) {
+            return;
+        }
+
+        String title = design.getMetadata() != null && design.getMetadata().getTitle() != null
+            ? design.getMetadata().getTitle()
+            : NodeTitle.CIRCUIT_CANVAS;
+
+        Map<String, Object> canvasNodeData = new ConcurrentHashMap<>();
+        canvasNodeData.put("title", title);
+        canvasNodeData.put("text", "已根据你的问题自动生成可编辑电路图");
+        canvasNodeData.put("subtype", NodeSubType.CIRCUIT_CANVAS);
+        canvasNodeData.put("circuitDesign", design);
+        canvasNodeData.put("mode", aiTaskMessage.getModel());
+
+        Node canvasNode = new Node(
+            NodeType.CIRCUIT_CANVAS,
+            objectMapper.writeValueAsString(canvasNodeData),
+            objectMapper.writeValueAsString(XYPosition.origin()),
+            parentId,
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            true
+        );
+        insertAndPublishNoneStreamNode(workContext, canvasNode, canvasNodeData);
+
+        Map<String, Object> analyzeNodeData = new ConcurrentHashMap<>();
+        analyzeNodeData.put("title", NodeTitle.CIRCUIT_ANALYSIS);
+        analyzeNodeData.put("text", "电路图已生成，可继续追问工作原理、参数选择与优化建议。");
+        analyzeNodeData.put("subtype", NodeSubType.CIRCUIT_ANALYZE);
+        analyzeNodeData.put("contextTitle", title);
+        analyzeNodeData.put("contextText", aiTaskMessage.getPrompt());
+        analyzeNodeData.put("parentPointId", String.valueOf(canvasNode.getId()));
+
+        Node analyzeNode = new Node(
+            NodeType.CIRCUIT_ANALYZE,
+            objectMapper.writeValueAsString(analyzeNodeData),
+            objectMapper.writeValueAsString(XYPosition.origin()),
+            canvasNode.getId(),
+            aiTaskMessage.getUserId(),
+            aiTaskMessage.getConvId(),
+            true
+        );
+        insertAndPublishNoneStreamNode(workContext, analyzeNode, analyzeNodeData);
     }
 
     @Override

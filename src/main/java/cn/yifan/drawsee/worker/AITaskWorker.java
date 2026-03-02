@@ -22,8 +22,6 @@ public class AITaskWorker {
     @Autowired
     private GeneralDetailWorkFlow generalDetailWorkFlow;
     @Autowired
-    private KnowledgeWorkFlow knowledgeWorkFlow;
-    @Autowired
     private KnowledgeDetailWorkFlow knowledgeDetailWorkFlow;
     @Autowired
     private AnimationWorkFlow animationWorkFlow;
@@ -52,7 +50,7 @@ public class AITaskWorker {
         switch (aiTaskMessage.getType()) {
             case AiTaskType.GENERAL -> generalWorkFlow.execute(workContext);
             case AiTaskType.GENERAL_DETAIL -> generalDetailWorkFlow.execute(workContext);
-            case AiTaskType.KNOWLEDGE -> knowledgeWorkFlow.execute(workContext);
+            case AiTaskType.KNOWLEDGE -> generalWorkFlow.execute(workContext);
             case AiTaskType.KNOWLEDGE_DETAIL -> knowledgeDetailWorkFlow.execute(workContext);
             case AiTaskType.ANIMATION -> animationWorkFlow.execute(workContext);
             case AiTaskType.SOLVER_FIRST -> solverFirstWorkFlow.execute(workContext);
