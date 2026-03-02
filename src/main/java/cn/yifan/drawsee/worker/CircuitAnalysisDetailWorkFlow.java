@@ -96,8 +96,10 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
         Node parentNode = workContext.getParentNode();
         AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
 
-        if (!parentNode.getType().equals(NodeType.CIRCUIT_ANALYZE)) {
-            log.error("父节点不是电路分析节点, taskMessage: {}", aiTaskMessage);
+        boolean isCircuitParent = NodeType.CIRCUIT_ANALYZE.equals(parentNode.getType())
+            || NodeType.CIRCUIT_CANVAS.equals(parentNode.getType());
+        if (!isCircuitParent) {
+            log.error("父节点不是电路节点(analysis/canvas), parentType={}, taskMessage={}", parentNode.getType(), aiTaskMessage);
             return false;
         }
 
@@ -434,26 +436,39 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
 
         Node currentNode = parentNode;
         while (currentNode != null && !currentNode.getType().equals(NodeType.ROOT)) {
+            if (NodeType.CIRCUIT_CANVAS.equals(currentNode.getType())) {
+                CircuitDesign direct = extractCircuitDesignFromNode(currentNode);
+                if (direct != null) {
+                    return direct;
+                }
+            }
+
             Node nextNode = nodeMap.get(currentNode.getParentId());
 
             if (nextNode != null && nextNode.getType().equals(NodeType.CIRCUIT_CANVAS)) {
-                try {
-                    TypeReference<Map<String, Object>> dataTypeRef = new TypeReference<>() {};
-                    Map<String, Object> canvasNodeData = objectMapper.readValue(nextNode.getData(), dataTypeRef);
-                    Object circuitDesignObj = canvasNodeData.get("circuitDesign");
-
-                    String circuitDesignJson = objectMapper.writeValueAsString(circuitDesignObj);
-                    return objectMapper.readValue(circuitDesignJson, CircuitDesign.class);
-                } catch (JsonProcessingException e) {
-                    log.error("解析电路画布节点数据失败: {}", e.getMessage());
-                    return null;
-                }
+                return extractCircuitDesignFromNode(nextNode);
             }
 
             currentNode = nextNode;
         }
 
         return null;
+    }
+
+    private CircuitDesign extractCircuitDesignFromNode(Node canvasNode) {
+        try {
+            TypeReference<Map<String, Object>> dataTypeRef = new TypeReference<>() {};
+            Map<String, Object> canvasNodeData = objectMapper.readValue(canvasNode.getData(), dataTypeRef);
+            Object circuitDesignObj = canvasNodeData.get("circuitDesign");
+            if (circuitDesignObj == null) {
+                return null;
+            }
+            String circuitDesignJson = objectMapper.writeValueAsString(circuitDesignObj);
+            return objectMapper.readValue(circuitDesignJson, CircuitDesign.class);
+        } catch (JsonProcessingException e) {
+            log.error("解析电路画布节点数据失败: {}", e.getMessage());
+            return null;
+        }
     }
 
     private void publishErrorAndFail(WorkContext workContext, String message) {
