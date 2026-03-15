@@ -18,75 +18,78 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
+import java.util.LinkedList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.LinkedList;
-
 /**
- * @FileName SolverWorkFlow
- * @Description
- * @Author yifan
+ * @FileName SolverWorkFlow @Description @Author yifan
+ *
  * @date 2025-03-23 13:48
- **/
-
+ */
 @Service
 @Slf4j
 public class SolverFirstWorkFlow extends WorkFlow {
 
-    public SolverFirstWorkFlow(
-        UserMapper userMapper,
-        AiService aiService,
-        StreamAiService streamAiService,
-        RedissonClient redissonClient,
-        NodeMapper nodeMapper,
-        ConversationMapper conversationMapper,
-        AiTaskMapper aiTaskMapper,
-        ObjectMapper objectMapper,
-        ContextBudgetManager contextBudgetManager
-    ) {
-        super(userMapper, aiService, streamAiService, redissonClient, nodeMapper, conversationMapper, aiTaskMapper, objectMapper, contextBudgetManager);
-    }
+  public SolverFirstWorkFlow(
+      UserMapper userMapper,
+      AiService aiService,
+      StreamAiService streamAiService,
+      RedissonClient redissonClient,
+      NodeMapper nodeMapper,
+      ConversationMapper conversationMapper,
+      AiTaskMapper aiTaskMapper,
+      ObjectMapper objectMapper,
+      ContextBudgetManager contextBudgetManager) {
+    super(
+        userMapper,
+        aiService,
+        streamAiService,
+        redissonClient,
+        nodeMapper,
+        conversationMapper,
+        aiTaskMapper,
+        objectMapper,
+        contextBudgetManager);
+  }
 
-    @Override
-    public void createInitStreamNode(WorkContext workContext, Long parentNodeId) throws JsonProcessingException {
-        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+  @Override
+  public void createInitStreamNode(WorkContext workContext, Long parentNodeId)
+      throws JsonProcessingException {
+    AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
 
-        // 创建AI回答节点
-        Map<String, Object> answerNodeData = new ConcurrentHashMap<>();
-        answerNodeData.put("subtype", NodeSubType.SOLVER_FIRST);
-        answerNodeData.put("title", NodeTitle.SOLVER_FIRST);
-        answerNodeData.put("text", "");
-        Node answerNode = new Node(
+    // 创建AI回答节点
+    Map<String, Object> answerNodeData = new ConcurrentHashMap<>();
+    answerNodeData.put("subtype", NodeSubType.SOLVER_FIRST);
+    answerNodeData.put("title", NodeTitle.SOLVER_FIRST);
+    answerNodeData.put("text", "");
+    Node answerNode =
+        new Node(
             NodeType.ANSWER,
             objectMapper.writeValueAsString(answerNodeData),
             objectMapper.writeValueAsString(XYPosition.origin()),
             parentNodeId,
             aiTaskMessage.getUserId(),
             aiTaskMessage.getConvId(),
-            true
-        );
-        insertAndPublishStreamNode(workContext, answerNode, answerNodeData);
-    }
+            true);
+    insertAndPublishStreamNode(workContext, answerNode, answerNodeData);
+  }
 
-    @Override
-    public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler) throws JsonProcessingException {
-        AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
-        LinkedList<ChatMessage> history = applyHistoryBudget(
-            workContext,
-            planContextBudget(workContext, aiTaskMessage.getPrompt())
-        );
-        String model = aiTaskMessage.getModel();
-        streamAiService.solverFirstChat(
-            history, 
-            aiTaskMessage.getPrompt(), 
-            aiTaskMessage.getPromptParams().get("method"), 
-            model,
-            handler
-        );
-    }
-
+  @Override
+  public void streamChat(WorkContext workContext, StreamingResponseHandler<AiMessage> handler)
+      throws JsonProcessingException {
+    AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
+    LinkedList<ChatMessage> history =
+        applyHistoryBudget(workContext, planContextBudget(workContext, aiTaskMessage.getPrompt()));
+    String model = aiTaskMessage.getModel();
+    streamAiService.solverFirstChat(
+        history,
+        aiTaskMessage.getPrompt(),
+        aiTaskMessage.getPromptParams().get("method"),
+        model,
+        handler);
+  }
 }

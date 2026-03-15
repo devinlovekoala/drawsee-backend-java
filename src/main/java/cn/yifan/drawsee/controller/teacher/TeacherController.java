@@ -11,56 +11,54 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * @FileName TeacherController
- * @Description 教师控制器类
- * @Author yifan
+ * @FileName TeacherController @Description 教师控制器类 @Author yifan
+ *
  * @date 2025-03-28 11:15
- **/
-
+ */
 @RestController
 @RequestMapping("/teacher")
 @SaCheckLogin
 public class TeacherController {
 
-    @Autowired
-    private TeacherService teacherService;
+  @Autowired private TeacherService teacherService;
 
-    /**
-     * 创建教师
-     * @param createTeacherDTO 创建教师DTO
-     */
-    @PostMapping
-    @SaCheckRole(UserRole.ADMIN)
-    public void createTeacher(@RequestBody @Valid CreateTeacherDTO createTeacherDTO) {
-        teacherService.createTeacher(createTeacherDTO);
-    }
+  /**
+   * 创建教师
+   *
+   * @param createTeacherDTO 创建教师DTO
+   */
+  @PostMapping
+  @SaCheckRole(UserRole.ADMIN)
+  public void createTeacher(@RequestBody @Valid CreateTeacherDTO createTeacherDTO) {
+    teacherService.createTeacher(createTeacherDTO);
+  }
 
-    /**
-     * 验证用户是否为教师
-     */
-    @GetMapping("/validate")
-    public void validateTeacher() {
-        teacherService.validateTeacher();
-    }
+  /** 验证用户是否为教师 */
+  @GetMapping("/validate")
+  public void validateTeacher() {
+    teacherService.validateTeacher();
+  }
 
-    /**
-     * 获取教师信息
-     * @param userId 用户ID
-     * @return 教师信息
-     */
-    @GetMapping("/{userId}")
-    @SaCheckRole(UserRole.ADMIN)
-    public Teacher getTeacherByUserId(@PathVariable("userId") Long userId) {
-        return teacherService.getTeacherByUserId(userId);
-    }
+  /**
+   * 获取教师信息
+   *
+   * @param userId 用户ID
+   * @return 教师信息
+   */
+  @GetMapping("/{userId}")
+  @SaCheckRole(UserRole.ADMIN)
+  public Teacher getTeacherByUserId(@PathVariable("userId") Long userId) {
+    return teacherService.getTeacherByUserId(userId);
+  }
 
-    /**
-     * 更新教师信息
-     * @param teacher 教师信息
-     */
-    @PutMapping
-    @SaCheckRole(value = {UserRole.ADMIN, UserRole.TEACHER})
-    public void updateTeacher(@RequestBody Teacher teacher) {
-        teacherService.updateTeacher(teacher);
-    }
+  /**
+   * 更新教师信息
+   *
+   * @param teacher 教师信息
+   */
+  @PutMapping
+  @SaCheckRole(value = {UserRole.ADMIN, UserRole.TEACHER})
+  public void updateTeacher(@RequestBody Teacher teacher) {
+    teacherService.updateTeacher(teacher);
+  }
 }

@@ -4,24 +4,21 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * @FileName MqConfig
- * @Description
- * @Author yifan
+ * @FileName MqConfig @Description @Author yifan
+ *
  * @date 2025-03-22 09:17
- **/
-
+ */
 @Data
 @NoArgsConstructor
 public class MqConfig {
 
-    private String exchangeName;
+  private String exchangeName;
 
-    private String queueName;
+  private String queueName;
 
-    private String routingKey;
+  private String routingKey;
 
-    private Integer queueCount;
+  private Integer queueCount;
 
-    private String queueConcurrency = "5-10";
-
+  private String queueConcurrency = "5-10";
 }

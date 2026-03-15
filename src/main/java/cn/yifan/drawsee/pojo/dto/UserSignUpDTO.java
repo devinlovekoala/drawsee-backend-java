@@ -6,18 +6,14 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * @FileName SignUpDTO
- * @Description
- * @Author yifan
+ * @FileName SignUpDTO @Description @Author yifan
+ *
  * @date 2025-01-28 16:19
- **/
-
+ */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class UserSignUpDTO {
-    @NotBlank
-    private String username;
-    @NotBlank
-    private String password;
+  @NotBlank private String username;
+  @NotBlank private String password;
 }

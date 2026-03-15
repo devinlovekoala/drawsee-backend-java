@@ -8,75 +8,67 @@ import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.output.Response;
-import lombok.Data;
-import org.redisson.api.RStream;
-
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import lombok.Data;
+import org.redisson.api.RStream;
 
 /**
- * @FileName WorkerContext
- * @Description
- * @Author yifan
+ * @FileName WorkerContext @Description @Author yifan
+ *
  * @date 2025-03-08 22:24
- **/
-
+ */
 @Data
 public class WorkContext {
 
-    private AiTaskMessage aiTaskMessage;
+  private AiTaskMessage aiTaskMessage;
 
-    private AiTask aiTask;
+  private AiTask aiTask;
 
-    private User user;
+  private User user;
 
-    private Conversation conversation;
+  private Conversation conversation;
 
-    private Node parentNode;
+  private Node parentNode;
 
-    private RStream<String, Object> redisStream;
+  private RStream<String, Object> redisStream;
 
-    private LinkedList<ChatMessage> history;
+  private LinkedList<ChatMessage> history;
 
-    private Node streamNode;
+  private Node streamNode;
 
-    private Map<String, Object> streamNodeData;
+  private Map<String, Object> streamNodeData;
 
-    private Response<AiMessage> streamResponse;
+  private Response<AiMessage> streamResponse;
 
-    private AtomicLong tokens;
+  private AtomicLong tokens;
 
-    private List<Node> nodesToUpdate;
+  private List<Node> nodesToUpdate;
 
-    private Boolean isSendDone;
-    
-    // 额外数据存储
-    private Map<String, Object> extraData;
+  private Boolean isSendDone;
 
-    public WorkContext(AiTaskMessage aiTaskMessage) {
-        this.aiTaskMessage = aiTaskMessage;
-        this.nodesToUpdate = new ArrayList<>();
-        this.isSendDone = true;
-        this.tokens = new AtomicLong(0);
-        this.extraData = new ConcurrentHashMap<>();
-    }
-    
-    /**
-     * 存储额外数据
-     */
-    public void putExtraData(String key, Object value) {
-        this.extraData.put(key, value);
-    }
-    
-    /**
-     * 获取额外数据
-     */
-    public Object getExtraData(String key) {
-        return this.extraData.get(key);
-    }
+  // 额外数据存储
+  private Map<String, Object> extraData;
 
+  public WorkContext(AiTaskMessage aiTaskMessage) {
+    this.aiTaskMessage = aiTaskMessage;
+    this.nodesToUpdate = new ArrayList<>();
+    this.isSendDone = true;
+    this.tokens = new AtomicLong(0);
+    this.extraData = new ConcurrentHashMap<>();
+  }
+
+  /** 存储额外数据 */
+  public void putExtraData(String key, Object value) {
+    this.extraData.put(key, value);
+  }
+
+  /** 获取额外数据 */
+  public Object getExtraData(String key) {
+    return this.extraData.get(key);
+  }
 }

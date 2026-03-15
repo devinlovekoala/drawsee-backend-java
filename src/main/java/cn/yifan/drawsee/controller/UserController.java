@@ -8,46 +8,43 @@ import cn.yifan.drawsee.pojo.vo.LoginVO;
 import cn.yifan.drawsee.service.business.UserService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * @FileName UserController
- * @Description 用户控制器
- * @Author yifan
+ * @FileName UserController @Description 用户控制器 @Author yifan
+ *
  * @date 2025-01-28 16:06
- **/
-
+ */
 @Slf4j
 @RestController
 @RequestMapping("/user")
 public class UserController {
 
-    private final UserService userService;
+  private final UserService userService;
 
-    public UserController(UserService userService) {
-        this.userService = userService;
-    }
+  public UserController(UserService userService) {
+    this.userService = userService;
+  }
 
-    @PostMapping("/login")
-    public LoginVO login(@RequestBody @Valid UserLoginDTO userLoginDTO) {
-        return userService.login(userLoginDTO);
-    }
+  @PostMapping("/login")
+  public LoginVO login(@RequestBody @Valid UserLoginDTO userLoginDTO) {
+    return userService.login(userLoginDTO);
+  }
 
-    @PostMapping("/signup")
-    public LoginVO signup(@RequestBody @Valid UserSignUpDTO userSignUpDTO) {
-        return userService.signup(userSignUpDTO);
-    }
+  @PostMapping("/signup")
+  public LoginVO signup(@RequestBody @Valid UserSignUpDTO userSignUpDTO) {
+    return userService.signup(userSignUpDTO);
+  }
 
-    @GetMapping("/check_login")
-    @SaCheckLogin
-    public LoginVO checkLogin() {
-        return userService.checkLogin();
-    }
+  @GetMapping("/check_login")
+  @SaCheckLogin
+  public LoginVO checkLogin() {
+    return userService.checkLogin();
+  }
 
-    @PostMapping("/logout")
-    @SaCheckLogin
-    public void logout() {
-        StpUtil.logout();
-    }
+  @PostMapping("/logout")
+  @SaCheckLogin
+  public void logout() {
+    StpUtil.logout();
+  }
 }

@@ -16,29 +16,19 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class NodeContent {
-    
-    /**
-     * 节点标题
-     */
-    private String title;
-    
-    /**
-     * 节点内容
-     */
-    private String content;
-    
-    /**
-     * 节点子类型，用于区分同一类型下的不同子节点
-     */
-    private String subType;
-    
-    /**
-     * 排序顺序
-     */
-    private Integer order;
-    
-    /**
-     * 额外数据，可用于存储特定节点类型的额外信息
-     */
-    private Object extraData;
+
+  /** 节点标题 */
+  private String title;
+
+  /** 节点内容 */
+  private String content;
+
+  /** 节点子类型，用于区分同一类型下的不同子节点 */
+  private String subType;
+
+  /** 排序顺序 */
+  private Integer order;
+
+  /** 额外数据，可用于存储特定节点类型的额外信息 */
+  private Object extraData;
 }

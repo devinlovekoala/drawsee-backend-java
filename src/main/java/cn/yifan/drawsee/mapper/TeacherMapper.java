@@ -4,19 +4,16 @@ import cn.yifan.drawsee.pojo.entity.Teacher;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
- * @FileName TeacherMapper
- * @Description 教师Mapper接口
- * @Author yifan
+ * @FileName TeacherMapper @Description 教师Mapper接口 @Author yifan
+ *
  * @date 2025-03-28 10:42
- **/
-
+ */
 @Mapper
 public interface TeacherMapper {
 
-    Teacher getByUserId(Long userId);
+  Teacher getByUserId(Long userId);
 
-    void insert(Teacher teacher);
+  void insert(Teacher teacher);
 
-    void update(Teacher teacher);
-
-} 
+  void update(Teacher teacher);
+}

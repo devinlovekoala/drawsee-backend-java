@@ -1,20 +1,16 @@
 package cn.yifan.drawsee.pojo.rabbit;
 
+import java.util.List;
 import lombok.Data;
 
-import java.util.List;
-
 /**
- * @FileName ConfigModel
- * @Description
- * @Author yifan
+ * @FileName ConfigModel @Description @Author yifan
+ *
  * @date 2025-01-29 17:33
- **/
-
+ */
 @Data
 public class ConfigModel {
 
-    private List<ConfigQueue> queues;
-    private ConfigExchange exchange;
-
+  private List<ConfigQueue> queues;
+  private ConfigExchange exchange;
 }

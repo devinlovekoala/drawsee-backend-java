@@ -1,48 +1,43 @@
 package cn.yifan.drawsee.pojo.vo;
 
 import cn.yifan.drawsee.pojo.XYPosition;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.io.Serial;
 import java.io.Serializable;
 import java.sql.Timestamp;
 import java.util.Map;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * @FileName NodeVO
- * @Description
- * @Author yifan
+ * @FileName NodeVO @Description @Author yifan
+ *
  * @date 2025-01-29 20:53
- **/
-
+ */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class NodeVO implements Serializable {
 
-    @Serial
-    private static final long serialVersionUID = 1L;
+  @Serial private static final long serialVersionUID = 1L;
 
-    private Long id;
+  private Long id;
 
-    private String type;
+  private String type;
 
-    private Map<String, Object> data;
+  private Map<String, Object> data;
 
-    private XYPosition position;
+  private XYPosition position;
 
-    private Long height;
+  private Long height;
 
-    private Long parentId;
+  private Long parentId;
 
-    private Long convId;
+  private Long convId;
 
-    private Long userId;
+  private Long userId;
 
-    private Timestamp createdAt;
+  private Timestamp createdAt;
 
-    private Timestamp updatedAt;
-
+  private Timestamp updatedAt;
 }

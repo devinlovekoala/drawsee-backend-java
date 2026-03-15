@@ -2,108 +2,70 @@ package cn.yifan.drawsee.constant;
 
 /**
  * AI任务类型常量
- * 
+ *
  * @author devin
  * @date 2024/03/19
  */
 public class AiTaskType {
-    
-    /**
-     * 通用对话
-     */
-    public static final String GENERAL = "GENERAL";
 
-    /**
-     * 通用对话详情
-     */
-    public static final String GENERAL_DETAIL = "GENERAL_DETAIL";
+  /** 通用对话 */
+  public static final String GENERAL = "GENERAL";
 
-    /**
-     * 知识问答
-     */
-    public static final String KNOWLEDGE = "KNOWLEDGE";
+  /** 通用对话详情 */
+  public static final String GENERAL_DETAIL = "GENERAL_DETAIL";
 
-    /**
-     * 知识详解
-     */
-    public static final String KNOWLEDGE_DETAIL = "KNOWLEDGE_DETAIL";
+  /** 知识问答 */
+  public static final String KNOWLEDGE = "KNOWLEDGE";
 
-    /**
-     * 动画生成
-     */
-    public static final String ANIMATION = "ANIMATION";
+  /** 知识详解 */
+  public static final String KNOWLEDGE_DETAIL = "KNOWLEDGE_DETAIL";
 
-    /**
-     * 问题求解（第一步）
-     */
-    public static final String SOLVER_FIRST = "SOLVER_FIRST";
+  /** 动画生成 */
+  public static final String ANIMATION = "ANIMATION";
 
-    /**
-     * 问题求解（继续）
-     */
-    public static final String SOLVER_CONTINUE = "SOLVER_CONTINUE";
+  /** 问题求解（第一步） */
+  public static final String SOLVER_FIRST = "SOLVER_FIRST";
 
-    /**
-     * 问题求解（总结）
-     */
-    public static final String SOLVER_SUMMARY = "SOLVER_SUMMARY";
+  /** 问题求解（继续） */
+  public static final String SOLVER_CONTINUE = "SOLVER_CONTINUE";
 
-    /**
-     * 学习规划
-     */
-    public static final String PLANNER = "PLANNER";
+  /** 问题求解（总结） */
+  public static final String SOLVER_SUMMARY = "SOLVER_SUMMARY";
 
-    /**
-     * HTML生成
-     */
-    public static final String HTML_MAKER = "HTML_MAKER";
+  /** 学习规划 */
+  public static final String PLANNER = "PLANNER";
 
-    /**
-     * 电路分析
-     */
-    public static final String CIRCUIT_ANALYSIS = "CIRCUIT_ANALYSIS";
-    
-    /**
-     * 电路分析点详情
-     */
-    public static final String CIRCUIT_DETAIL = "CIRCUIT_DETAIL";
-    
-    /**
-     * PDF电路实验任务分析
-     */
-    public static final String PDF_CIRCUIT_ANALYSIS = "PDF_CIRCUIT_ANALYSIS";
-    
-    /**
-     * PDF电路实验任务自动设计生成
-     */
-    public static final String PDF_CIRCUIT_DESIGN = "PDF_CIRCUIT_DESIGN";
-    
-    /**
-     * PDF电路实验任务分析详情
-     */
-    public static final String PDF_CIRCUIT_ANALYSIS_DETAIL = "PDF_CIRCUIT_ANALYSIS_DETAIL";
+  /** HTML生成 */
+  public static final String HTML_MAKER = "HTML_MAKER";
 
-    /**
-     * Agentic RAG v2 查询
-     */
-    public static final String AGENTIC_RAG = "AGENTIC_RAG";
+  /** 电路分析 */
+  public static final String CIRCUIT_ANALYSIS = "CIRCUIT_ANALYSIS";
 
-    /**
-     * Agentic RAG v2 公式计算
-     */
-    public static final String AGENTIC_RAG_FORMULA = "AGENTIC_RAG_FORMULA";
+  /** 电路分析点详情 */
+  public static final String CIRCUIT_DETAIL = "CIRCUIT_DETAIL";
 
-    /**
-     * Agentic RAG v2 Netlist解析
-     */
-    public static final String AGENTIC_RAG_NETLIST = "AGENTIC_RAG_NETLIST";
+  /** PDF电路实验任务分析 */
+  public static final String PDF_CIRCUIT_ANALYSIS = "PDF_CIRCUIT_ANALYSIS";
 
-    /**
-     * Agentic RAG v2 图片分析
-     */
-    public static final String AGENTIC_RAG_IMAGE = "AGENTIC_RAG_IMAGE";
+  /** PDF电路实验任务自动设计生成 */
+  public static final String PDF_CIRCUIT_DESIGN = "PDF_CIRCUIT_DESIGN";
 
-    private AiTaskType() {
-        // 私有构造函数，防止实例化
-    }
+  /** PDF电路实验任务分析详情 */
+  public static final String PDF_CIRCUIT_ANALYSIS_DETAIL = "PDF_CIRCUIT_ANALYSIS_DETAIL";
+
+  /** Agentic RAG v2 查询 */
+  public static final String AGENTIC_RAG = "AGENTIC_RAG";
+
+  /** Agentic RAG v2 公式计算 */
+  public static final String AGENTIC_RAG_FORMULA = "AGENTIC_RAG_FORMULA";
+
+  /** Agentic RAG v2 Netlist解析 */
+  public static final String AGENTIC_RAG_NETLIST = "AGENTIC_RAG_NETLIST";
+
+  /** Agentic RAG v2 图片分析 */
+  public static final String AGENTIC_RAG_IMAGE = "AGENTIC_RAG_IMAGE";
+
+  private AiTaskType() {
+    // 私有构造函数，防止实例化
+  }
 }

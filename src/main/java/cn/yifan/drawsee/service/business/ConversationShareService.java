@@ -20,473 +20,469 @@ import cn.yifan.drawsee.pojo.entity.ConversationShare;
 import cn.yifan.drawsee.pojo.entity.Course;
 import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.entity.User;
-import cn.yifan.drawsee.pojo.vo.ClassStudentVO;
 import cn.yifan.drawsee.pojo.vo.*;
+import cn.yifan.drawsee.pojo.vo.ClassStudentVO;
 import cn.yifan.drawsee.util.UUIDUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 /**
- * @FileName ConversationShareService
- * @Description 会话分享服务
- * @Author devin
+ * @FileName ConversationShareService @Description 会话分享服务 @Author devin
+ *
  * @date 2026-02-25
  */
-
 @Service
 @Slf4j
 public class ConversationShareService {
 
-    @Autowired
-    private ConversationMapper conversationMapper;
-    @Autowired
-    private ConversationShareMapper conversationShareMapper;
-    @Autowired
-    private NodeMapper nodeMapper;
-    @Autowired
-    private ObjectMapper objectMapper;
-    @Autowired
-    private ClassMapper classMapper;
-    @Autowired
-    private ClassMemberMapper classMemberMapper;
-    @Autowired
-    private CourseMapper courseMapper;
-    @Autowired
-    private UserRoleService userRoleService;
-    @Autowired
-    private UserMapper userMapper;
+  @Autowired private ConversationMapper conversationMapper;
+  @Autowired private ConversationShareMapper conversationShareMapper;
+  @Autowired private NodeMapper nodeMapper;
+  @Autowired private ObjectMapper objectMapper;
+  @Autowired private ClassMapper classMapper;
+  @Autowired private ClassMemberMapper classMemberMapper;
+  @Autowired private CourseMapper courseMapper;
+  @Autowired private UserRoleService userRoleService;
+  @Autowired private UserMapper userMapper;
 
-    public ConversationShareVO createShare(Long convId, CreateConversationShareDTO dto) {
-        Long userId = StpUtil.getLoginIdAsLong();
-        Conversation conversation = conversationMapper.getById(convId);
-        if (conversation == null || Boolean.TRUE.equals(conversation.getIsDeleted())) {
-            throw new ApiException(ApiError.CONVERSATION_NOT_EXISTED, "文件不能为空");
-        }
-        if (!userId.equals(conversation.getUserId())) {
-            throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
-        }
-
-        Long classId = resolveClassId(dto != null ? dto.getClassId() : null);
-        if (classId != null) {
-            validateClassAccess(userId, classId);
-        }
-
-        Boolean allowContinue = dto != null && dto.getAllowContinue() != null ? dto.getAllowContinue() : Boolean.TRUE;
-
-        String shareToken = generateUniqueToken();
-        ConversationShare share = new ConversationShare();
-        share.setConvId(convId);
-        share.setUserId(userId);
-        share.setClassId(classId);
-        share.setShareToken(shareToken);
-        share.setAllowContinue(allowContinue);
-        share.setViewCount(0L);
-        share.setIsDeleted(false);
-        conversationShareMapper.insert(share);
-
-        ConversationShareVO shareVO = new ConversationShareVO();
-        BeanUtils.copyProperties(share, shareVO);
-        shareVO.setSharePath(buildSharePath(shareToken));
-        return shareVO;
+  public ConversationShareVO createShare(Long convId, CreateConversationShareDTO dto) {
+    Long userId = StpUtil.getLoginIdAsLong();
+    Conversation conversation = conversationMapper.getById(convId);
+    if (conversation == null || Boolean.TRUE.equals(conversation.getIsDeleted())) {
+      throw new ApiException(ApiError.CONVERSATION_NOT_EXISTED, "文件不能为空");
+    }
+    if (!userId.equals(conversation.getUserId())) {
+      throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
     }
 
-    public ShareConversationVO getShareByToken(String shareToken) {
-        ConversationShare share = conversationShareMapper.getByToken(shareToken);
-        if (share == null || Boolean.TRUE.equals(share.getIsDeleted())) {
-            throw new ApiException(ApiError.SHARE_NOT_EXISTED, "文件不能为空");
-        }
-        Conversation conversation = conversationMapper.getById(share.getConvId());
-        if (conversation == null || Boolean.TRUE.equals(conversation.getIsDeleted())) {
-            throw new ApiException(ApiError.CONVERSATION_NOT_EXISTED, "文件不能为空");
-        }
-
-        List<NodeVO> nodeVOS = convertToNodeVOs(nodeMapper.getByConvId(share.getConvId()));
-
-        ConversationVO conversationVO = new ConversationVO();
-        BeanUtils.copyProperties(conversation, conversationVO);
-
-        ConversationShareVO shareVO = new ConversationShareVO();
-        BeanUtils.copyProperties(share, shareVO);
-        shareVO.setSharePath(buildSharePath(shareToken));
-
-        conversationShareMapper.increaseViewCount(share.getId());
-
-        return new ShareConversationVO(conversationVO, nodeVOS, shareVO);
+    Long classId = resolveClassId(dto != null ? dto.getClassId() : null);
+    if (classId != null) {
+      validateClassAccess(userId, classId);
     }
 
-    @Transactional
-    public ConversationForkVO forkSharedConversation(String shareToken) {
-        Long userId = StpUtil.getLoginIdAsLong();
-        ConversationShare share = conversationShareMapper.getByToken(shareToken);
-        if (share == null || Boolean.TRUE.equals(share.getIsDeleted())) {
-            throw new ApiException(ApiError.SHARE_NOT_EXISTED, "文件不能为空");
-        }
-        if (!Boolean.TRUE.equals(share.getAllowContinue())) {
-            throw new ApiException(ApiError.SHARE_NOT_ALLOWED, "文件不能为空");
-        }
+    Boolean allowContinue =
+        dto != null && dto.getAllowContinue() != null ? dto.getAllowContinue() : Boolean.TRUE;
 
-        Conversation conversation = conversationMapper.getById(share.getConvId());
-        if (conversation == null || Boolean.TRUE.equals(conversation.getIsDeleted())) {
-            throw new ApiException(ApiError.CONVERSATION_NOT_EXISTED, "文件不能为空");
-        }
+    String shareToken = generateUniqueToken();
+    ConversationShare share = new ConversationShare();
+    share.setConvId(convId);
+    share.setUserId(userId);
+    share.setClassId(classId);
+    share.setShareToken(shareToken);
+    share.setAllowContinue(allowContinue);
+    share.setViewCount(0L);
+    share.setIsDeleted(false);
+    conversationShareMapper.insert(share);
 
-        String title = conversation.getTitle();
-        if (title == null || title.isBlank()) {
-            title = "共享会话";
-        }
-        Conversation newConversation = new Conversation("共享副本 - " + title, userId);
-        conversationMapper.insert(newConversation);
+    ConversationShareVO shareVO = new ConversationShareVO();
+    BeanUtils.copyProperties(share, shareVO);
+    shareVO.setSharePath(buildSharePath(shareToken));
+    return shareVO;
+  }
 
-        List<Node> nodes = nodeMapper.getByConvId(conversation.getId());
-        Map<Long, Long> nodeIdMap = new HashMap<>();
-        List<Node> remaining = new ArrayList<>(nodes);
-        boolean progress;
-        do {
-            progress = false;
-            for (int i = 0; i < remaining.size(); i++) {
-                Node node = remaining.get(i);
-                Long parentId = node.getParentId();
-                if (parentId == null || nodeIdMap.containsKey(parentId)) {
-                    Long newParentId = parentId == null ? null : nodeIdMap.get(parentId);
-                    Node newNode = new Node(
-                            node.getType(),
-                            node.getData(),
-                            node.getPosition(),
-                            newParentId,
-                            userId,
-                            newConversation.getId(),
-                            false
-                    );
-                    nodeMapper.insert(newNode);
-                    if (node.getHeight() != null) {
-                        newNode.setHeight(node.getHeight());
-                        nodeMapper.update(newNode);
-                    }
-                    nodeIdMap.put(node.getId(), newNode.getId());
-                    remaining.remove(i);
-                    i--;
-                    progress = true;
-                }
-            }
-        } while (progress);
-
-        if (!remaining.isEmpty()) {
-            log.warn("分享会话复制失败，存在无法映射的父节点: shareToken={}, convId={}", shareToken, conversation.getId());
-            throw new ApiException(ApiError.COMMON_ERROR, "文件不能为空");
-        }
-
-        ConversationVO conversationVO = new ConversationVO();
-        BeanUtils.copyProperties(newConversation, conversationVO);
-        conversationVO.setCreatedAt(new Timestamp(System.currentTimeMillis()));
-        conversationVO.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
-
-        return new ConversationForkVO(conversationVO);
+  public ShareConversationVO getShareByToken(String shareToken) {
+    ConversationShare share = conversationShareMapper.getByToken(shareToken);
+    if (share == null || Boolean.TRUE.equals(share.getIsDeleted())) {
+      throw new ApiException(ApiError.SHARE_NOT_EXISTED, "文件不能为空");
+    }
+    Conversation conversation = conversationMapper.getById(share.getConvId());
+    if (conversation == null || Boolean.TRUE.equals(conversation.getIsDeleted())) {
+      throw new ApiException(ApiError.CONVERSATION_NOT_EXISTED, "文件不能为空");
     }
 
-    public List<ConversationSharePostVO> listClassShares(Long classId) {
-        Long userId = StpUtil.getLoginIdAsLong();
-        String role = userRoleService.getCurrentUserRole();
-        if (!UserRole.ADMIN.equals(role)) {
-            Class clazz = classMapper.getById(classId);
-            if (clazz == null || Boolean.TRUE.equals(clazz.getIsDeleted())) {
-                throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
-            }
-            if (!userId.equals(clazz.getTeacherId())) {
-                throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
-            }
+    List<NodeVO> nodeVOS = convertToNodeVOs(nodeMapper.getByConvId(share.getConvId()));
+
+    ConversationVO conversationVO = new ConversationVO();
+    BeanUtils.copyProperties(conversation, conversationVO);
+
+    ConversationShareVO shareVO = new ConversationShareVO();
+    BeanUtils.copyProperties(share, shareVO);
+    shareVO.setSharePath(buildSharePath(shareToken));
+
+    conversationShareMapper.increaseViewCount(share.getId());
+
+    return new ShareConversationVO(conversationVO, nodeVOS, shareVO);
+  }
+
+  @Transactional
+  public ConversationForkVO forkSharedConversation(String shareToken) {
+    Long userId = StpUtil.getLoginIdAsLong();
+    ConversationShare share = conversationShareMapper.getByToken(shareToken);
+    if (share == null || Boolean.TRUE.equals(share.getIsDeleted())) {
+      throw new ApiException(ApiError.SHARE_NOT_EXISTED, "文件不能为空");
+    }
+    if (!Boolean.TRUE.equals(share.getAllowContinue())) {
+      throw new ApiException(ApiError.SHARE_NOT_ALLOWED, "文件不能为空");
+    }
+
+    Conversation conversation = conversationMapper.getById(share.getConvId());
+    if (conversation == null || Boolean.TRUE.equals(conversation.getIsDeleted())) {
+      throw new ApiException(ApiError.CONVERSATION_NOT_EXISTED, "文件不能为空");
+    }
+
+    String title = conversation.getTitle();
+    if (title == null || title.isBlank()) {
+      title = "共享会话";
+    }
+    Conversation newConversation = new Conversation("共享副本 - " + title, userId);
+    conversationMapper.insert(newConversation);
+
+    List<Node> nodes = nodeMapper.getByConvId(conversation.getId());
+    Map<Long, Long> nodeIdMap = new HashMap<>();
+    List<Node> remaining = new ArrayList<>(nodes);
+    boolean progress;
+    do {
+      progress = false;
+      for (int i = 0; i < remaining.size(); i++) {
+        Node node = remaining.get(i);
+        Long parentId = node.getParentId();
+        if (parentId == null || nodeIdMap.containsKey(parentId)) {
+          Long newParentId = parentId == null ? null : nodeIdMap.get(parentId);
+          Node newNode =
+              new Node(
+                  node.getType(),
+                  node.getData(),
+                  node.getPosition(),
+                  newParentId,
+                  userId,
+                  newConversation.getId(),
+                  false);
+          nodeMapper.insert(newNode);
+          if (node.getHeight() != null) {
+            newNode.setHeight(node.getHeight());
+            nodeMapper.update(newNode);
+          }
+          nodeIdMap.put(node.getId(), newNode.getId());
+          remaining.remove(i);
+          i--;
+          progress = true;
         }
+      }
+    } while (progress);
 
-        List<ConversationShare> shares = conversationShareMapper.listByClassId(classId);
+    if (!remaining.isEmpty()) {
+      log.warn("分享会话复制失败，存在无法映射的父节点: shareToken={}, convId={}", shareToken, conversation.getId());
+      throw new ApiException(ApiError.COMMON_ERROR, "文件不能为空");
+    }
 
-        Map<Long, ConversationShare> shareByConvId = new HashMap<>();
-        for (ConversationShare share : shares) {
-            if (share.getConvId() == null) {
-                continue;
-            }
-            ConversationShare existed = shareByConvId.get(share.getConvId());
-            if (existed == null || isAfter(share.getUpdatedAt(), existed.getUpdatedAt())) {
-                shareByConvId.put(share.getConvId(), share);
-            }
-        }
+    ConversationVO conversationVO = new ConversationVO();
+    BeanUtils.copyProperties(newConversation, conversationVO);
+    conversationVO.setCreatedAt(new Timestamp(System.currentTimeMillis()));
+    conversationVO.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
 
-        Set<Long> studentUserIds = loadClassStudentUserIds(classId);
-        List<Conversation> conversations = studentUserIds.isEmpty()
+    return new ConversationForkVO(conversationVO);
+  }
+
+  public List<ConversationSharePostVO> listClassShares(Long classId) {
+    Long userId = StpUtil.getLoginIdAsLong();
+    String role = userRoleService.getCurrentUserRole();
+    if (!UserRole.ADMIN.equals(role)) {
+      Class clazz = classMapper.getById(classId);
+      if (clazz == null || Boolean.TRUE.equals(clazz.getIsDeleted())) {
+        throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
+      }
+      if (!userId.equals(clazz.getTeacherId())) {
+        throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
+      }
+    }
+
+    List<ConversationShare> shares = conversationShareMapper.listByClassId(classId);
+
+    Map<Long, ConversationShare> shareByConvId = new HashMap<>();
+    for (ConversationShare share : shares) {
+      if (share.getConvId() == null) {
+        continue;
+      }
+      ConversationShare existed = shareByConvId.get(share.getConvId());
+      if (existed == null || isAfter(share.getUpdatedAt(), existed.getUpdatedAt())) {
+        shareByConvId.put(share.getConvId(), share);
+      }
+    }
+
+    Set<Long> studentUserIds = loadClassStudentUserIds(classId);
+    List<Conversation> conversations =
+        studentUserIds.isEmpty()
             ? Collections.emptyList()
             : conversationMapper.listByUserIds(new ArrayList<>(studentUserIds));
 
-        List<ConversationSharePostVO> posts = new ArrayList<>();
-        Set<Long> includedConvIds = new HashSet<>();
+    List<ConversationSharePostVO> posts = new ArrayList<>();
+    Set<Long> includedConvIds = new HashSet<>();
 
-        for (Conversation conversation : conversations) {
-            ConversationShare share = shareByConvId.get(conversation.getId());
-            posts.add(buildPost(conversation, share, classId));
-            includedConvIds.add(conversation.getId());
-        }
-
-        // 保留历史分享数据：即便学生已不在班级，也保留已分享帖子可见
-        for (ConversationShare share : shares) {
-            if (share.getConvId() == null || includedConvIds.contains(share.getConvId())) {
-                continue;
-            }
-            Conversation conversation = conversationMapper.getById(share.getConvId());
-            if (conversation == null || Boolean.TRUE.equals(conversation.getIsDeleted())) {
-                continue;
-            }
-            posts.add(buildPost(conversation, share, classId));
-        }
-
-        posts.sort(Comparator.comparing(ConversationSharePostVO::getUpdatedAt, Comparator.nullsLast(Timestamp::compareTo)).reversed());
-        return posts;
+    for (Conversation conversation : conversations) {
+      ConversationShare share = shareByConvId.get(conversation.getId());
+      posts.add(buildPost(conversation, share, classId));
+      includedConvIds.add(conversation.getId());
     }
 
-    public List<ConversationSharePostVO> listClassSharesByCourseOrClass(String classIdOrCourseId) {
-        if (classIdOrCourseId == null || classIdOrCourseId.isBlank()) {
-            throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
-        }
-        Long classId = resolveClassId(classIdOrCourseId);
-        if (classId == null) {
-            return new ArrayList<>();
-        }
-        List<ConversationSharePostVO> posts = listClassShares(classId);
-        if (!posts.isEmpty()) {
-            return posts;
-        }
-
-        // 兼容历史数据：分享记录未设置class_id，尝试按课程成员回填
-        Class clazz = classMapper.getById(classId);
-        if (clazz == null || clazz.getClassCode() == null) {
-            return posts;
-        }
-        Course course = courseMapper.getByClassCode(clazz.getClassCode());
-        if (course == null || course.getStudentIds() == null || course.getStudentIds().isEmpty()) {
-            return posts;
-        }
-
-        List<Long> userIds = new ArrayList<>();
-        for (Object obj : course.getStudentIds()) {
-            if (obj == null) {
-                continue;
-            }
-            try {
-                userIds.add(Long.parseLong(String.valueOf(obj)));
-            } catch (NumberFormatException ignore) {
-                // skip invalid
-            }
-        }
-        if (userIds.isEmpty()) {
-            return posts;
-        }
-
-        List<ConversationShare> shares = conversationShareMapper.listByUserIdsWithoutClassId(userIds);
-        for (ConversationShare share : shares) {
-            share.setClassId(classId);
-            conversationShareMapper.update(share);
-        }
-        return listClassShares(classId);
+    // 保留历史分享数据：即便学生已不在班级，也保留已分享帖子可见
+    for (ConversationShare share : shares) {
+      if (share.getConvId() == null || includedConvIds.contains(share.getConvId())) {
+        continue;
+      }
+      Conversation conversation = conversationMapper.getById(share.getConvId());
+      if (conversation == null || Boolean.TRUE.equals(conversation.getIsDeleted())) {
+        continue;
+      }
+      posts.add(buildPost(conversation, share, classId));
     }
 
-    private Long resolveClassId(String classIdOrCourseId) {
-        if (classIdOrCourseId == null || classIdOrCourseId.isBlank()) {
-            return null;
-        }
-        try {
-            return Long.parseLong(classIdOrCourseId);
-        } catch (NumberFormatException ignore) {
-            // fallthrough
-        }
+    posts.sort(
+        Comparator.comparing(
+                ConversationSharePostVO::getUpdatedAt, Comparator.nullsLast(Timestamp::compareTo))
+            .reversed());
+    return posts;
+  }
 
-        Course course = courseMapper.getById(classIdOrCourseId);
-        if (course == null || Boolean.TRUE.equals(course.getIsDeleted())) {
-            return null;
-        }
-        String classCode = course.getClassCode();
-        if (classCode == null || classCode.isBlank()) {
-            return null;
-        }
-        Class clazz = classMapper.getByClassCode(classCode);
-        if (clazz == null) {
-            clazz = new Class(course.getName(), course.getDescription(), classCode, course.getCreatorId());
-            classMapper.insert(clazz);
-        }
-        if (Boolean.TRUE.equals(clazz.getIsDeleted())) {
-            return null;
-        }
-        return clazz.getId();
+  public List<ConversationSharePostVO> listClassSharesByCourseOrClass(String classIdOrCourseId) {
+    if (classIdOrCourseId == null || classIdOrCourseId.isBlank()) {
+      throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
+    }
+    Long classId = resolveClassId(classIdOrCourseId);
+    if (classId == null) {
+      return new ArrayList<>();
+    }
+    List<ConversationSharePostVO> posts = listClassShares(classId);
+    if (!posts.isEmpty()) {
+      return posts;
     }
 
-    public List<ClassStudentVO> listClassStudentsByCourseOrClass(String classIdOrCourseId) {
-        Long classId = resolveClassId(classIdOrCourseId);
-        if (classId == null) {
-            return new ArrayList<>();
-        }
-        Long userId = StpUtil.getLoginIdAsLong();
-        String role = userRoleService.getCurrentUserRole();
-        if (!UserRole.ADMIN.equals(role)) {
-            Class clazz = classMapper.getById(classId);
-            if (clazz == null || Boolean.TRUE.equals(clazz.getIsDeleted())) {
-                throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
-            }
-            if (!userId.equals(clazz.getTeacherId())) {
-                throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
-            }
-        }
-
-        Class clazz = classMapper.getById(classId);
-        List<ClassMember> members = classMemberMapper.getByClassId(classId);
-        if ((members == null || members.isEmpty()) && clazz != null && clazz.getClassCode() != null) {
-            Course course = courseMapper.getByClassCode(clazz.getClassCode());
-            if (course != null && course.getStudentIds() != null) {
-                for (Object studentIdObj : course.getStudentIds()) {
-                    if (studentIdObj == null) {
-                        continue;
-                    }
-                    Long studentId;
-                    try {
-                        studentId = Long.parseLong(String.valueOf(studentIdObj));
-                    } catch (NumberFormatException ignore) {
-                        continue;
-                    }
-                    ClassMember existing = classMemberMapper.getByClassIdAndUserId(classId, studentId);
-                    if (existing == null) {
-                        classMemberMapper.insert(new ClassMember(classId, studentId));
-                    } else if (Boolean.TRUE.equals(existing.getIsDeleted())) {
-                        existing.setIsDeleted(false);
-                        classMemberMapper.update(existing);
-                    }
-                }
-                members = classMemberMapper.getByClassId(classId);
-            }
-        }
-        List<ClassStudentVO> students = new ArrayList<>();
-        for (ClassMember member : members) {
-            User user = userMapper.getById(member.getUserId());
-            ClassStudentVO vo = new ClassStudentVO();
-            vo.setUserId(member.getUserId());
-            vo.setUsername(user != null ? user.getUsername() : null);
-            vo.setJoinedAt(member.getJoinedAt());
-            students.add(vo);
-        }
-        return students;
+    // 兼容历史数据：分享记录未设置class_id，尝试按课程成员回填
+    Class clazz = classMapper.getById(classId);
+    if (clazz == null || clazz.getClassCode() == null) {
+      return posts;
+    }
+    Course course = courseMapper.getByClassCode(clazz.getClassCode());
+    if (course == null || course.getStudentIds() == null || course.getStudentIds().isEmpty()) {
+      return posts;
     }
 
-    private void validateClassAccess(Long userId, Long classId) {
-        Class clazz = classMapper.getById(classId);
-        if (clazz == null || Boolean.TRUE.equals(clazz.getIsDeleted())) {
-            throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
-        }
-        String role = userRoleService.getCurrentUserRole();
-        if (UserRole.ADMIN.equals(role)) {
-            return;
-        }
-        if (userId.equals(clazz.getTeacherId())) {
-            return;
-        }
-        ClassMember member = classMemberMapper.getByClassIdAndUserId(classId, userId);
-        if (member == null) {
-            throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
-        }
+    List<Long> userIds = new ArrayList<>();
+    for (Object obj : course.getStudentIds()) {
+      if (obj == null) {
+        continue;
+      }
+      try {
+        userIds.add(Long.parseLong(String.valueOf(obj)));
+      } catch (NumberFormatException ignore) {
+        // skip invalid
+      }
+    }
+    if (userIds.isEmpty()) {
+      return posts;
     }
 
-    private String generateUniqueToken() {
-        String token;
-        do {
-            token = UUIDUtils.generateUUID(16);
-        } while (conversationShareMapper.getByToken(token) != null);
-        return token;
+    List<ConversationShare> shares = conversationShareMapper.listByUserIdsWithoutClassId(userIds);
+    for (ConversationShare share : shares) {
+      share.setClassId(classId);
+      conversationShareMapper.update(share);
+    }
+    return listClassShares(classId);
+  }
+
+  private Long resolveClassId(String classIdOrCourseId) {
+    if (classIdOrCourseId == null || classIdOrCourseId.isBlank()) {
+      return null;
+    }
+    try {
+      return Long.parseLong(classIdOrCourseId);
+    } catch (NumberFormatException ignore) {
+      // fallthrough
     }
 
-    private String buildSharePath(String token) {
-        return "/share/" + token;
+    Course course = courseMapper.getById(classIdOrCourseId);
+    if (course == null || Boolean.TRUE.equals(course.getIsDeleted())) {
+      return null;
+    }
+    String classCode = course.getClassCode();
+    if (classCode == null || classCode.isBlank()) {
+      return null;
+    }
+    Class clazz = classMapper.getByClassCode(classCode);
+    if (clazz == null) {
+      clazz =
+          new Class(course.getName(), course.getDescription(), classCode, course.getCreatorId());
+      classMapper.insert(clazz);
+    }
+    if (Boolean.TRUE.equals(clazz.getIsDeleted())) {
+      return null;
+    }
+    return clazz.getId();
+  }
+
+  public List<ClassStudentVO> listClassStudentsByCourseOrClass(String classIdOrCourseId) {
+    Long classId = resolveClassId(classIdOrCourseId);
+    if (classId == null) {
+      return new ArrayList<>();
+    }
+    Long userId = StpUtil.getLoginIdAsLong();
+    String role = userRoleService.getCurrentUserRole();
+    if (!UserRole.ADMIN.equals(role)) {
+      Class clazz = classMapper.getById(classId);
+      if (clazz == null || Boolean.TRUE.equals(clazz.getIsDeleted())) {
+        throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
+      }
+      if (!userId.equals(clazz.getTeacherId())) {
+        throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
+      }
     }
 
-    private boolean isAfter(Timestamp ts1, Timestamp ts2) {
-        if (ts1 == null) {
-            return false;
+    Class clazz = classMapper.getById(classId);
+    List<ClassMember> members = classMemberMapper.getByClassId(classId);
+    if ((members == null || members.isEmpty()) && clazz != null && clazz.getClassCode() != null) {
+      Course course = courseMapper.getByClassCode(clazz.getClassCode());
+      if (course != null && course.getStudentIds() != null) {
+        for (Object studentIdObj : course.getStudentIds()) {
+          if (studentIdObj == null) {
+            continue;
+          }
+          Long studentId;
+          try {
+            studentId = Long.parseLong(String.valueOf(studentIdObj));
+          } catch (NumberFormatException ignore) {
+            continue;
+          }
+          ClassMember existing = classMemberMapper.getByClassIdAndUserId(classId, studentId);
+          if (existing == null) {
+            classMemberMapper.insert(new ClassMember(classId, studentId));
+          } else if (Boolean.TRUE.equals(existing.getIsDeleted())) {
+            existing.setIsDeleted(false);
+            classMemberMapper.update(existing);
+          }
         }
-        if (ts2 == null) {
-            return true;
-        }
-        return ts1.after(ts2);
+        members = classMemberMapper.getByClassId(classId);
+      }
     }
-
-    private Set<Long> loadClassStudentUserIds(Long classId) {
-        List<ClassStudentVO> students = listClassStudentsByCourseOrClass(String.valueOf(classId));
-        Set<Long> userIds = new HashSet<>();
-        for (ClassStudentVO student : students) {
-            if (student.getUserId() != null) {
-                userIds.add(student.getUserId());
-            }
-        }
-        return userIds;
+    List<ClassStudentVO> students = new ArrayList<>();
+    for (ClassMember member : members) {
+      User user = userMapper.getById(member.getUserId());
+      ClassStudentVO vo = new ClassStudentVO();
+      vo.setUserId(member.getUserId());
+      vo.setUsername(user != null ? user.getUsername() : null);
+      vo.setJoinedAt(member.getJoinedAt());
+      students.add(vo);
     }
+    return students;
+  }
 
-    private ConversationSharePostVO buildPost(Conversation conversation, ConversationShare share, Long classId) {
-        ConversationSharePostVO post = new ConversationSharePostVO();
-        boolean isShared = share != null;
-        Long postId = isShared ? share.getId() : -conversation.getId();
-        Long ownerUserId = isShared ? share.getUserId() : conversation.getUserId();
-        User user = ownerUserId != null ? userMapper.getById(ownerUserId) : null;
-
-        post.setId(postId);
-        post.setConvId(conversation.getId());
-        post.setUserId(ownerUserId);
-        post.setUsername(user != null ? user.getUsername() : null);
-        post.setClassId(classId);
-        post.setTitle(conversation.getTitle());
-        post.setShareToken(isShared ? share.getShareToken() : null);
-        post.setSharePath(isShared ? buildSharePath(share.getShareToken()) : null);
-        post.setAllowContinue(isShared ? share.getAllowContinue() : Boolean.FALSE);
-        post.setViewCount(isShared ? share.getViewCount() : 0L);
-        post.setCreatedAt(isShared ? share.getCreatedAt() : conversation.getCreatedAt());
-        post.setUpdatedAt(isShared ? share.getUpdatedAt() : conversation.getUpdatedAt());
-        return post;
+  private void validateClassAccess(Long userId, Long classId) {
+    Class clazz = classMapper.getById(classId);
+    if (clazz == null || Boolean.TRUE.equals(clazz.getIsDeleted())) {
+      throw new ApiException(ApiError.PARAM_ERROR, "文件不能为空");
     }
-
-    private List<NodeVO> convertToNodeVOs(List<Node> nodes) {
-        List<NodeVO> nodeVOS = new ArrayList<>();
-        for (Node node : nodes) {
-            NodeVO nodeVO = new NodeVO();
-            nodeVO.setId(node.getId());
-            nodeVO.setType(node.getType());
-            TypeReference<Map<String, Object>> dataTypeReference = new TypeReference<Map<String, Object>>() {};
-            Map<String, Object> data = null;
-            try {
-                data = objectMapper.readValue(node.getData(), dataTypeReference);
-            } catch (JsonProcessingException e) {
-                throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
-            }
-            XYPosition position = null;
-            try {
-                position = objectMapper.readValue(node.getPosition(), XYPosition.class);
-            } catch (JsonProcessingException e) {
-                throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
-            }
-            nodeVO.setData(data);
-            nodeVO.setPosition(position);
-            nodeVO.setHeight(node.getHeight());
-            nodeVO.setParentId(node.getParentId());
-            nodeVO.setConvId(node.getConvId());
-            nodeVO.setUserId(node.getUserId());
-            nodeVO.setCreatedAt(node.getCreatedAt());
-            nodeVO.setUpdatedAt(node.getUpdatedAt());
-            nodeVOS.add(nodeVO);
-        }
-        return nodeVOS;
+    String role = userRoleService.getCurrentUserRole();
+    if (UserRole.ADMIN.equals(role)) {
+      return;
     }
+    if (userId.equals(clazz.getTeacherId())) {
+      return;
+    }
+    ClassMember member = classMemberMapper.getByClassIdAndUserId(classId, userId);
+    if (member == null) {
+      throw new ApiException(ApiError.PERMISSION_DENIED, "文件不能为空");
+    }
+  }
+
+  private String generateUniqueToken() {
+    String token;
+    do {
+      token = UUIDUtils.generateUUID(16);
+    } while (conversationShareMapper.getByToken(token) != null);
+    return token;
+  }
+
+  private String buildSharePath(String token) {
+    return "/share/" + token;
+  }
+
+  private boolean isAfter(Timestamp ts1, Timestamp ts2) {
+    if (ts1 == null) {
+      return false;
+    }
+    if (ts2 == null) {
+      return true;
+    }
+    return ts1.after(ts2);
+  }
+
+  private Set<Long> loadClassStudentUserIds(Long classId) {
+    List<ClassStudentVO> students = listClassStudentsByCourseOrClass(String.valueOf(classId));
+    Set<Long> userIds = new HashSet<>();
+    for (ClassStudentVO student : students) {
+      if (student.getUserId() != null) {
+        userIds.add(student.getUserId());
+      }
+    }
+    return userIds;
+  }
+
+  private ConversationSharePostVO buildPost(
+      Conversation conversation, ConversationShare share, Long classId) {
+    ConversationSharePostVO post = new ConversationSharePostVO();
+    boolean isShared = share != null;
+    Long postId = isShared ? share.getId() : -conversation.getId();
+    Long ownerUserId = isShared ? share.getUserId() : conversation.getUserId();
+    User user = ownerUserId != null ? userMapper.getById(ownerUserId) : null;
+
+    post.setId(postId);
+    post.setConvId(conversation.getId());
+    post.setUserId(ownerUserId);
+    post.setUsername(user != null ? user.getUsername() : null);
+    post.setClassId(classId);
+    post.setTitle(conversation.getTitle());
+    post.setShareToken(isShared ? share.getShareToken() : null);
+    post.setSharePath(isShared ? buildSharePath(share.getShareToken()) : null);
+    post.setAllowContinue(isShared ? share.getAllowContinue() : Boolean.FALSE);
+    post.setViewCount(isShared ? share.getViewCount() : 0L);
+    post.setCreatedAt(isShared ? share.getCreatedAt() : conversation.getCreatedAt());
+    post.setUpdatedAt(isShared ? share.getUpdatedAt() : conversation.getUpdatedAt());
+    return post;
+  }
+
+  private List<NodeVO> convertToNodeVOs(List<Node> nodes) {
+    List<NodeVO> nodeVOS = new ArrayList<>();
+    for (Node node : nodes) {
+      NodeVO nodeVO = new NodeVO();
+      nodeVO.setId(node.getId());
+      nodeVO.setType(node.getType());
+      TypeReference<Map<String, Object>> dataTypeReference =
+          new TypeReference<Map<String, Object>>() {};
+      Map<String, Object> data = null;
+      try {
+        data = objectMapper.readValue(node.getData(), dataTypeReference);
+      } catch (JsonProcessingException e) {
+        throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
+      }
+      XYPosition position = null;
+      try {
+        position = objectMapper.readValue(node.getPosition(), XYPosition.class);
+      } catch (JsonProcessingException e) {
+        throw new ApiException(ApiError.SYSTEM_ERROR, "文件不能为空");
+      }
+      nodeVO.setData(data);
+      nodeVO.setPosition(position);
+      nodeVO.setHeight(node.getHeight());
+      nodeVO.setParentId(node.getParentId());
+      nodeVO.setConvId(node.getConvId());
+      nodeVO.setUserId(node.getUserId());
+      nodeVO.setCreatedAt(node.getCreatedAt());
+      nodeVO.setUpdatedAt(node.getUpdatedAt());
+      nodeVOS.add(nodeVO);
+    }
+    return nodeVOS;
+  }
 }
