@@ -34,9 +34,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * @FileName ConversationShareService
@@ -209,28 +213,45 @@ public class ConversationShareService {
         }
 
         List<ConversationShare> shares = conversationShareMapper.listByClassId(classId);
-        List<ConversationSharePostVO> posts = new ArrayList<>();
+
+        Map<Long, ConversationShare> shareByConvId = new HashMap<>();
         for (ConversationShare share : shares) {
+            if (share.getConvId() == null) {
+                continue;
+            }
+            ConversationShare existed = shareByConvId.get(share.getConvId());
+            if (existed == null || isAfter(share.getUpdatedAt(), existed.getUpdatedAt())) {
+                shareByConvId.put(share.getConvId(), share);
+            }
+        }
+
+        Set<Long> studentUserIds = loadClassStudentUserIds(classId);
+        List<Conversation> conversations = studentUserIds.isEmpty()
+            ? Collections.emptyList()
+            : conversationMapper.listByUserIds(new ArrayList<>(studentUserIds));
+
+        List<ConversationSharePostVO> posts = new ArrayList<>();
+        Set<Long> includedConvIds = new HashSet<>();
+
+        for (Conversation conversation : conversations) {
+            ConversationShare share = shareByConvId.get(conversation.getId());
+            posts.add(buildPost(conversation, share, classId));
+            includedConvIds.add(conversation.getId());
+        }
+
+        // 保留历史分享数据：即便学生已不在班级，也保留已分享帖子可见
+        for (ConversationShare share : shares) {
+            if (share.getConvId() == null || includedConvIds.contains(share.getConvId())) {
+                continue;
+            }
             Conversation conversation = conversationMapper.getById(share.getConvId());
             if (conversation == null || Boolean.TRUE.equals(conversation.getIsDeleted())) {
                 continue;
             }
-            User user = userMapper.getById(share.getUserId());
-            ConversationSharePostVO post = new ConversationSharePostVO();
-            post.setId(share.getId());
-            post.setConvId(share.getConvId());
-            post.setUserId(share.getUserId());
-            post.setUsername(user != null ? user.getUsername() : null);
-            post.setClassId(share.getClassId());
-            post.setTitle(conversation.getTitle());
-            post.setShareToken(share.getShareToken());
-            post.setSharePath(buildSharePath(share.getShareToken()));
-            post.setAllowContinue(share.getAllowContinue());
-            post.setViewCount(share.getViewCount());
-            post.setCreatedAt(share.getCreatedAt());
-            post.setUpdatedAt(share.getUpdatedAt());
-            posts.add(post);
+            posts.add(buildPost(conversation, share, classId));
         }
+
+        posts.sort(Comparator.comparing(ConversationSharePostVO::getUpdatedAt, Comparator.nullsLast(Timestamp::compareTo)).reversed());
         return posts;
     }
 
@@ -392,6 +413,49 @@ public class ConversationShareService {
 
     private String buildSharePath(String token) {
         return "/share/" + token;
+    }
+
+    private boolean isAfter(Timestamp ts1, Timestamp ts2) {
+        if (ts1 == null) {
+            return false;
+        }
+        if (ts2 == null) {
+            return true;
+        }
+        return ts1.after(ts2);
+    }
+
+    private Set<Long> loadClassStudentUserIds(Long classId) {
+        List<ClassStudentVO> students = listClassStudentsByCourseOrClass(String.valueOf(classId));
+        Set<Long> userIds = new HashSet<>();
+        for (ClassStudentVO student : students) {
+            if (student.getUserId() != null) {
+                userIds.add(student.getUserId());
+            }
+        }
+        return userIds;
+    }
+
+    private ConversationSharePostVO buildPost(Conversation conversation, ConversationShare share, Long classId) {
+        ConversationSharePostVO post = new ConversationSharePostVO();
+        boolean isShared = share != null;
+        Long postId = isShared ? share.getId() : -conversation.getId();
+        Long ownerUserId = isShared ? share.getUserId() : conversation.getUserId();
+        User user = ownerUserId != null ? userMapper.getById(ownerUserId) : null;
+
+        post.setId(postId);
+        post.setConvId(conversation.getId());
+        post.setUserId(ownerUserId);
+        post.setUsername(user != null ? user.getUsername() : null);
+        post.setClassId(classId);
+        post.setTitle(conversation.getTitle());
+        post.setShareToken(isShared ? share.getShareToken() : null);
+        post.setSharePath(isShared ? buildSharePath(share.getShareToken()) : null);
+        post.setAllowContinue(isShared ? share.getAllowContinue() : Boolean.FALSE);
+        post.setViewCount(isShared ? share.getViewCount() : 0L);
+        post.setCreatedAt(isShared ? share.getCreatedAt() : conversation.getCreatedAt());
+        post.setUpdatedAt(isShared ? share.getUpdatedAt() : conversation.getUpdatedAt());
+        return post;
     }
 
     private List<NodeVO> convertToNodeVOs(List<Node> nodes) {

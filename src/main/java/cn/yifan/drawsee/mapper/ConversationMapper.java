@@ -22,6 +22,8 @@ public interface ConversationMapper {
 
     List<Conversation> getByUserId(Long userId);
 
+    List<Conversation> listByUserIds(@Param("userIds") List<Long> userIds);
+
     void insert(Conversation conversation);
 
     void update(Conversation conversation);
