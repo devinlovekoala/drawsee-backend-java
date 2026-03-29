@@ -124,7 +124,7 @@ spring:
   application:
     name: drawsee-java
   profiles:
-    active: test
+    active: prod
   mail:
     host: smtp.qq.com
     protocol: smtp

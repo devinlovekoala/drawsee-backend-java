@@ -6,7 +6,6 @@ import cn.yifan.drawsee.service.base.ApiService;
 import cn.yifan.drawsee.service.base.PromptService;
 import cn.yifan.drawsee.service.base.StreamAiService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RedissonClient;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -96,7 +95,7 @@ class DrawseeApplicationTests {
       }
   }*/
 
-  @Autowired private ChatLanguageModel deepseekV3ChatLanguageModel;
+  // @Autowired private ChatLanguageModel deepseekV3ChatLanguageModel;
   @Autowired private PromptService promptService;
   @Autowired private ObjectMapper objectMapper;
   @Autowired private ApiService apiService;

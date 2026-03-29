@@ -61,11 +61,11 @@ CREATE TABLE IF NOT EXISTS rag_ingestion_task (
         ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_kd_kb_status
+CREATE INDEX idx_kd_kb_status
     ON knowledge_document (knowledge_base_id, status);
-CREATE INDEX IF NOT EXISTS idx_kd_created_at
-    ON knowledge_document (created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_kdc_doc_idx
+CREATE INDEX idx_kd_created_at
+    ON knowledge_document (created_at);
+CREATE INDEX idx_kdc_doc_idx
     ON knowledge_document_chunk (document_id, chunk_index);
-CREATE INDEX IF NOT EXISTS idx_rit_status
+CREATE INDEX idx_rit_status
     ON rag_ingestion_task (status, created_at);
