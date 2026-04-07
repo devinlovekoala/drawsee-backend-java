@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
+@SuppressWarnings("unused")
 class DrawseeApplicationTests {
   @Autowired private AiService aiService;
   @Autowired private StreamAiService streamAiService;

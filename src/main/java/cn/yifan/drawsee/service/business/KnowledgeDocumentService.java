@@ -111,7 +111,6 @@ public class KnowledgeDocumentService {
     }
 
     List<KnowledgeDocumentChunk> chunks = knowledgeDocumentChunkMapper.listByDocumentId(documentId);
-    KnowledgeBase knowledgeBase = knowledgeBaseMapper.getById(document.getKnowledgeBaseId());
 
     for (KnowledgeDocumentChunk chunk : chunks) {
       try {

@@ -123,7 +123,9 @@ public class GlobalExceptionHandler {
   public R<String> handleMethodArgumentTypeMismatchException(
       MethodArgumentTypeMismatchException e) {
     log.warn("参数类型不匹配: {}", e.getMessage());
-    return R.error("参数类型不匹配: " + e.getName() + "应为" + e.getRequiredType().getName() + "类型");
+    Class<?> requiredType = e.getRequiredType();
+    String requiredTypeName = requiredType != null ? requiredType.getName() : "未知类型";
+    return R.error("参数类型不匹配: " + e.getName() + "应为" + requiredTypeName + "类型");
   }
 
   /** 上传文件大小超出限制处理 */

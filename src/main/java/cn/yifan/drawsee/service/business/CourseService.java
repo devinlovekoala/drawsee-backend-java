@@ -688,11 +688,8 @@ public class CourseService {
     // 获取活跃学生数（最近7天有登录记录的学生）
     int activeStudents = 0;
     if (course.getStudentIds() != null) {
-      long sevenDaysAgo = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L;
-      for (Long studentId : course.getStudentIds()) {
-        // TODO: 实现学生活跃度统计，可以通过用户登录记录或学习记录统计
-        activeStudents++;
-      }
+      // TODO: 实现学生活跃度统计，可以通过用户登录记录或学习记录统计
+      activeStudents = course.getStudentIds().size();
     }
 
     return new CourseStatsVO(

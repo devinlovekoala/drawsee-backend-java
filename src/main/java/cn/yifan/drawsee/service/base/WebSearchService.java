@@ -138,9 +138,12 @@ public class WebSearchService {
       HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
       // 发送请求
-      @SuppressWarnings("rawtypes")
-      ResponseEntity<Map> response =
-          restTemplate.exchange(BAIDU_SEARCH_API_URL, HttpMethod.POST, entity, Map.class);
+        ResponseEntity<Map<String, Object>> response =
+            restTemplate.exchange(
+              BAIDU_SEARCH_API_URL,
+              HttpMethod.POST,
+              entity,
+              new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {});
 
       if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
         return parseBaiduSearchResponse(response.getBody());

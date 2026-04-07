@@ -368,6 +368,9 @@ public class ConversationShareService {
       }
     }
     List<ClassStudentVO> students = new ArrayList<>();
+    if (members == null) {
+      return students;
+    }
     for (ClassMember member : members) {
       User user = userMapper.getById(member.getUserId());
       ClassStudentVO vo = new ClassStudentVO();
@@ -434,8 +437,8 @@ public class ConversationShareService {
       Conversation conversation, ConversationShare share, Long classId) {
     ConversationSharePostVO post = new ConversationSharePostVO();
     boolean isShared = share != null;
-    Long postId = isShared ? share.getId() : -conversation.getId();
-    Long ownerUserId = isShared ? share.getUserId() : conversation.getUserId();
+    Long postId = isShared && share != null ? share.getId() : -conversation.getId();
+    Long ownerUserId = isShared && share != null ? share.getUserId() : conversation.getUserId();
     User user = ownerUserId != null ? userMapper.getById(ownerUserId) : null;
 
     post.setId(postId);
@@ -444,12 +447,15 @@ public class ConversationShareService {
     post.setUsername(user != null ? user.getUsername() : null);
     post.setClassId(classId);
     post.setTitle(conversation.getTitle());
-    post.setShareToken(isShared ? share.getShareToken() : null);
-    post.setSharePath(isShared ? buildSharePath(share.getShareToken()) : null);
-    post.setAllowContinue(isShared ? share.getAllowContinue() : Boolean.FALSE);
-    post.setViewCount(isShared ? share.getViewCount() : 0L);
-    post.setCreatedAt(isShared ? share.getCreatedAt() : conversation.getCreatedAt());
-    post.setUpdatedAt(isShared ? share.getUpdatedAt() : conversation.getUpdatedAt());
+    post.setShareToken(isShared && share != null ? share.getShareToken() : null);
+    post.setSharePath(
+      isShared && share != null ? buildSharePath(share.getShareToken()) : null);
+    post.setAllowContinue(isShared && share != null ? share.getAllowContinue() : Boolean.FALSE);
+    post.setViewCount(isShared && share != null ? share.getViewCount() : 0L);
+    post.setCreatedAt(
+      isShared && share != null ? share.getCreatedAt() : conversation.getCreatedAt());
+    post.setUpdatedAt(
+      isShared && share != null ? share.getUpdatedAt() : conversation.getUpdatedAt());
     return post;
   }
 

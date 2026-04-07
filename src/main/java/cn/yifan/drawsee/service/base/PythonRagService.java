@@ -116,8 +116,8 @@ public class PythonRagService {
               entity,
               new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {});
 
-      if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-        Map<String, Object> body = response.getBody();
+      Map<String, Object> body = response.getBody();
+      if (response.getStatusCode() == HttpStatus.OK && body != null) {
         Boolean success = (Boolean) body.get("success");
         if (Boolean.TRUE.equals(success)) {
           log.info("Python RAG检索成功: 返回{}条结果", body.get("total"));
@@ -201,8 +201,8 @@ public class PythonRagService {
               entity,
               new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {});
 
-      if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-        Map<String, Object> body = response.getBody();
+      Map<String, Object> body = response.getBody();
+      if (response.getStatusCode() == HttpStatus.OK && body != null) {
         Boolean success = (Boolean) body.get("success");
         if (Boolean.TRUE.equals(success)) {
           log.info(
@@ -279,8 +279,8 @@ public class PythonRagService {
               entity,
               new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {});
 
-      if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-        Map<String, Object> result = response.getBody();
+      Map<String, Object> result = response.getBody();
+      if (response.getStatusCode() == HttpStatus.OK && result != null) {
         log.info(
             "[AgenticRAG-Sync] 查询成功: channel={}, answer_length={}, elapsed_time={}s",
             result.get("channel"),
@@ -439,9 +439,8 @@ public class PythonRagService {
               entity,
               new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {});
 
-      if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-        Map<String, Object> body = response.getBody();
-        Boolean success = (Boolean) body.get("success");
+      Map<String, Object> body = response.getBody();
+      if (response.getStatusCode() == HttpStatus.OK && body != null) {
         String taskId = (String) body.get("task_id");
         log.info("文档入库触发成功: task_id={}, status={}", taskId, body.get("status"));
         return body;

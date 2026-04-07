@@ -52,7 +52,6 @@ public class SolverResponseParser implements ResponseParser {
 
         // 提取每个步骤的详细信息
         Matcher stepMatcher = STEP_PATTERN.matcher(content);
-        int stepOrder = 1;
 
         while (stepMatcher.find()) {
           String stepNumber = stepMatcher.group(1).trim();
@@ -67,7 +66,6 @@ public class SolverResponseParser implements ResponseParser {
                   .build();
 
           results.add(stepNode);
-          stepOrder++;
         }
       } else {
         // 对于其他部分，按照普通方式处理

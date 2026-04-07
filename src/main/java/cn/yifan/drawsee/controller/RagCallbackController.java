@@ -29,7 +29,6 @@ public class RagCallbackController {
   @PostMapping("/document-status")
   public CommonResponse<Void> updateDocumentStatus(@RequestBody Map<String, Object> request) {
     String documentId = (String) request.get("document_id");
-    String knowledgeBaseId = (String) request.get("knowledge_base_id");
     String statusStr = (String) request.get("status");
     String taskId = (String) request.get("task_id");
     String errorMessage = (String) request.get("error_message");

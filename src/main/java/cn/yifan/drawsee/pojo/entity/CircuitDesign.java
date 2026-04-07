@@ -20,6 +20,8 @@ public class CircuitDesign {
   public static class CircuitElement {
     private String id;
     private String type;
+    private String label;
+    private String value;
     private Position position;
     private int rotation;
     private Map<String, Object> properties;

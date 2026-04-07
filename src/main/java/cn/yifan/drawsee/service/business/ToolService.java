@@ -14,6 +14,7 @@ import cn.yifan.drawsee.pojo.vo.CircuitImageUploadVO;
 import cn.yifan.drawsee.pojo.vo.RecognizeTextVO;
 import cn.yifan.drawsee.service.base.AiService;
 import cn.yifan.drawsee.service.base.MinioService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
@@ -62,7 +63,8 @@ public class ToolService {
       Node node = nodeMapper.getById(uploadAnimationFrameDTO.getNodeId());
       if (node != null) {
         // 解析现有节点数据
-        Map<String, Object> nodeData = objectMapper.readValue(node.getData(), Map.class);
+        Map<String, Object> nodeData =
+          objectMapper.readValue(node.getData(), new TypeReference<Map<String, Object>>() {});
 
         // 更新节点数据
         nodeData.put("progress", "渲染完成");
@@ -91,8 +93,11 @@ public class ToolService {
     // 生成UUID，并去掉-
     String uuid = UUID.randomUUID().toString().replace("-", "");
     // 获取原文件后缀
-    String suffix =
-        file.getOriginalFilename().substring(file.getOriginalFilename().lastIndexOf("."));
+    String originalFilename = file.getOriginalFilename();
+    String suffix = ".png";
+    if (originalFilename != null && originalFilename.contains(".")) {
+      suffix = originalFilename.substring(originalFilename.lastIndexOf('.'));
+    }
     String objectName = MinioObjectPath.RECOGNIZE_IMAGE_PATH + uuid + suffix;
     try {
       minioService.uploadImage(file, objectName);

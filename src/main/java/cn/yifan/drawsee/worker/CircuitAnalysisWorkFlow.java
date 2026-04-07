@@ -16,7 +16,6 @@ import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.pojo.vo.rag.RagChatResponseVO;
 import cn.yifan.drawsee.service.base.AiService;
-import cn.yifan.drawsee.service.base.PromptService;
 import cn.yifan.drawsee.service.base.StreamAiService;
 import cn.yifan.drawsee.service.business.ContextBudgetManager;
 import cn.yifan.drawsee.service.business.KnowledgeBaseService;
@@ -50,7 +49,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class CircuitAnalysisWorkFlow extends WorkFlow {
 
-  private final PromptService promptService;
   private final SpiceConverter spiceConverter;
   private final KnowledgeBaseService knowledgeBaseService;
   private final AgenticRagTool agenticRagTool;
@@ -65,7 +63,6 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
       ConversationMapper conversationMapper,
       AiTaskMapper aiTaskMapper,
       ObjectMapper objectMapper,
-      PromptService promptService,
       SpiceConverter spiceConverter,
       KnowledgeBaseService knowledgeBaseService,
       ObjectProvider<AgenticRagTool> agenticRagToolProvider,
@@ -81,7 +78,6 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
         aiTaskMapper,
         objectMapper,
         contextBudgetManager);
-    this.promptService = promptService;
     this.spiceConverter = spiceConverter;
     this.knowledgeBaseService = knowledgeBaseService;
     this.agenticRagTool = agenticRagToolProvider.getIfAvailable();
@@ -91,14 +87,18 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
   @Override
   public void createInitNodes(WorkContext workContext) throws JsonProcessingException {
     AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
-    CircuitDesign circuitDesign =
-        objectMapper.readValue(aiTaskMessage.getPrompt(), CircuitDesign.class);
+    CircuitAnalysisPayloadSupport.ParsedPayload parsedPayload =
+        CircuitAnalysisPayloadSupport.parsePrompt(aiTaskMessage.getPrompt(), objectMapper);
+    CircuitDesign circuitDesign = parsedPayload.circuitDesign();
 
     // 创建电路画布节点
     Map<String, Object> canvasNodeData = new HashMap<>();
     canvasNodeData.put("title", NodeTitle.CIRCUIT_CANVAS);
     canvasNodeData.put("text", "电路分析请求");
     canvasNodeData.put("circuitDesign", circuitDesign);
+    canvasNodeData.put("analysisContext", parsedPayload.analysisContext());
+    canvasNodeData.put("workspaceMode", parsedPayload.workspaceMode());
+    canvasNodeData.put("promptVersion", parsedPayload.version());
     canvasNodeData.put("mode", aiTaskMessage.getType());
 
     Node canvasNode =
@@ -119,6 +119,7 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
     analyzeNodeData.put("text", "");
     analyzeNodeData.put("subtype", NodeSubType.CIRCUIT_ANALYZE);
     analyzeNodeData.put("contextTitle", resolveDesignTitle(circuitDesign));
+    analyzeNodeData.put("workspaceMode", parsedPayload.workspaceMode());
     analyzeNodeData.put("followUps", new ArrayList<>());
     analyzeNodeData.put("isGenerated", false);
 
@@ -143,9 +144,9 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
       throws JsonProcessingException {
     AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
 
-    // 解析电路设计JSON
-    CircuitDesign circuitDesign =
-        objectMapper.readValue(aiTaskMessage.getPrompt(), CircuitDesign.class);
+    CircuitAnalysisPayloadSupport.ParsedPayload parsedPayload =
+        CircuitAnalysisPayloadSupport.parsePrompt(aiTaskMessage.getPrompt(), objectMapper);
+    CircuitDesign circuitDesign = parsedPayload.circuitDesign();
 
     // 生成SPICE网表
     String spiceNetlist = spiceConverter.generateNetlist(circuitDesign);
@@ -162,7 +163,7 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
     }
 
     // 构建用户查询（包含电路信息）
-    String userQuery = buildUserQuery(circuitDesign, spiceNetlist);
+    String userQuery = buildUserQuery(circuitDesign, spiceNetlist, parsedPayload);
     RagChatResponseVO ragResponse =
         ragEnhancementService.queryWithTimeout(
             knowledgeBaseIds,
@@ -200,6 +201,7 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
             - 当需要查询教材、课件、电路知识库中的内容时，使用searchKnowledgeBase工具
             - 当涉及电路理论、公式推导、元件特性时，优先调用searchKnowledgeBase工具
             - 对于电路结构分析、拓扑分析等可以直接基于提供的网表和电路图回答
+            - 如果提供了示波器/测量仪表/仿真上下文，应优先把这些连接关系视为测量目标的直接证据，不要忽略它们
             - 回答要准确、详细，结合理论知识和实际电路分析
 
             **回答要求**：
@@ -224,25 +226,19 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
   }
 
   /** 构建用户查询（包含电路信息） */
-  private String buildUserQuery(CircuitDesign circuitDesign, String spiceNetlist) {
+  private String buildUserQuery(
+      CircuitDesign circuitDesign,
+      String spiceNetlist,
+      CircuitAnalysisPayloadSupport.ParsedPayload parsedPayload) {
     StringBuilder query = new StringBuilder();
 
     query.append("## 电路分析任务\n\n");
 
     // 添加电路元件信息
-    if (circuitDesign.getElements() != null && !circuitDesign.getElements().isEmpty()) {
+    String elementSummary = CircuitAnalysisPayloadSupport.describeElements(circuitDesign);
+    if (!elementSummary.isBlank()) {
       query.append("**电路元件清单**:\n");
-      circuitDesign
-          .getElements()
-          .forEach(
-              elem ->
-                  query
-                      .append(String.format("- %s (类型: %s", elem.getId(), elem.getType()))
-                      .append(
-                          elem.getProperties() != null && elem.getProperties().containsKey("value")
-                              ? ", 值: " + elem.getProperties().get("value")
-                              : "")
-                      .append(")\n"));
+      query.append(elementSummary).append('\n');
       query.append("\n");
     }
 
@@ -256,6 +252,12 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
       query.append("**SPICE网表**:\n```spice\n");
       query.append(spiceNetlist);
       query.append("\n```\n\n");
+    }
+
+    String analysisContextSummary =
+        CircuitAnalysisPayloadSupport.buildAnalysisContextSummary(parsedPayload.analysisContext());
+    if (!analysisContextSummary.isBlank()) {
+      query.append(analysisContextSummary);
     }
 
     // 添加电路元数据
@@ -276,8 +278,9 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
     query.append("**分析要求**:\n");
     query.append("1. 分析电路拓扑结构和工作原理\n");
     query.append("2. 识别电路类型和应用场景\n");
-    query.append("3. 提供3个追问方向，引导学生深入学习\n");
-    query.append("4. 如果涉及理论知识，请调用searchKnowledgeBase工具查询教材内容\n");
+    query.append("3. 如果存在示波器/电压表/电流表，请明确指出每个仪表实际连接到了哪些节点、它正在测什么\n");
+    query.append("4. 提供3个追问方向，引导学生深入学习\n");
+    query.append("5. 如果涉及理论知识，请调用searchKnowledgeBase工具查询教材内容\n");
 
     return query.toString();
   }

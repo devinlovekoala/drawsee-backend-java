@@ -3,7 +3,6 @@ package cn.yifan.drawsee.consumer;
 import cn.yifan.drawsee.exception.ApiException;
 import cn.yifan.drawsee.pojo.rabbit.AnimationTaskMessage;
 import cn.yifan.drawsee.service.base.ApiService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -23,8 +22,6 @@ import org.springframework.web.client.RestClientException;
 public class AnimationTaskConsumer {
 
   @Autowired private ApiService apiService;
-
-  @Autowired private ObjectMapper objectMapper;
 
   /**
    * 接收并处理动画任务消息

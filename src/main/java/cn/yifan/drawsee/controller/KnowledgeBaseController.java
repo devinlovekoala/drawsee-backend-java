@@ -10,13 +10,10 @@ import cn.yifan.drawsee.pojo.vo.ResourceCountVO;
 import cn.yifan.drawsee.pojo.vo.rag.RagKnowledgeVO;
 import cn.yifan.drawsee.service.business.KnowledgeBaseService;
 import cn.yifan.drawsee.service.business.KnowledgeResourceService;
-import cn.yifan.drawsee.service.business.UserRoleService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -34,11 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Slf4j
 public class KnowledgeBaseController {
 
-  private static final Logger logger = LoggerFactory.getLogger(KnowledgeBaseController.class);
-
   @Autowired private KnowledgeBaseService knowledgeBaseService;
-
-  @Autowired private UserRoleService userRoleService;
 
   @Autowired private KnowledgeResourceService knowledgeResourceService;
 

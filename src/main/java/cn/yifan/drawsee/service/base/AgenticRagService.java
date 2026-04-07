@@ -5,6 +5,7 @@ import cn.yifan.drawsee.util.InternalJwtUtil;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -97,7 +98,8 @@ public class AgenticRagService {
                     .build();
 
             // 创建HTTP连接（用于SSE）
-            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+            URL targetUrl = URI.create(url).toURL();
+            HttpURLConnection connection = (HttpURLConnection) targetUrl.openConnection();
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json");
@@ -198,8 +200,8 @@ public class AgenticRagService {
               entity,
               new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {});
 
-      if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-        Map<String, Object> result = response.getBody();
+      Map<String, Object> result = response.getBody();
+      if (response.getStatusCode() == HttpStatus.OK && result != null) {
         if (Boolean.TRUE.equals(result.get("success"))) {
           @SuppressWarnings("unchecked")
           Map<String, Object> data = (Map<String, Object>) result.get("data");

@@ -59,7 +59,7 @@ public class QdrantService {
     }
     String url = baseUrl() + "/collections/" + properties.getCollection();
     try {
-      return restTemplate.getForObject(url, Map.class);
+      return castToMap(restTemplate.getForObject(url, Map.class));
     } catch (Exception ex) {
       throw new IllegalStateException("获取Qdrant collection信息失败", ex);
     }
@@ -181,7 +181,7 @@ public class QdrantService {
     }
     HttpEntity<Object> entity = new HttpEntity<>(body, headers);
     try {
-      Map response = restTemplate.postForObject(url, entity, Map.class);
+      Map<String, Object> response = castToMap(restTemplate.postForObject(url, entity, Map.class));
       validateQdrantResponse(response);
     } catch (HttpClientErrorException ex) {
       String responseBody = ex.getResponseBodyAsString();
@@ -199,10 +199,11 @@ public class QdrantService {
     }
     HttpEntity<Object> entity = new HttpEntity<>(body, headers);
     try {
-      Map response =
+      Map<String, Object> response =
+        castToMap(
           restTemplate
-              .exchange(url, org.springframework.http.HttpMethod.PUT, entity, Map.class)
-              .getBody();
+            .exchange(url, org.springframework.http.HttpMethod.PUT, entity, Map.class)
+            .getBody());
       validateQdrantResponse(response);
     } catch (HttpClientErrorException ex) {
       String responseBody = ex.getResponseBodyAsString();
@@ -220,7 +221,7 @@ public class QdrantService {
     }
     HttpEntity<Object> entity = new HttpEntity<>(body, headers);
     try {
-      Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+      Map<String, Object> response = castToMap(restTemplate.postForObject(url, entity, Map.class));
       validateQdrantResponse(response);
       return response;
     } catch (HttpClientErrorException ex) {
@@ -248,6 +249,11 @@ public class QdrantService {
         throw new IllegalStateException("Qdrant 响应异常: " + error);
       }
     }
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> castToMap(Object obj) {
+    return (Map<String, Object>) obj;
   }
 
   private Map<String, Object> buildFilter(String knowledgeBaseId, String documentId) {

@@ -4,11 +4,11 @@ import cn.yifan.drawsee.constant.AiTaskMessageType;
 import cn.yifan.drawsee.constant.NodeType;
 import cn.yifan.drawsee.exception.ApiError;
 import cn.yifan.drawsee.exception.ApiException;
-import cn.yifan.drawsee.parser.ResponseParser;
 import cn.yifan.drawsee.pojo.XYPosition;
 import cn.yifan.drawsee.pojo.entity.Node;
 import cn.yifan.drawsee.pojo.rabbit.AiTaskMessage;
 import cn.yifan.drawsee.worker.WorkContext;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
@@ -35,8 +35,6 @@ import org.springframework.stereotype.Service;
 public class StreamingNodeCreator {
 
   @Autowired private ObjectMapper objectMapper;
-
-  @Autowired private Map<String, ResponseParser> parserRegistry;
 
   // 记录节点和内容缓冲区之间的映射关系
   private final Map<String, Map<String, StringBuilder>> taskBuffers = new ConcurrentHashMap<>();
@@ -162,7 +160,8 @@ public class StreamingNodeCreator {
       Node node = nodes.get(sectionName);
 
       // 更新节点数据
-      Map<String, Object> nodeData = objectMapper.readValue(node.getData(), Map.class);
+        Map<String, Object> nodeData =
+          objectMapper.readValue(node.getData(), new TypeReference<Map<String, Object>>() {});
       nodeData.put("text", content);
       node.setData(objectMapper.writeValueAsString(nodeData));
 

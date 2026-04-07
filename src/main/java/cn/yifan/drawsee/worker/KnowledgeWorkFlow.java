@@ -25,6 +25,7 @@ import cn.yifan.drawsee.service.business.ClassKnowledgeService;
 import cn.yifan.drawsee.service.business.ContextBudgetManager;
 import cn.yifan.drawsee.service.business.ContextBudgetPlan;
 import cn.yifan.drawsee.service.business.RagEnhancementService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
@@ -129,7 +130,7 @@ public class KnowledgeWorkFlow extends WorkFlow {
     }
 
     // 首先尝试使用RAG增强AI回答
-    boolean ragSuccess = tryEnhanceWithRag(workContext);
+    tryEnhanceWithRag(workContext);
 
     List<String> knowledgePoints;
     String classId = aiTaskMessage.getClassId();
@@ -421,8 +422,7 @@ public class KnowledgeWorkFlow extends WorkFlow {
         return false;
       }
 
-      ContextBudgetPlan budgetPlan =
-          contextBudgetManager.plan(aiTaskMessage.getPrompt(), workContext.getHistory());
+        contextBudgetManager.plan(aiTaskMessage.getPrompt(), workContext.getHistory());
       // 使用RAG服务检索并生成增强回答（作为MCP工具）
       log.info(
           "调用Python RAG MCP工具进行知识检索，知识库数量: {}, 查询: {}",
@@ -444,7 +444,8 @@ public class KnowledgeWorkFlow extends WorkFlow {
         String originalData = streamNode.getData();
 
         // 解析原始数据
-        Map<String, Object> dataMap = objectMapper.readValue(originalData, Map.class);
+        Map<String, Object> dataMap =
+          objectMapper.readValue(originalData, new TypeReference<Map<String, Object>>() {});
 
         // 添加RAG增强信息
         dataMap.put("ragEnhanced", true);

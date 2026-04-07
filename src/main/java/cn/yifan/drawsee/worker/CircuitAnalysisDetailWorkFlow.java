@@ -113,7 +113,9 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
       publishErrorAndFail(workContext, "未找到电路设计数据，请先完成电路画布解析后再追问");
       return false;
     }
+    Map<String, Object> analysisContext = findAnalysisContext(workContext);
     workContext.putExtraData("circuitDesign", circuitDesign);
+    workContext.putExtraData("analysisContext", analysisContext);
 
     return true;
   }
@@ -183,6 +185,9 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
 
     // 获取电路设计数据
     CircuitDesign circuitDesign = (CircuitDesign) workContext.getExtraData("circuitDesign");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> analysisContext =
+        (Map<String, Object>) workContext.getExtraData("analysisContext");
     if (circuitDesign == null) {
       circuitDesign = findCircuitDesign(workContext);
     }
@@ -203,7 +208,8 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
 
     // 构建用户查询（包含上下文和电路信息）
     String userQuery =
-        buildUserQuery(followUpQuestion, contextTitle, contextText, spiceNetlist, circuitDesign);
+        buildUserQuery(
+            followUpQuestion, contextTitle, contextText, spiceNetlist, circuitDesign, analysisContext);
 
     // 获取用户可访问的知识库ID列表（用于Tool调用时的权限控制）
     List<String> knowledgeBaseIds =
@@ -254,6 +260,7 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
             - 当需要查询教材、课件、电路知识库中的内容时，使用searchKnowledgeBase工具
             - 当涉及电路理论、公式推导、元件特性时，优先调用searchKnowledgeBase工具
             - 对于电路结构分析、拓扑分析等可以直接基于提供的网表和电路图回答
+            - 如果提供了示波器/测量仪表/仿真上下文，应优先把这些连接关系视为测量目标的直接证据，不要忽略它们
 
             **回答要求**：
             1. 先判断电路类型/功能（如放大、滤波、整流等），说明判断依据。
@@ -278,7 +285,8 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
       String contextTitle,
       String contextText,
       String spiceNetlist,
-      CircuitDesign circuitDesign) {
+      CircuitDesign circuitDesign,
+      Map<String, Object> analysisContext) {
     StringBuilder query = new StringBuilder();
 
     query.append("## 电路分析追问\n\n");
@@ -307,6 +315,17 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
       query.append("**电路网表**:\n```spice\n");
       query.append(spiceNetlist);
       query.append("\n```\n\n");
+    }
+
+    String elementSummary = CircuitAnalysisPayloadSupport.describeElements(circuitDesign);
+    if (!elementSummary.isBlank()) {
+      query.append("**关键元件**:\n").append(elementSummary).append("\n\n");
+    }
+
+    String analysisContextSummary =
+        CircuitAnalysisPayloadSupport.buildAnalysisContextSummary(analysisContext);
+    if (!analysisContextSummary.isBlank()) {
+      query.append(analysisContextSummary);
     }
 
     // 添加用户的追问
@@ -482,15 +501,51 @@ public class CircuitAnalysisDetailWorkFlow extends WorkFlow {
       TypeReference<Map<String, Object>> dataTypeRef = new TypeReference<>() {};
       Map<String, Object> canvasNodeData =
           objectMapper.readValue(canvasNode.getData(), dataTypeRef);
-      Object circuitDesignObj = canvasNodeData.get("circuitDesign");
-      if (circuitDesignObj == null) {
-        return null;
-      }
-      String circuitDesignJson = objectMapper.writeValueAsString(circuitDesignObj);
-      return objectMapper.readValue(circuitDesignJson, CircuitDesign.class);
+      return CircuitAnalysisPayloadSupport.extractCircuitDesign(canvasNodeData, objectMapper);
     } catch (JsonProcessingException e) {
       log.error("解析电路画布节点数据失败: {}", e.getMessage());
       return null;
+    }
+  }
+
+  private Map<String, Object> findAnalysisContext(WorkContext workContext) {
+    Node parentNode = workContext.getParentNode();
+    Long convId = parentNode.getConvId();
+    List<Node> nodes = nodeMapper.getByConvId(convId);
+    Map<Long, Node> nodeMap =
+        nodes.stream()
+            .collect(
+                ConcurrentHashMap::new,
+                (map, node) -> map.put(node.getId(), node),
+                ConcurrentHashMap::putAll);
+
+    Node currentNode = parentNode;
+    while (currentNode != null && !currentNode.getType().equals(NodeType.ROOT)) {
+      if (NodeType.CIRCUIT_CANVAS.equals(currentNode.getType())) {
+        Map<String, Object> direct = extractAnalysisContextFromNode(currentNode);
+        if (!direct.isEmpty()) {
+          return direct;
+        }
+      }
+
+      Node nextNode = nodeMap.get(currentNode.getParentId());
+      if (nextNode != null && nextNode.getType().equals(NodeType.CIRCUIT_CANVAS)) {
+        return extractAnalysisContextFromNode(nextNode);
+      }
+      currentNode = nextNode;
+    }
+    return Collections.emptyMap();
+  }
+
+  private Map<String, Object> extractAnalysisContextFromNode(Node canvasNode) {
+    try {
+      TypeReference<Map<String, Object>> dataTypeRef = new TypeReference<>() {};
+      Map<String, Object> canvasNodeData =
+          objectMapper.readValue(canvasNode.getData(), dataTypeRef);
+      return CircuitAnalysisPayloadSupport.extractAnalysisContext(canvasNodeData, objectMapper);
+    } catch (JsonProcessingException e) {
+      log.error("解析电路画布分析上下文失败: {}", e.getMessage());
+      return Collections.emptyMap();
     }
   }
 

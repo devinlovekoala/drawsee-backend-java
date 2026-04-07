@@ -18,7 +18,6 @@ import cn.yifan.drawsee.pojo.entity.KnowledgeBase;
 import cn.yifan.drawsee.pojo.entity.KnowledgeResource;
 import cn.yifan.drawsee.pojo.vo.KnowledgeBaseVO;
 import cn.yifan.drawsee.pojo.vo.rag.RagKnowledgeVO;
-import cn.yifan.drawsee.service.base.MinioService;
 import cn.yifan.drawsee.util.UUIDUtils;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -48,8 +47,6 @@ public class KnowledgeBaseService extends AbstractKnowledgeBaseService {
   private static final Logger logger = LoggerFactory.getLogger(KnowledgeBaseService.class);
 
   @Autowired private TeacherService teacherService;
-
-  @Autowired private MinioService minioService;
 
   @Autowired private KnowledgeResourceMapper knowledgeResourceMapper;
 

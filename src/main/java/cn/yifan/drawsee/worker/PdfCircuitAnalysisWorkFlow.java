@@ -219,8 +219,6 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
       throws JsonProcessingException {
     log.info("PDF电路分析工作流开始流式聊天，taskId: {}", workContext.getAiTaskMessage().getTaskId());
     AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
-    LinkedList<ChatMessage> history = workContext.getHistory();
-    String model = aiTaskMessage.getModel();
 
     // 获取PDF文档URL
     String pdfUrl = aiTaskMessage.getPrompt();
@@ -409,6 +407,7 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
    * @param content 文档内容
    * @return 元器件名称列表
    */
+  @SuppressWarnings("unused")
   private List<String> extractComponentNames(String content) {
 
     // 常见元器件模式匹配
@@ -496,12 +495,14 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
    * @param pdfContent PDF分析内容
    * @return null（Tool-based架构下不再使用此方法）
    */
+  @SuppressWarnings("unused")
   private String tryEnhanceWithKnowledgeBase(String pdfContent) {
     log.info("[Tool-based] 知识库检索将通过AgenticRagTool自动完成，此方法已废弃");
     return null;
   }
 
   /** 从PDF内容中提取电路查询关键词 */
+  @SuppressWarnings("unused")
   private String extractCircuitQuery(String pdfContent) {
     if (pdfContent == null || pdfContent.isBlank()) {
       return null;
@@ -520,7 +521,6 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
   public void createOtherNodesOrUpdateNodeData(WorkContext workContext)
       throws JsonProcessingException {
     RStream<String, Object> redisStream = workContext.getRedisStream();
-    AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
     Node streamNode = workContext.getStreamNode();
     Response<AiMessage> streamResponse = workContext.getStreamResponse();
 
@@ -652,7 +652,6 @@ public class PdfCircuitAnalysisWorkFlow extends WorkFlow {
   }
 
   /** 根据AI识别的电路图创建电路画布节点，供前端渲染 */
-  @SuppressWarnings("unchecked")
   private void createCircuitDesignNodes(WorkContext workContext, Long parentId)
       throws JsonProcessingException {
     Object rawDesigns = workContext.getExtraData("circuitDesigns");

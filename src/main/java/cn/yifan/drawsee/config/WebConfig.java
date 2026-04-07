@@ -2,8 +2,8 @@ package cn.yifan.drawsee.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.lang.NonNull;
 import org.springframework.web.multipart.support.StandardServletMultipartResolver;
-import org.springframework.web.servlet.config.annotation.PathMatchConfigurer;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -16,7 +16,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
   @Override
-  public void addResourceHandlers(ResourceHandlerRegistry registry) {
+  public void addResourceHandlers(@NonNull ResourceHandlerRegistry registry) {
     // 静态资源路径配置
     registry.addResourceHandler("/static/**").addResourceLocations("classpath:/static/");
 
@@ -25,12 +25,6 @@ public class WebConfig implements WebMvcConfigurer {
         .addResourceHandler("/swagger-ui/**")
         .addResourceLocations("classpath:/META-INF/resources/webjars/springfox-swagger-ui/")
         .resourceChain(false);
-  }
-
-  @Override
-  public void configurePathMatch(PathMatchConfigurer configurer) {
-    // 配置路径匹配，确保控制器能正确处理请求
-    configurer.setUseTrailingSlashMatch(false);
   }
 
   /**

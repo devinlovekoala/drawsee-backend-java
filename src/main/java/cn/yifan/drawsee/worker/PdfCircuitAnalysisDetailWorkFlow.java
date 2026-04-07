@@ -155,7 +155,6 @@ public class PdfCircuitAnalysisDetailWorkFlow extends WorkFlow {
       throws JsonProcessingException {
     AiTaskMessage aiTaskMessage = workContext.getAiTaskMessage();
     Node parentNode = workContext.getParentNode();
-    String model = aiTaskMessage.getModel();
 
     // 从父节点(PDF_CIRCUIT_POINT)中读取角度信息
     TypeReference<Map<String, Object>> dataTypeRef = new TypeReference<>() {};
