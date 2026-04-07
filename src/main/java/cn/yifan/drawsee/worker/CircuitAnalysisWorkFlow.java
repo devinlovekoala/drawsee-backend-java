@@ -90,6 +90,13 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
     CircuitAnalysisPayloadSupport.ParsedPayload parsedPayload =
         CircuitAnalysisPayloadSupport.parsePrompt(aiTaskMessage.getPrompt(), objectMapper);
     CircuitDesign circuitDesign = parsedPayload.circuitDesign();
+    log.info(
+        "[CircuitAnalysis-Tool] 解析分析载荷: version={}, workspaceMode={}, promptLength={}, elementCount={}, analysisKeys={}",
+        parsedPayload.version(),
+        parsedPayload.workspaceMode(),
+        aiTaskMessage.getPrompt() == null ? 0 : aiTaskMessage.getPrompt().length(),
+        circuitDesign.getElements() == null ? 0 : circuitDesign.getElements().size(),
+        parsedPayload.analysisContext().keySet());
 
     // 创建电路画布节点
     Map<String, Object> canvasNodeData = new HashMap<>();
@@ -164,6 +171,10 @@ public class CircuitAnalysisWorkFlow extends WorkFlow {
 
     // 构建用户查询（包含电路信息）
     String userQuery = buildUserQuery(circuitDesign, spiceNetlist, parsedPayload);
+    log.info(
+        "[CircuitAnalysis-Tool] 构建用户查询完成: netlistLength={}, queryLength={}",
+        spiceNetlist == null ? 0 : spiceNetlist.length(),
+        userQuery.length());
     RagChatResponseVO ragResponse =
         ragEnhancementService.queryWithTimeout(
             knowledgeBaseIds,

@@ -54,7 +54,7 @@ drawsee:
     deepseekV3:
       baseUrl: https://api.siliconflow.cn/v1
       apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
-      modelName: Pro/deepseek-ai/DeepSeek-V3.2
+      modelName: deepseek-ai/DeepSeek-V3.2
       customParameters:
         enable_thinking: false
     qwenVision:

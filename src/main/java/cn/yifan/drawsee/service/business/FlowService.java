@@ -63,6 +63,7 @@ public class FlowService {
   @Autowired private ConversationMapper conversationMapper;
   @Autowired private NodeMapper nodeMapper;
   @Autowired private ObjectMapper objectMapper;
+  @Autowired private AiTaskDispatchService aiTaskDispatchService;
   @Autowired private MinioService minioService;
   @Autowired private ModeAutoDetectionService modeAutoDetectionService;
   @Autowired private UserRoleService userRoleService;
@@ -276,11 +277,14 @@ public class FlowService {
       aiTaskMessage.setClassId(createAiTaskDTO.getClassId());
     }
 
-    // 随机选取队列
-    LinkedQueue queue = getRandomQueue();
-
-    // 发送到RabbitMQ
-    rabbitTemplate.convertAndSend(queue.getExchangeName(), queue.getRoutingKey(), aiTaskMessage);
+    // 直接在当前服务内异步执行AI任务，避免Rabbit消费异常导致任务静默挂起
+    log.info(
+        "本地提交AI任务: taskId={}, type={}, convId={}, parentId={}",
+        aiTask.getId(),
+        aiTaskMessage.getType(),
+        aiTaskMessage.getConvId(),
+        aiTaskMessage.getParentId());
+    aiTaskDispatchService.dispatch(aiTaskMessage);
 
     ConversationVO conversationVO = null;
     if (conversation != null) {

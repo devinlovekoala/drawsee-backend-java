@@ -78,27 +78,24 @@ public class WorkFlow {
   }
 
   public final void execute(WorkContext workContext) {
-    // 参数校验并初始化
-    Boolean isValid = validateAndInit(workContext);
-    if (!isValid) return;
-    // 更新任务状态
-    updateTaskToProcessing(workContext);
-    // 更新conversation
-    Conversation conversation = workContext.getConversation();
-    // 更新现在的时间戳
-    conversation.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
-    conversationMapper.update(conversation);
     try {
+      // 参数校验并初始化
+      Boolean isValid = validateAndInit(workContext);
+      if (!isValid) return;
+      // 更新任务状态
+      updateTaskToProcessing(workContext);
+      // 更新conversation
+      Conversation conversation = workContext.getConversation();
+      // 更新现在的时间戳
+      conversation.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
+      conversationMapper.update(conversation);
+
       // 创建初始节点
       createInitNodes(workContext);
-    } catch (JsonProcessingException e) {
-      throw new RuntimeException(e); // TODO 异常处理
-    }
-    // title
-    updateConvTitle(workContext);
+      // title
+      updateConvTitle(workContext);
 
-    // 流式输出文本
-    try {
+      // 流式输出文本
       streamChat(
           workContext,
           new StreamingResponseHandler<AiMessage>() {
@@ -121,48 +118,35 @@ public class WorkFlow {
 
               try {
                 createOtherNodesOrUpdateNodeData(workContext);
-              } catch (JsonProcessingException e) {
-                throw new RuntimeException(e); // TODO 异常处理
-              }
-
-              // 发送结束消息
-              if (workContext.getIsSendDone()) {
-                RStream<String, Object> redisStream = workContext.getRedisStream();
-                redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.DONE, "data", ""));
-              }
-
-              // update task and nodes
-              updateTaskToSuccess(workContext);
-              AiTask aiTask = workContext.getAiTask();
-              aiTaskMapper.update(aiTask);
-              try {
                 updateStreamNode(workContext);
-              } catch (JsonProcessingException e) {
-                throw new RuntimeException(e); // TODO 异常处理
-              }
-              List<Node> nodesToUpdate = workContext.getNodesToUpdate();
-              nodeMapper.updateDataAndIsDeletedBatch(nodesToUpdate);
+                // 发送结束消息
+                if (workContext.getIsSendDone()) {
+                  RStream<String, Object> redisStream = workContext.getRedisStream();
+                  redisStream.add(
+                      StreamAddArgs.entries("type", AiTaskMessageType.DONE, "data", ""));
+                }
 
-              // 定时删除
-              redissonClient.getQueue(RedisKey.CLEAN_AI_TASK_QUEUE_KEY).add(aiTask.getId());
+                // update task and nodes
+                updateTaskToSuccess(workContext);
+                AiTask aiTask = workContext.getAiTask();
+                aiTaskMapper.update(aiTask);
+                List<Node> nodesToUpdate = workContext.getNodesToUpdate();
+                nodeMapper.updateDataAndIsDeletedBatch(nodesToUpdate);
+
+                // 定时删除
+                redissonClient.getQueue(RedisKey.CLEAN_AI_TASK_QUEUE_KEY).add(aiTask.getId());
+              } catch (Exception e) {
+                failWorkContext(workContext, "结果写回失败: " + resolveErrorMessage(e), e);
+              }
             }
 
             @Override
             public void onError(Throwable error) {
-              log.error("流式输出文本失败, taskMessage: {}", workContext.getAiTaskMessage(), error);
-              RStream<String, Object> redisStream = workContext.getRedisStream();
-              redisStream.add(
-                  StreamAddArgs.entries(
-                      "type", AiTaskMessageType.ERROR, "data", error.getMessage()));
-              // update task to failed
-              AiTask aiTask = workContext.getAiTask();
-              aiTask.setStatus(AiTaskStatus.FAILED);
-              aiTask.setResult(error.getMessage());
-              aiTaskMapper.update(aiTask);
+              failWorkContext(workContext, "流式生成失败: " + resolveErrorMessage(error), error);
             }
           });
-    } catch (JsonProcessingException e) {
-      throw new RuntimeException(e); // TODO 异常处理
+    } catch (Exception e) {
+      failWorkContext(workContext, "任务执行失败: " + resolveErrorMessage(e), e);
     }
   }
 
@@ -555,5 +539,51 @@ public class WorkFlow {
     streamNode.setIsDeleted(false);
     streamNode.setData(objectMapper.writeValueAsString(streamNodeData));
     workContext.getNodesToUpdate().add(streamNode);
+  }
+
+  protected void failWorkContext(WorkContext workContext, String message, Throwable error) {
+    log.error("AI任务执行失败, taskMessage: {}", workContext.getAiTaskMessage(), error);
+
+    try {
+      RStream<String, Object> redisStream = workContext.getRedisStream();
+      if (redisStream != null) {
+        redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.ERROR, "data", message));
+        redisStream.add(StreamAddArgs.entries("type", AiTaskMessageType.DONE, "data", ""));
+      }
+    } catch (Exception streamError) {
+      log.warn("推送AI任务错误消息失败: {}", streamError.getMessage());
+    }
+
+    try {
+      AiTask aiTask = workContext.getAiTask();
+      if (aiTask != null) {
+        aiTask.setStatus(AiTaskStatus.FAILED);
+        aiTask.setResult(message);
+        aiTaskMapper.update(aiTask);
+      }
+    } catch (Exception taskError) {
+      log.warn("更新AI任务失败状态时出错: {}", taskError.getMessage());
+    }
+  }
+
+  protected String resolveErrorMessage(Throwable error) {
+    if (error == null) {
+      return "未知异常";
+    }
+
+    Throwable current = error;
+    while (current.getCause() != null && current.getCause() != current) {
+      current = current.getCause();
+    }
+
+    String message = current.getMessage();
+    if (message == null || message.isBlank()) {
+      message = error.getMessage();
+    }
+    if (message == null || message.isBlank()) {
+      message = error.getClass().getSimpleName();
+    }
+
+    return message.length() > 400 ? message.substring(0, 400) + "..." : message;
   }
 }
