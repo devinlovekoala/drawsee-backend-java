@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.yifan.drawsee.mapper.KnowledgeResourceMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="cn.yifan.drawsee.pojo.entity.KnowledgeResource">
+        <id column="id" property="id"/>
+        <result column="knowledge_base_id" property="knowledgeBaseId"/>
+        <result column="resource_type" property="resourceType"/>
+        <result column="title" property="title"/>
+        <result column="description" property="description"/>
+        <result column="url" property="url"/>
+        <result column="local_path" property="localPath"/>
+        <result column="cover_url" property="coverUrl"/>
+        <result column="size" property="size"/>
+        <result column="duration" property="duration"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="creator_id" property="creatorId"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="metadata" property="metadata" typeHandler="cn.yifan.drawsee.typehandler.JsonTypeHandler"/>
+    </resultMap>
+    
+    <!-- 所有列 -->
+    <sql id="Base_Column_List">
+        id, knowledge_base_id, resource_type, title, description, url, local_path, 
+        cover_url, size, duration, created_at, updated_at, creator_id, is_deleted, metadata
+    </sql>
+    
+    <!-- 插入资源 -->
+    <insert id="insert" parameterType="cn.yifan.drawsee.pojo.entity.KnowledgeResource">
+        INSERT INTO knowledge_resource (
+            id, knowledge_base_id, resource_type, title, description, url, 
+            local_path, cover_url, size, duration, created_at, updated_at, 
+            creator_id, is_deleted, metadata
+        ) VALUES (
+            #{id}, #{knowledgeBaseId}, #{resourceType}, #{title}, #{description}, #{url}, 
+            #{localPath}, #{coverUrl}, #{size}, #{duration}, #{createdAt}, #{updatedAt}, 
+            #{creatorId}, #{isDeleted}, #{metadata,typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler}
+        )
+    </insert>
+    
+    <!-- 根据ID查询 -->
+    <select id="getById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> FROM knowledge_resource WHERE id = #{id}
+    </select>
+    
+    <!-- 根据ID删除 -->
+    <delete id="deleteById" parameterType="string">
+        DELETE FROM knowledge_resource WHERE id = #{id}
+    </delete>
+    
+    <!-- 更新资源 -->
+    <update id="update" parameterType="cn.yifan.drawsee.pojo.entity.KnowledgeResource">
+        UPDATE knowledge_resource
+        <set>
+            <if test="knowledgeBaseId != null">knowledge_base_id = #{knowledgeBaseId},</if>
+            <if test="resourceType != null">resource_type = #{resourceType},</if>
+            <if test="title != null">title = #{title},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="url != null">url = #{url},</if>
+            <if test="localPath != null">local_path = #{localPath},</if>
+            <if test="coverUrl != null">cover_url = #{coverUrl},</if>
+            <if test="size != null">size = #{size},</if>
+            <if test="duration != null">duration = #{duration},</if>
+            <if test="updatedAt != null">updated_at = #{updatedAt},</if>
+            <if test="isDeleted != null">is_deleted = #{isDeleted},</if>
+            <if test="metadata != null">metadata = #{metadata,typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <!-- 根据知识库ID查询 -->
+    <select id="getByKnowledgeBaseId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> 
+        FROM knowledge_resource 
+        WHERE knowledge_base_id = #{knowledgeBaseId} 
+        AND is_deleted = #{isDeleted}
+    </select>
+    
+    <!-- 根据知识库ID和资源类型查询 -->
+    <select id="getByKnowledgeBaseIdAndType" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> 
+        FROM knowledge_resource 
+        WHERE knowledge_base_id = #{knowledgeBaseId} 
+        AND resource_type = #{resourceType}
+        AND is_deleted = #{isDeleted}
+    </select>
+    
+    <!-- 根据URL查询资源 -->
+    <select id="getByUrl" parameterType="string" resultMap="BaseResultMap">
+        SELECT * FROM knowledge_resource WHERE url = #{url}
+    </select>
+    
+    <!-- 根据知识点ID统计各类型资源数量 -->
+    <select id="countByKnowledgeIdAndType" resultType="java.util.Map">
+        SELECT resource_type as resourceType, COUNT(*) as count
+        FROM knowledge_resource 
+        WHERE knowledge_id = #{knowledgeId} 
+        AND is_deleted = #{isDeleted}
+        GROUP BY resource_type
+    </select>
+    
+    <!-- 统计知识库资源数量 -->
+    <select id="countResourcesByKnowledgeBaseId" resultType="java.util.Map">
+        SELECT resource_type as resourceType, COUNT(*) as count
+        FROM knowledge_resource 
+        WHERE knowledge_base_id = #{knowledgeBaseId} 
+        AND is_deleted = 0
+        GROUP BY resource_type
+    </select>
+    
+    <!-- 逻辑删除 -->
+    <update id="logicDelete">
+        UPDATE knowledge_resource SET is_deleted = 1 WHERE id = #{id}
+    </update>
+</mapper> 

@@ -10,6 +10,7 @@ management: # 开启监控
 logging:
   level:
     cn.yifan.drawsee.mapper : debug
+    cn.yifan.drawsee.worker : info
 
 sa-token:
   # token 名称（同时也是 cookie 名称）
@@ -32,43 +33,98 @@ sa-token:
 drawsee:
   mysql:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    host: 42.193.107.127
-    port: 3246
+    host: rm-2ze68xa54uq7agma27o.mysql.rds.aliyuncs.com
+    port: 3306
+    database: drawsee
     username: root
-    password: cyf829CMT917
+    password: Funstack@3205
   minio:
-    endpoint: http://42.193.107.127:9046
-    accessKey: XOKQYoPekwnGasqY9cB3
-    secretKey: Z65Sy7T2pegQFj5A7ZnRzCFeJdTBV2O4qj5GQkH3
+    endpoint: http://115.191.37.253:9046
+    accessKey: s0j3IBszn6Xg0eNkKbj7
+    secretKey: v76MDrkFpSgfon7RhAfwqeUxarpsB2aF7QbyLuUa
     bucketName: drawsee
   models:
-    doubao:
-      baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      apiKey: 38e2b6ed-2af3-440d-a28b-2f3b1c4aaafc
-      modelName: ep-20250129233540-8rztb
+    qwen:
+      baseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+      apiKey: sk-1f046e48086e4f1d88f9dc031b4cbe0a
+      modelName: qwen3.5-plus
+      temperature: 0.7
+      customParameters:
+        enable_thinking: false
     deepseekV3:
-      baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      apiKey: 38e2b6ed-2af3-440d-a28b-2f3b1c4aaafc
-      modelName: ep-20250320211327-hgz94
-    doubaoVision:
-      baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      apiKey: 38e2b6ed-2af3-440d-a28b-2f3b1c4aaafc
-      modelName: ep-20250323134257-7l4fn
+      baseUrl: https://api.siliconflow.cn/v1
+      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
+      modelName: deepseek-ai/DeepSeek-V3.2
+      customParameters:
+        enable_thinking: false
+    qwenVision:
+      baseUrl: https://api.siliconflow.cn/v1
+      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
+      modelName: Pro/moonshotai/Kimi-K2.5
+      temperature: 0.1
+      customParameters:
+        enable_thinking: false
+    compress:
+      baseUrl: https://api.siliconflow.cn/v1
+      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
+      modelName: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
+      temperature: 0.2
+    embedding:
+      baseUrl: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1/embeddings}
+      apiKey: ${EMBEDDING_API_KEY:sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv}
+      modelName: ${EMBEDDING_MODEL:Qwen/Qwen3-Embedding-8B}
+  # Web搜索配置（用于查询电子元器件资料）
+  search:
+    enabled: ${SEARCH_ENABLED:true}  # 是否启用搜索功能
+    api-key: ${SEARCH_API_KEY:bce-v3/ALTAK-9uOVZ9zTecaAKTY3taFhJ/71ee329eea9a9df805e15aa310110dc13ddf8e71}  # 百度AppBuilder API Key，获取方式见文档
+  # Python微服务配置
+  python-service:
+    base-url: http://localhost:8000  # Python服务地址（FastAPI默认端口8000）
+    timeout: 60000  # 超时时间（毫秒）
+    enabled: false  # 是否启用Python服务（v2.0生产就绪）
+  # RAG入库流程配置
+  rag-ingestion:
+    mode: JAVA  # JAVA / PYTHON
+    batch-size: 64
+  # RAG检索流程配置
+  rag-query:
+    mode: JAVA  # JAVA / PYTHON
+    top-k: 5
+    max-context-tokens: 160000
+    safe-input-ratio: 0.65
+    reserved-output-tokens: 8000
+    history-ratio: 0.30
+    retrieval-ratio: 0.45
+    max-chunks-in-context: 4
+    rag-timeout-ms: 1200
+  # Qdrant向量库配置（由Python RAG侧使用，Java侧预留）
+  qdrant:
+    host: ${QDRANT_HOST:115.191.37.253}
+    port: ${QDRANT_PORT:6333}
+    api-key: ${QDRANT_API_KEY:}
+    https: ${QDRANT_HTTPS:false}
+    collection: ${QDRANT_COLLECTION:circuit_embeddings}
+  # 内部服务JWT配置
+  internal-jwt:
+    secret: ${INTERNAL_JWT_SECRET:your-super-secret-key-min-32-chars-change-in-production}  # 与Python共享的密钥（生产环境必须修改）
+    expiration: 3600  # Token过期时间（秒）
   rabbitmq:
     aiConfig:
       exchangeName: direct_ai_task_exchange
       queueName: direct_ai_task_queue
       routingKey: ai_task
+      queueCount: 5
     animationConfig:
       exchangeName: direct_animation_task_exchange
       queueName: direct_animation_task_queue
       routingKey: animation_task
+      queueCount: 3
 
 spring:
   application:
     name: drawsee-java
   profiles:
-    active: dev
+    active: prod
   mail:
     host: smtp.qq.com
     protocol: smtp
@@ -89,8 +145,16 @@ spring:
     encoding: UTF-8 #编码
     suffix: .html #模板后缀
     mode: HTML #模板
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 100MB
+      file-size-threshold: 2KB
+      location: ${java.io.tmpdir}
+      resolve-lazily: false
   rabbitmq:
-    host: 42.193.107.127
+    host: 115.191.37.253
     port: 5678
   datasource:
     druid:
@@ -100,7 +164,7 @@ spring:
       password: ${drawsee.mysql.password}
   data:
     redis:
-      host: 42.193.107.127
+      host: 115.191.37.253
       port: 6278
       # 连接超时时间
       timeout: 10s
@@ -114,10 +178,11 @@ spring:
           max-idle: 10
           # 连接池中的最小空闲连接
           min-idle: 0
-    mongodb:
-      host: 42.193.107.127
-      port: 26084
-      database: drawsee
+
+# RAG配置（已迁移到Python RAG微服务）
+rag:
+  chunk-size: ${RAG_CHUNK_SIZE:800}
+  chunk-overlap: ${RAG_CHUNK_OVERLAP:200}
 
 mybatis:
   #mapper配置文件

@@ -1,29 +1,32 @@
 package cn.yifan.drawsee.pojo.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-import java.io.Serial;
-import java.io.Serializable;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-/**
- * @FileName UpdateNodeDTO
- * @Description
- * @Author yifan
- * @date 2025-03-21 15:50
- **/
+import lombok.Data;
 
 @Data
-@AllArgsConstructor
-@NoArgsConstructor
-public class UpdateNodeDTO implements Serializable {
+public class UpdateNodeDTO {
+  @NotNull(message = "节点ID不能为空")
+  private Long id;
 
-    @Serial
-    private static final long serialVersionUID = 1L;
+  @NotBlank(message = "节点类型不能为空")
+  private String type;
 
-    private ConcurrentHashMap<String, Object> data;
+  @NotBlank(message = "节点内容不能为空")
+  private String content;
 
+  @NotNull(message = "节点位置不能为空")
+  private Position position;
+
+  private Map<String, Object> data;
+
+  @Data
+  public static class Position {
+    @NotNull(message = "X坐标不能为空")
+    private Integer x;
+
+    @NotNull(message = "Y坐标不能为空")
+    private Integer y;
+  }
 }

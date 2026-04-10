@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.yifan.drawsee.mapper.UserRoleMapper">
+
+    <!-- 根据用户ID查询用户角色 -->
+    <select id="getRoleByUserId" parameterType="long" resultType="string">
+        SELECT
+            CASE
+                WHEN EXISTS (SELECT 1 FROM admin WHERE user_id = #{userId}) THEN 'admin'
+                WHEN EXISTS (SELECT 1 FROM teacher WHERE user_id = #{userId}) THEN 'teacher'
+                ELSE 'user'
+            END as role
+    </select>
+    
+    <!-- 判断用户是否为管理员 -->
+    <select id="isAdmin" parameterType="long" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM admin WHERE user_id = #{userId})
+    </select>
+    
+    <!-- 判断用户是否为教师 -->
+    <select id="isTeacher" parameterType="long" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM teacher WHERE user_id = #{userId})
+    </select>
+    
+</mapper> 

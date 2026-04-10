@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.yifan.drawsee.mapper.KnowledgeBaseMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="cn.yifan.drawsee.pojo.entity.KnowledgeBase">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="description" property="description"/>
+        <result column="subject" property="subject"/>
+        <result column="invitation_code" property="invitationCode"/>
+        <result column="creator_id" property="creatorId"/>
+        <result column="class_ids" property="classIds" typeHandler="cn.yifan.drawsee.typehandler.JsonTypeHandler"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="members" property="members" typeHandler="cn.yifan.drawsee.typehandler.JsonTypeHandler"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="is_published" property="isPublished"/>
+        <result column="rag_enabled" property="ragEnabled"/>
+        <result column="rag_knowledge_id" property="ragKnowledgeId"/>
+        <result column="rag_document_count" property="ragDocumentCount"/>
+        <result column="rag_dataset_id" property="ragDatasetId"/>
+        <result column="sync_to_rag_flow" property="syncToRagFlow"/>
+        <result column="rag_sync_status" property="ragSyncStatus"/>
+        <result column="last_sync_time" property="lastSyncTime"/>
+    </resultMap>
+    
+    <!-- 所有列 -->
+    <sql id="Base_Column_List">
+        id, name, description, subject, invitation_code, creator_id, class_ids,
+        created_at, updated_at, members, is_deleted, 
+        is_published, rag_enabled, rag_knowledge_id, rag_document_count,
+        rag_dataset_id, sync_to_rag_flow, rag_sync_status, last_sync_time
+    </sql>
+    
+    <!-- 插入知识库 -->
+    <insert id="insert" parameterType="cn.yifan.drawsee.pojo.entity.KnowledgeBase" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO knowledge_base (
+            id, name, description, subject, invitation_code, creator_id, class_ids,
+            created_at, updated_at, members, is_deleted, 
+            is_published, rag_enabled, rag_knowledge_id, rag_document_count,
+            rag_dataset_id, sync_to_rag_flow, rag_sync_status, last_sync_time
+        ) VALUES (
+            #{id}, #{name}, #{description}, #{subject}, #{invitationCode}, #{creatorId}, #{classIds,typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},
+            #{createdAt}, #{updatedAt}, #{members,typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},
+            #{isDeleted}, #{isPublished}, #{ragEnabled}, #{ragKnowledgeId}, #{ragDocumentCount},
+            #{ragDatasetId}, #{syncToRagFlow}, #{ragSyncStatus}, #{lastSyncTime}
+        )
+    </insert>
+    
+    <!-- 根据ID查询 -->
+    <select id="getById" parameterType="string" resultMap="BaseResultMap">
+        SELECT * FROM knowledge_base WHERE id = #{id}
+    </select>
+    
+    <!-- 根据ID删除 -->
+    <delete id="deleteById" parameterType="string">
+        DELETE FROM knowledge_base WHERE id = #{id}
+    </delete>
+    
+    <!-- 更新知识库 -->
+    <update id="update" parameterType="cn.yifan.drawsee.pojo.entity.KnowledgeBase">
+        UPDATE knowledge_base
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="subject != null">subject = #{subject},</if>
+            <if test="invitationCode != null">invitation_code = #{invitationCode},</if>
+            <if test="creatorId != null">creator_id = #{creatorId},</if>
+            <if test="classIds != null">class_ids = #{classIds,typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},</if>
+            <if test="updatedAt != null">updated_at = #{updatedAt},</if>
+            <if test="members != null">members = #{members,typeHandler=cn.yifan.drawsee.typehandler.JsonTypeHandler},</if>
+            <if test="isDeleted != null">is_deleted = #{isDeleted},</if>
+            <if test="isPublished != null">is_published = #{isPublished},</if>
+            <if test="ragEnabled != null">rag_enabled = #{ragEnabled},</if>
+            <if test="ragKnowledgeId != null">rag_knowledge_id = #{ragKnowledgeId},</if>
+            <if test="ragDocumentCount != null">rag_document_count = #{ragDocumentCount},</if>
+            <if test="ragDatasetId != null">rag_dataset_id = #{ragDatasetId},</if>
+            <if test="syncToRagFlow != null">sync_to_rag_flow = #{syncToRagFlow},</if>
+            <if test="ragSyncStatus != null">rag_sync_status = #{ragSyncStatus},</if>
+            <if test="lastSyncTime != null">last_sync_time = #{lastSyncTime},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <!-- 根据名称查询（只查询未删除的） -->
+    <select id="getByName" parameterType="string" resultMap="BaseResultMap">
+        SELECT * FROM knowledge_base WHERE name = #{name} AND is_deleted = 0
+    </select>
+    
+    <!-- 根据创建者ID查询 -->
+    <select id="getByCreatorId" resultMap="BaseResultMap">
+        SELECT * FROM knowledge_base
+        WHERE creator_id = #{creatorId}
+        AND is_deleted = 0
+    </select>
+    
+    <!-- 根据邀请码查询 -->
+    <select id="getByInvitationCode" parameterType="string" resultMap="BaseResultMap">
+        SELECT * FROM knowledge_base WHERE invitation_code = #{invitationCode}
+    </select>
+    
+    <!-- 根据RAG知识库ID查询 -->
+    <select id="getByRagKnowledgeId" parameterType="string" resultMap="BaseResultMap">
+        SELECT * FROM knowledge_base WHERE rag_knowledge_id = #{ragKnowledgeId}
+    </select>
+    
+    <!-- 查询所有知识库 -->
+    <select id="getAll" resultMap="BaseResultMap">
+        SELECT * FROM knowledge_base WHERE is_deleted = 0
+    </select>
+    
+    <!-- 查询用户作为成员的知识库 -->
+    <select id="getByMemberId" resultMap="BaseResultMap">
+        SELECT * FROM knowledge_base
+        WHERE JSON_CONTAINS(members, CAST(#{userId} AS JSON), '$')
+        AND is_deleted = 0
+    </select>
+    
+    <!-- 根据创建者ID和RAG启用状态查询知识库 -->
+    <select id="getByCreatorIdAndRagEnabled" resultMap="BaseResultMap">
+        SELECT
+            <include refid="Base_Column_List"/>
+        FROM
+            knowledge_base
+        WHERE
+            creator_id = #{creatorId}
+            AND rag_enabled = #{ragEnabled}
+            AND is_deleted = 0
+    </select>
+    
+    <!-- 根据成员ID和RAG启用状态查询知识库 -->
+    <select id="getByMemberIdAndRagEnabled" resultMap="BaseResultMap">
+        SELECT
+            <include refid="Base_Column_List"/>
+        FROM
+            knowledge_base
+        WHERE
+            JSON_CONTAINS(members, CAST(#{memberId} AS JSON), '$')
+            AND rag_enabled = #{ragEnabled}
+            AND is_deleted = 0
+    </select>
+    
+    <!-- 根据班级ID查询知识库列表 -->
+    <select id="listByClassId" resultMap="BaseResultMap">
+        SELECT
+            <include refid="Base_Column_List"/>
+        FROM
+            knowledge_base
+        WHERE
+            class_ids IS NOT NULL
+            AND JSON_CONTAINS(class_ids, CAST(#{classId} AS JSON), '$')
+            AND is_deleted = false
+    </select>
+    
+    <!-- 根据创建者ID查询知识库列表 -->
+    <select id="listByCreatorId" resultMap="BaseResultMap">
+        SELECT
+            <include refid="Base_Column_List"/>
+        FROM
+            knowledge_base
+        WHERE
+            creator_id = #{creatorId}
+            AND is_deleted = false
+    </select>
+</mapper> 

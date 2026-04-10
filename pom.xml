@@ -13,7 +13,6 @@
     <groupId>cn.yifan</groupId>
     <artifactId>drawsee</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>drawsee-java</name>
     <description>drawsee-java</description>
     <url/>
     <licenses>
@@ -32,17 +31,21 @@
     <packaging>jar</packaging>
 
     <properties>
-        <java.version>17</java.version>
-        <lombok.version>1.18.20</lombok.version>
+        <java.version>21</java.version>
+        <lombok.version>1.18.30</lombok.version>
+        <spotless.version>2.43.0</spotless.version>
         <druid.version>1.2.20</druid.version>
         <sa-token.version>1.39.0</sa-token.version>
-        <langchain4j.version>1.0.0-alpha1</langchain4j.version>
+        <langchain4j.version>1.11.0</langchain4j.version>
         <redisson.version>3.41.0</redisson.version>
         <mybatis.version>3.0.4</mybatis.version>
-        <minio.version>8.5.17</minio.version>
+        <minio.version>8.6.0</minio.version>
         <elk.version>0.9.1</elk.version>
         <pagehelper.version>6.1.0</pagehelper.version>
         <jsqlparser.version>5.1</jsqlparser.version>
+        <tika.version>2.9.2</tika.version>
+        <pdfbox.version>2.0.27</pdfbox.version>
+        <poi.version>5.2.3</poi.version>
     </properties>
 
     <dependencies>
@@ -51,10 +54,32 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- webflux for SSE streaming (Agentic RAG integration) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
         <!-- springboot mail -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- document parsing -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parsers-standard-package</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/commons-io/commons-io -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.21.0</version>
         </dependency>
         <!-- thymeleaf -->
         <dependency>
@@ -72,16 +97,28 @@
             <artifactId>minio</artifactId>
             <version>${minio.version}</version>
         </dependency>
+        <!-- OkHttp (explicit) required by MinIO client on some versions -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>4.11.0</version>
+        </dependency>
+        <!-- PDF文档处理 -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
+        </dependency>
         <!-- rabbitmq -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
         <!-- mongodb -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-mongodb</artifactId>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.springframework.boot</groupId>-->
+<!--            <artifactId>spring-boot-starter-data-mongodb</artifactId>-->
+<!--        </dependency>-->
         <!-- redis -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -140,6 +177,11 @@
             <optional>true</optional>
             <version>${lombok.version}</version>
         </dependency>
+        <!-- Spring Security Crypto（用于密码加密）-->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
         <!-- Sa-Token 权限认证，在线文档：https://sa-token.cc -->
         <dependency>
             <groupId>cn.dev33</groupId>
@@ -160,62 +202,32 @@
         <!-- langchain4j -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
-            <version>${langchain4j.version}</version>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>1.11.0</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-spring-boot-starter</artifactId>
-            <version>${langchain4j.version}</version>
-        </dependency>
-        <!-- elk -->
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.core</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.graph</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.alg.mrtree</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.graph.json</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.graph.json.text</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.graph.json.text.ide</artifactId>
-            <version>${elk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>plugins</artifactId>
-            <version>${elk.version}</version>
-            <type>pom</type>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.elk</groupId>
-            <artifactId>org.eclipse.elk.alg.common</artifactId>
-            <version>${elk.version}</version>
+            <artifactId>langchain4j</artifactId>
+            <version>1.11.0</version>
         </dependency>
 
-        <!-- test -->
+        <!-- JWT for internal service communication -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.11.5</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.11.5</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.11.5</version>
+            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>org.mybatis.spring.boot</groupId>
@@ -228,10 +240,28 @@
             <artifactId>spring-rabbit-test</artifactId>
             <scope>test</scope>
         </dependency>
+        
+        <!-- 配置处理器 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <configuration>
+                    <java>
+                        <!-- 使用内置的 google-java-format 进行格式化 -->
+                        <googleJavaFormat/>
+                    </java>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -265,5 +295,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>

@@ -1,47 +1,43 @@
 package cn.yifan.drawsee.pojo.entity;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import java.io.Serial;
 import java.io.Serializable;
 import java.sql.Timestamp;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * @FileName InvitationCode
- * @Description
- * @Author yifan
+ * @FileName InvitationCode @Description @Author devin
+ *
  * @date 2025-03-25 08:45
- **/
-
+ */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class InvitationCode implements Serializable {
 
-    @Serial
-    private static final long serialVersionUID = 1L;
+  @Serial private static final long serialVersionUID = 1L;
 
-    private Long id;
+  private Long id;
 
-    private String code;
+  private String code;
 
-    private Timestamp createdAt;
+  private Timestamp createdAt;
 
-    private Long usedBy;
+  private Long usedBy;
 
-    private Timestamp usedAt;
+  private Timestamp usedAt;
 
-    private Boolean isActive;
+  private Boolean isActive;
 
-    private String sentUserName;
+  private String sentUserName;
 
-    private String sentEmail;
+  private String sentEmail;
 
-    private Timestamp lastSentAt;
+  private Timestamp lastSentAt;
 
-    public InvitationCode(String code) {
-        this.code = code;
-    }
-
+  public InvitationCode(String code) {
+    this.code = code;
+  }
 }

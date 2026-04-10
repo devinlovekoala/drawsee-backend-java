@@ -18,6 +18,21 @@
         FROM conversation WHERE user_id = #{userId} AND is_deleted = 0 ORDER BY updated_at DESC
     </select>
 
+    <select id="listByUserIds"
+            resultType="cn.yifan.drawsee.pojo.entity.Conversation"
+    >
+        SELECT id, title, user_id, created_at, updated_at, is_deleted
+        FROM conversation
+        WHERE is_deleted = 0
+        <if test="userIds != null and userIds.size() > 0">
+            AND user_id IN
+            <foreach collection="userIds" item="uid" open="(" separator="," close=")">
+                #{uid}
+            </foreach>
+        </if>
+        ORDER BY updated_at DESC
+    </select>
+
     <insert id="insert"
             parameterType="cn.yifan.drawsee.pojo.entity.Conversation"
             useGeneratedKeys="true"

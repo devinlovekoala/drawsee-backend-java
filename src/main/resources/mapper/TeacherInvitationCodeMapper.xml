@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.yifan.drawsee.mapper.TeacherInvitationCodeMapper">
+
+    <select id="getById"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.TeacherInvitationCode"
+    >
+        SELECT id, code, created_at as createdAt, created_by as createdBy, used_by as usedBy, 
+               used_at as usedAt, is_active as isActive, remark, course_id as courseId
+        FROM teacher_invitation_code
+        WHERE id = #{id}
+    </select>
+
+    <select id="getByPage"
+            resultType="cn.yifan.drawsee.pojo.entity.TeacherInvitationCode"
+    >
+        SELECT id, code, created_at as createdAt, created_by as createdBy, used_by as usedBy, 
+               used_at as usedAt, is_active as isActive, remark, course_id as courseId
+        FROM teacher_invitation_code
+        WHERE id >= (
+            SELECT id
+            FROM teacher_invitation_code
+            ORDER BY created_at DESC
+            LIMIT 1 OFFSET #{offset}
+        )
+        ORDER BY created_at DESC
+        LIMIT #{size}
+    </select>
+
+    <select id="getByCode"
+            parameterType="string"
+            resultType="cn.yifan.drawsee.pojo.entity.TeacherInvitationCode"
+    >
+        SELECT id, code, created_at as createdAt, created_by as createdBy, used_by as usedBy, 
+               used_at as usedAt, is_active as isActive, remark, course_id as courseId
+        FROM teacher_invitation_code
+        WHERE code = #{code}
+    </select>
+
+    <select id="getByUsedBy"
+            parameterType="long"
+            resultType="cn.yifan.drawsee.pojo.entity.TeacherInvitationCode"
+    >
+        SELECT id, code, created_at as createdAt, created_by as createdBy, used_by as usedBy, 
+               used_at as usedAt, is_active as isActive, remark, course_id as courseId
+        FROM teacher_invitation_code
+        WHERE used_by = #{usedBy}
+    </select>
+    
+    <insert id="insert"
+            parameterType="cn.yifan.drawsee.pojo.entity.TeacherInvitationCode"
+            useGeneratedKeys="true"
+            keyProperty="id"
+    >
+        INSERT INTO teacher_invitation_code (code, created_by, is_active, remark, course_id) 
+        VALUES (#{code}, #{createdBy}, #{isActive}, #{remark}, #{courseId})
+    </insert>
+
+    <update id="update"
+            parameterType="cn.yifan.drawsee.pojo.entity.TeacherInvitationCode"
+    >
+        UPDATE teacher_invitation_code
+        <set>
+            <if test="usedBy != null">used_by = #{usedBy},</if>
+            <if test="usedAt != null">used_at = #{usedAt},</if>
+            <if test="isActive != null">is_active = #{isActive},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="courseId != null">course_id = #{courseId},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+</mapper> 

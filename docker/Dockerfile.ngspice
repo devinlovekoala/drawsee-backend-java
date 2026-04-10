@@ -1,0 +1,23 @@
+FROM node:20-bookworm-slim AS base
+
+WORKDIR /app
+
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    ngspice \
+    curl \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY . .
+
+ENV NODE_ENV=production \
+    PORT=3001 \
+    NGSPICE_BIN=/usr/bin/ngspice
+
+EXPOSE 3001
+
+CMD ["node", "server/ngspice-server.js"]
