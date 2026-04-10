@@ -58,9 +58,9 @@ drawsee:
       customParameters:
         enable_thinking: false
     qwenVision:
-      baseUrl: https://open.bigmodel.cn/api/paas/v4
-      apiKey: cc4f64b7080447b99560e43f6df775a4.ha56EPtvmi52EmZ1
-      modelName: glm-4.6v
+      baseUrl: https://api.siliconflow.cn/v1
+      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
+      modelName: Pro/moonshotai/Kimi-K2.5
       temperature: 0.1
       customParameters:
         enable_thinking: false
