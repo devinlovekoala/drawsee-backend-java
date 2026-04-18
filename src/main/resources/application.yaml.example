@@ -33,55 +33,55 @@ sa-token:
 drawsee:
   mysql:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    host: rm-2ze68xa54uq7agma27o.mysql.rds.aliyuncs.com
-    port: 3306
-    database: drawsee
-    username: root
-    password: Funstack@3205
+    host: ${MYSQL_HOST:localhost}
+    port: ${MYSQL_PORT:3306}
+    database: ${MYSQL_DATABASE:drawsee}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:your_mysql_password}
   minio:
-    endpoint: http://115.191.37.253:9046
-    accessKey: s0j3IBszn6Xg0eNkKbj7
-    secretKey: v76MDrkFpSgfon7RhAfwqeUxarpsB2aF7QbyLuUa
-    bucketName: drawsee
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    accessKey: ${MINIO_ACCESS_KEY:your_minio_access_key}
+    secretKey: ${MINIO_SECRET_KEY:your_minio_secret_key}
+    bucketName: ${MINIO_BUCKET:drawsee}
   models:
     qwen:
-      baseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
-      apiKey: sk-1f046e48086e4f1d88f9dc031b4cbe0a
-      modelName: qwen3.5-plus
+      baseUrl: ${QWEN_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      apiKey: ${QWEN_API_KEY:your_qwen_api_key}
+      modelName: ${QWEN_MODEL_NAME:qwen3.5-plus}
       temperature: 0.7
       customParameters:
         enable_thinking: false
     deepseekV3:
-      baseUrl: https://api.siliconflow.cn/v1
-      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
-      modelName: deepseek-ai/DeepSeek-V3.2
+      baseUrl: ${DEEPSEEK_BASE_URL:https://api.siliconflow.cn/v1}
+      apiKey: ${DEEPSEEK_API_KEY:your_deepseek_api_key}
+      modelName: ${DEEPSEEK_MODEL_NAME:deepseek-ai/DeepSeek-V3.2}
       customParameters:
         enable_thinking: false
     qwenVision:
-      baseUrl: https://api.siliconflow.cn/v1
-      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
-      modelName: Pro/moonshotai/Kimi-K2.5
+      baseUrl: ${SILICONFLOW_BASE_URL:https://api.siliconflow.cn/v1}
+      apiKey: ${SILICONFLOW_API_KEY:your_siliconflow_api_key}
+      modelName: ${QWEN_VISION_MODEL_NAME:Pro/moonshotai/Kimi-K2.5}
       temperature: 0.1
       customParameters:
         enable_thinking: false
     compress:
-      baseUrl: https://api.siliconflow.cn/v1
-      apiKey: sk-eeixoawctuiqwnjvyomhnclwsxylwpgisdyuvbgojgvvjwqm
-      modelName: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
+      baseUrl: ${SILICONFLOW_BASE_URL:https://api.siliconflow.cn/v1}
+      apiKey: ${SILICONFLOW_API_KEY:your_siliconflow_api_key}
+      modelName: ${COMPRESS_MODEL_NAME:deepseek-ai/DeepSeek-R1-Distill-Qwen-14B}
       temperature: 0.2
     embedding:
       baseUrl: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1/embeddings}
-      apiKey: ${EMBEDDING_API_KEY:sk-ljtiejfrkybzmtyauvvjaezbawsazvckhnsfxyejnqldlspv}
+      apiKey: ${EMBEDDING_API_KEY:your_embedding_api_key}
       modelName: ${EMBEDDING_MODEL:Qwen/Qwen3-Embedding-8B}
   # Web搜索配置（用于查询电子元器件资料）
   search:
-    enabled: ${SEARCH_ENABLED:true}  # 是否启用搜索功能
-    api-key: ${SEARCH_API_KEY:bce-v3/ALTAK-9uOVZ9zTecaAKTY3taFhJ/71ee329eea9a9df805e15aa310110dc13ddf8e71}  # 百度AppBuilder API Key，获取方式见文档
+    enabled: ${SEARCH_ENABLED:true}
+    api-key: ${SEARCH_API_KEY:your_baidu_appbuilder_api_key}
   # Python微服务配置
   python-service:
-    base-url: http://localhost:8000  # Python服务地址（FastAPI默认端口8000）
-    timeout: 60000  # 超时时间（毫秒）
-    enabled: false  # 是否启用Python服务（v2.0生产就绪）
+    base-url: ${PYTHON_SERVICE_URL:http://localhost:8000}
+    timeout: 60000
+    enabled: false
   # RAG入库流程配置
   rag-ingestion:
     mode: JAVA  # JAVA / PYTHON
@@ -97,17 +97,17 @@ drawsee:
     retrieval-ratio: 0.45
     max-chunks-in-context: 4
     rag-timeout-ms: 1200
-  # Qdrant向量库配置（由Python RAG侧使用，Java侧预留）
+  # Qdrant向量库配置
   qdrant:
-    host: ${QDRANT_HOST:115.191.37.253}
+    host: ${QDRANT_HOST:localhost}
     port: ${QDRANT_PORT:6333}
     api-key: ${QDRANT_API_KEY:}
     https: ${QDRANT_HTTPS:false}
     collection: ${QDRANT_COLLECTION:circuit_embeddings}
   # 内部服务JWT配置
   internal-jwt:
-    secret: ${INTERNAL_JWT_SECRET:your-super-secret-key-min-32-chars-change-in-production}  # 与Python共享的密钥（生产环境必须修改）
-    expiration: 3600  # Token过期时间（秒）
+    secret: ${INTERNAL_JWT_SECRET:your-super-secret-key-min-32-chars-change-in-production}
+    expiration: 3600
   rabbitmq:
     aiConfig:
       exchangeName: direct_ai_task_exchange
@@ -129,8 +129,8 @@ spring:
     host: smtp.qq.com
     protocol: smtp
     default-encoding: UTF-8
-    username: 3149107774@qq.com
-    password: ofnkhtpclryjdgfe
+    username: ${MAIL_USERNAME:your_email@qq.com}
+    password: ${MAIL_PASSWORD:your_smtp_authorization_code}
     test-connection: true
     properties:
       mail:
@@ -142,9 +142,9 @@ spring:
   thymeleaf:
     cache: false
     prefix: classpath:/templates/
-    encoding: UTF-8 #编码
-    suffix: .html #模板后缀
-    mode: HTML #模板
+    encoding: UTF-8
+    suffix: .html
+    mode: HTML
   servlet:
     multipart:
       enabled: true
@@ -154,8 +154,8 @@ spring:
       location: ${java.io.tmpdir}
       resolve-lazily: false
   rabbitmq:
-    host: 115.191.37.253
-    port: 5678
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
   datasource:
     druid:
       driver-class-name: ${drawsee.mysql.driver-class-name}
@@ -164,30 +164,24 @@ spring:
       password: ${drawsee.mysql.password}
   data:
     redis:
-      host: 115.191.37.253
-      port: 6278
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
       # 连接超时时间
       timeout: 10s
       lettuce:
         pool:
-          # 连接池最大连接数
           max-active: 200
-          # 连接池最大阻塞等待时间（使用负值表示没有限制）
           max-wait: -1ms
-          # 连接池中的最大空闲连接
           max-idle: 10
-          # 连接池中的最小空闲连接
           min-idle: 0
 
-# RAG配置（已迁移到Python RAG微服务）
+# RAG配置
 rag:
   chunk-size: ${RAG_CHUNK_SIZE:800}
   chunk-overlap: ${RAG_CHUNK_OVERLAP:200}
 
 mybatis:
-  #mapper配置文件
-  mapper-locations: classpath*:mapper/*.xml # classpath*: 会搜索所有类路径（包括依赖 jar 包中的资源）
+  mapper-locations: classpath*:mapper/*.xml
   type-aliases-package: cn.yifan.drawsee.pojo.entity
   configuration:
-    #开启驼峰命名
     map-underscore-to-camel-case: true
